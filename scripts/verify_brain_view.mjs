@@ -42,7 +42,7 @@ try {
     class TFile { constructor(path) { this.path = path; this.basename = path.split("/").pop().replace(/\.md$/, ""); } }
     const module = { exports: {} };
     class Component { registerDomEvent(el, name, fn, options) { el.addEventListener(name, fn, options); } registerEvent() {} }
-    const require = () => ({ Component, ItemView, TFile, Plugin: class {}, Modal: class {}, Notice: class {}, setIcon() {} });
+    const require = () => ({ Component, ItemView, TFile, Plugin: class {}, PluginSettingTab: class {}, Setting: class {}, Modal: class {}, Notice: class {}, setIcon() {} });
     const BrainView = new Function("require", "module", `${source}; return LifeOSBrainRenderer;`)(require, module);
     const folders = ["03 Planning", "04 Projects", "01 Journal/Daily", "02 Retreats", "05 People", "07 Library", "06 Writing", "08 Tasks"];
     const files = Array.from({ length: 160 }, (_, i) => new TFile(`${folders[i % folders.length]}/Note ${String(i + 1).padStart(3, "0")}.md`));

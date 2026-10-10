@@ -1,9 +1,9 @@
 {
   "id": "life-os-app",
-  "name": "Life OS",
-  "version": "0.20.0",
+  "name": "Dev OS",
+  "version": "1.0.0",
   "minAppVersion": "1.13.1",
-  "description": "A local-first home surface for planning, reflection, capture, and AI-assisted work.",
-  "author": "Life OS",
+  "description": "A local-first workspace for developers and IT project managers: projects, sprints, meeting minutes, decisions, and web clippings.",
+  "author": "Dev OS",
   "isDesktopOnly": false
 }

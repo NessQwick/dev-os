@@ -31,21 +31,28 @@ try {
     for(const name of ['Assistant','Task Dashboard','Projects Dashboard','Compass Dashboard','Boards'])add(`00 Dashboards/${name}.md`);
     for(let i=0;i<20;i++){const d=new Date('2026-09-09T12:00:00Z');d.setUTCDate(d.getUTCDate()-i);add(`01 Journal/Daily/${d.toISOString().slice(0,10)}.md`,{dq_focus:4+i%7,habit_walk:i%3!==0,habit_read:i%2===0});}
     add('02 Retreats/2026-Q3 Personal Retreat.md',{wheel_health:7,wheel_work:6,wheel_relationships:8});
-    add('04 Projects/Synthetic project.md',{type:'project',status:'active'},'- [ ] Review synthetic plan #project/synthetic-project 📅 2026-09-09\n- [ ] Draft outline #project/synthetic-project ⏳ 2026-09-10');
     add('08 Tasks/Tasks.md',{},'- [ ] Resolve fixture overdue task 📅 2026-09-08\n- [ ] Pick a focus ⏫');
     add('05 People/Synthetic person.md',{type:'person'},'- [ ] Discuss fixture #p/synthetic-person #discuss');
     add('07 Library/Book Notes/Synthetic book.md',{type:'book'});
     add('07 Library/Book Notes/Finished book.md',{type:'book',status:'completed'});
     add('07 Library/Book Notes/Sample book.md',{type:'book',status:'reading',tags:['example']});
     add('07 Library/Source.md',{type:'source',cover:'https://example.invalid/cover.png'});
-    const boardPath='06 Writing/Articles/Article Board.md';
-    add(boardPath,{'kanban-plugin':'board'},'## Ideas\n- [ ] Fixture idea\n## Drafting\n- [ ] Fixture draft\n- [x] Fixture checked item');
-    metadata.get(boardPath).headings=[{level:2,heading:'Ideas',position:{start:{line:0}}},{level:2,heading:'Drafting',position:{start:{line:2}}}];
+    add('06 Writing/Articles/Article Board.md',{'kanban-plugin':'board'},'## Ideas\n## Drafting');
+    add('04 Projects/Sprints/Synthetic project Sprint 1.md',{type:'sprint',project:'[[Synthetic project]]',number:1,start:'2026-09-07',end:'2026-09-18',goal:'Fixture goal',status:'active'});
+    add('04 Projects/Synthetic project.md',{type:'project',status:'active',priority:'high',due:'2026-10-01',stakeholders:['[[Synthetic person]]']},'## Tasks\n- [ ] Review synthetic plan #project/synthetic-project 📅 2026-09-09\n- [ ] Draft outline #project/synthetic-project ⏳ 2026-09-10\n- [/] Build the fixture #project/synthetic-project #sprint/synthetic-project-sprint-1\n- [ ] Wait on vendor #project/synthetic-project #sprint/synthetic-project-sprint-1 #blocked\n- [x] Agree scope #project/synthetic-project #sprint/synthetic-project-sprint-1 ✅ 2026-09-08');
+    add('10 Meetings/2026-09-08 Synthetic kickoff.md',{type:'meeting',kind:'meeting',date:'2026-09-08',project:'[[Synthetic project]]',attendees:['[[Synthetic person]]']},'# Kickoff\n## Decisions\n- Use the fixture database\n## Action items\n- [ ] Send fixture notes #project/synthetic-project 📅 2026-09-11');
+    add('06 Writing/Decisions/ADR-0001 Fixture decision.md',{type:'adr',adr_number:1,status:'proposed',date:'2026-09-08',project:'[[Synthetic project]]'});
+    add('07 Library/Clippings/Fixture clip.md',{type:'clipping',status:'inbox',source:'https://example.invalid/clip',site:'example.invalid',clipped:'2026-09-09'});
     window.opened=[];window.commands=[];
     const plugins={'agent-client':{settings:{autoAllowPermissions:false}},'obsidian-local-rest-api':{settings:{}}};
-    const app={vault:{getMarkdownFiles:()=>[...files.values()],getAbstractFileByPath:p=>files.get(p),cachedRead:async f=>contents.get(f.path)||'',on(){}},metadataCache:{getFileCache:f=>metadata.get(f.path),on(){}},plugins:{getPlugin:id=>plugins[id]},workspace:{getLeaf:()=>({openFile:async(f,o)=>window.opened.push({path:f.path,options:o})}),revealLeaf:async()=>{}},commands:{commands:{}}};
+    window.writes=[];
+    const reindex=(path)=>{const body=contents.get(path)||'';metadata.get(path).listItems=body.split('\n').flatMap((line,i)=>{const m=line.match(/^- \[(.)\]/);return m?[{task:m[1],position:{start:{line:i}}}]:[];});};
+    const app={vault:{getMarkdownFiles:()=>[...files.values()],getFiles:()=>[...files.values()],getAbstractFileByPath:p=>files.get(p),cachedRead:async f=>contents.get(f.path)||'',read:async f=>contents.get(f.path)||'',on(){},
+      process:async(f,fn)=>{const next=fn(contents.get(f.path)||'');contents.set(f.path,next);reindex(f.path);window.writes.push(['process',f.path]);return next;},
+      create:async(p,c)=>{const fm={};for(const line of (c.match(/^---\n([\s\S]*?)\n---/)?.[1]||'').split('\n')){const m=line.match(/^(\w+): (.+)$/);if(m)fm[m[1]]=m[2].startsWith('"')?JSON.parse(m[2]):m[2];}add(p,fm,c);window.writes.push(['create',p]);return files.get(p);},createFolder:async()=>{}},
+      fileManager:{processFrontMatter:async(f,fn)=>{fn(metadata.get(f.path).frontmatter);window.writes.push(['frontmatter',f.path]);},renameFile:async(f,t)=>{window.writes.push(['rename',f.path,t]);}},metadataCache:{getFileCache:f=>metadata.get(f.path),on(){}},plugins:{getPlugin:id=>plugins[id]},workspace:{getLeaf:()=>({openFile:async(f,o)=>window.opened.push({path:f.path,options:o})}),revealLeaf:async()=>{}},commands:{commands:{}}};
     const module={exports:{}};
-    const View=new Function('require','module',`${source};return LifeOSHomeView;`)(()=>({Component,ItemView,TFile,Plugin:class{},Modal:class{},Notice:class{},moment,setIcon(){}}),module);
+    const View=new Function('require','module',`${source};return LifeOSHomeView;`)(()=>({Component,ItemView,TFile,Plugin:class{},PluginSettingTab:class{},Setting:class{},Modal:class{},Notice:class{},moment,setIcon(){}}),module);
     const plugin={runCommand:(id)=>{window.commands.push(id);return true;},openCapture(){window.commands.push('capture');},activateView(){}};
     window.view=new View({app},plugin);await window.view.onOpen();
   }, fs.readFileSync('.obsidian/plugins/life-os-app/main.js','utf8'));
@@ -57,7 +64,7 @@ try {
   assert.ok(await page.locator('.life-os-task-row').count() <= 3);
   await page.locator('.life-os-task-row').first().click();
   assert.ok(await page.evaluate(()=>window.opened.at(-1)?.options?.eState?.line >= 0));
-  for(const screen of ['home','today','plan','review','focus','projects','people','create','library','ai']){
+  for(const screen of ['home','today','sprint','projects','meetings','docs','inbox','plan','review','focus','people','library','ai']){
     await page.evaluate((s)=>{window.view.activeScreen=s;window.view.render();},screen);
     assert.ok(await page.locator('.life-os-shell').innerText());
     await page.screenshot({path:`/tmp/life-os-${screen}-candidate.png`,fullPage:true});
@@ -71,10 +78,57 @@ try {
       await page.screenshot({path:'/tmp/life-os-home-lower-candidate.png'});
       await page.evaluate(()=>document.querySelector('#root').scrollTop=0);
     }
-    if(screen==='today')assert.equal(await page.locator('.life-os-checkin-meter').getAttribute('max'),'3');
-    if(screen==='projects')assert.ok((await page.locator('.life-os-record-metrics').textContent()).includes('2 tagged open'),await page.locator('.life-os-record-metrics').textContent());
+    if(screen==='today'){
+      assert.equal(await page.locator('.life-os-standup').count(),1);
+      assert.ok((await page.locator('.life-os-standup-column.is-alert').innerText()).includes('Wait on vendor'));
+    }
+    if(screen==='projects'){
+      assert.ok((await page.locator('.life-os-project-card .life-os-record-metrics').first().textContent()).includes('5 open · 1 done'),await page.locator('.life-os-project-card .life-os-record-metrics').first().textContent());
+      await page.locator('.life-os-project-card-open').first().click();
+      assert.equal(await page.locator('.life-os-project-page').count(),1);
+      assert.equal(await page.locator('.life-os-nav-button[aria-current="page"]').innerText(),'Projects');
+      await page.screenshot({path:'/tmp/life-os-project-overview.png',fullPage:true});
+      await page.getByRole('tab',{name:/^Tasks/}).click();
+      await page.getByLabel('Task description',{exact:true}).fill('Fixture task from the page');
+      await page.getByLabel('Due',{exact:true}).fill('2026-09-20');
+      await page.locator('.life-os-task-form').getByRole('button',{name:'Add task'}).click();
+      await page.waitForFunction(()=>document.querySelector('.life-os-tab-panel')?.innerText.includes('Fixture task from the page'));
+      await page.screenshot({path:'/tmp/life-os-project-tasks.png',fullPage:true});
+      await page.getByRole('checkbox',{name:/Complete: Review synthetic plan/}).click();
+      await page.waitForFunction(()=>window.writes.length>=2);
+      await page.getByRole('tab',{name:/^Meetings/}).click();
+      await page.getByRole('button',{name:'New meeting minutes'}).click();
+      await page.getByLabel('Title',{exact:true}).fill('Fixture review');
+      await page.getByRole('button',{name:'Synthetic person',exact:true}).click();
+      await page.getByLabel('Decision 1',{exact:true}).fill('Keep the fixture small');
+      await page.getByLabel('Action item 1',{exact:true}).fill('Write the follow-up');
+      await page.screenshot({path:'/tmp/life-os-project-composer.png',fullPage:true});
+      await page.getByRole('button',{name:'Save minutes'}).click();
+      await page.waitForFunction(()=>window.writes.some(w=>w[0]==='create'));
+      assert.ok(await page.evaluate(()=>window.writes.find(w=>w[0]==='create')[1]==='10 Meetings/2026-09-09 Fixture review.md'));
+      await page.waitForSelector('.life-os-meeting-card.is-open');
+      await page.screenshot({path:'/tmp/life-os-project-meetings.png',fullPage:true});
+      await page.evaluate(()=>{window.view.activeScreen='projects';window.view.render();});
+    }
+    if(screen==='sprint'){
+      assert.equal(await page.locator('.life-os-board-column').count(),3);
+      assert.equal(await page.locator('.life-os-board-column.is-doing .life-os-board-card').count(),1);
+      await page.locator('.life-os-board-column.is-todo .life-os-board-card').first().getByRole('button',{name:'Start'}).click();
+      await page.waitForFunction(()=>document.querySelectorAll('.life-os-board-column.is-doing .life-os-board-card').length===2);
+      await page.screenshot({path:'/tmp/life-os-sprint-board.png',fullPage:true});
+    }
+    if(screen==='inbox'){
+      assert.equal(await page.locator('.life-os-clip-card').count(),1);
+      await page.getByRole('button',{name:'Read'}).click();
+      await page.waitForFunction(()=>window.writes.some(w=>w[0]==='frontmatter'&&w[1].includes('Clippings')));
+      assert.equal(await page.locator('.life-os-clip-card').count(),0);
+    }
+    if(screen==='docs'){
+      assert.ok((await page.locator('.life-os-doc-table').innerText()).includes('ADR-0001 Fixture decision'));
+      await page.screenshot({path:'/tmp/life-os-docs.png',fullPage:true});
+    }
     if(screen==='people'){
-      await page.locator('.life-os-discussion-queue button').click();
+      await page.locator('.life-os-discussion-queue button').first().click();
       assert.equal(await page.evaluate(()=>window.opened.at(-1).path),'05 People/Synthetic person.md');
     }
     if(screen==='focus'){
@@ -84,18 +138,9 @@ try {
       assert.ok((await page.locator('.life-os-task-row').innerText()).includes('overdue'));
       await page.getByRole('button',{name:/^All ·/}).click();
     }
-    if(screen==='create'){
-      await page.locator('.life-os-pipeline-card').filter({hasText:'Articles'}).click();
-      assert.equal(await page.locator('.life-os-workflow-lanes').count(),1);
-      assert.equal(await page.locator('.life-os-lane-item').count(),2);
-      assert.equal(await page.getByRole('button',{name:'Ideas · 1',exact:true}).count(),1);
-      await page.getByRole('button',{name:'Drafting · 2',exact:true}).click();
-      assert.equal(await page.evaluate(()=>window.opened.at(-1).options.eState.line),2);
-      await page.screenshot({path:'/tmp/life-os-create-candidate.png',fullPage:true});
-    }
     if(screen==='library'){
-      assert.equal(await page.locator('.life-os-record-card').count(),3);
-      assert.equal(await page.locator('.life-os-book-fallback').count(),3);
+      assert.equal(await page.locator('.life-os-record-card').count(),4);
+      assert.equal(await page.locator('.life-os-book-fallback').count(),4);
       assert.equal(await page.locator('img[src^="https:"]').count(),0);
       await page.getByLabel('Library type',{exact:true}).selectOption('source');
       assert.equal(await page.locator('.life-os-record-card').count(),1);
@@ -142,9 +187,10 @@ try {
   await page.getByRole('button',{name:'Home',exact:true}).click();
   for(const width of [900,620,390]){
     await page.setViewportSize({width,height:900});
-    for (const screen of ['home','today','plan','review','focus','projects','people','create','library','ai']) {
-      await page.evaluate(s=>{window.view.activeScreen=s;window.view.render();},screen);
+    for (const screen of ['home','today','sprint','projects','meetings','docs','inbox','plan','review','focus','people','library','ai','project']) {
+      await page.evaluate(s=>{window.view.activeScreen=s;window.view.activeProjectPath='04 Projects/Synthetic project.md';window.view.render();},screen);
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`${screen} document overflow at ${width}`);
+      if(width===390&&['project','sprint','today'].includes(screen))await page.screenshot({path:`/tmp/life-os-${screen}-390.png`,fullPage:true});
     }
   }
   await page.setViewportSize({width:1440,height:1000});
@@ -181,5 +227,5 @@ try {
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.screenshot({path:'/tmp/life-os-home-light-candidate.png'});
   await page.evaluate(()=>window.view.onClose());
-  console.log('Dashboard browser checks passed: ten modules, Home spacing, preview/full Brain navigation, workload groups, project counts, discussion links, board previews, Library filters and remote-cover rejection, AI branches, per-module controls, narrow widths and light-theme smoke check. Synthetic fixture only.');
+  console.log('Dashboard browser checks passed: thirteen modules, project page tasks and minutes composer, sprint moves, inbox triage, Home spacing, preview/full Brain navigation, workload groups, project counts, discussion links, board previews, Library filters and remote-cover rejection, AI branches, per-module controls, narrow widths and light-theme smoke check. Synthetic fixture only.');
 }finally{await browser.close();}

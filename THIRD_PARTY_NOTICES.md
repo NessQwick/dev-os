@@ -23,7 +23,7 @@ The original Life OS application shell is included with this vault.
 
 | Plugin id | Version shipped | License | Source |
 | --- | --- | --- | --- |
-| life-os-app | 0.20.0 | MIT | `.obsidian/plugins/life-os-app/` |
+| life-os-app | 1.0.0 | MIT | `.obsidian/plugins/life-os-app/` |
 
 The Life OS Brain view is an original Canvas implementation inspired by the brain-shaped visual concept in SEO OS. No SEO OS source code, assets, dependencies, or client data are bundled.
 

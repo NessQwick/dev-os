@@ -11,9 +11,9 @@ const pset = id => { try { return app.plugins.plugins[id]?.settings || null; } c
 const today = moment();
 
 // Tier 0: the app
-for (const [id, name] of [["life-os-app", "Life OS"], ["dataview", "Dataview"], ["templater-obsidian", "Templater"], ["periodic-notes", "Periodic Notes"], ["quickadd", "QuickAdd"], ["obsidian-tasks-plugin", "Tasks"], ["obsidian-kanban", "Kanban"]])
+for (const [id, name] of [["life-os-app", "Dev OS"], ["dataview", "Dataview"], ["templater-obsidian", "Templater"], ["periodic-notes", "Periodic Notes"], ["quickadd", "QuickAdd"], ["obsidian-tasks-plugin", "Tasks"], ["obsidian-kanban", "Kanban"]])
   add(0, `${name} plugin enabled`, enabled(id), "Settings → Community plugins");
-add(0, "Life OS application command registered", !!app.commands.findCommand("life-os-app:open-home"), "Command palette → Life OS: Open Life OS home");
+add(0, "Dev OS application command registered", !!app.commands.findCommand("life-os-app:open-home"), "Command palette → Dev OS: Open Dev OS home");
 add(0, "Dataview JavaScript queries on", !!(pset("dataview")?.enableDataviewJs), "Settings → Dataview");
 add(0, "CSS snippet lifeos on", (() => { try { return app.customCss.enabledSnippets.has("lifeos"); } catch (e) { return false; } })(), "Settings → Appearance → CSS snippets");
 add(0, "Periodic Notes daily folder matches config", (() => { const pn = pset("periodic-notes"); return !!pn && pn.daily?.folder === (cfg.daily_folder || "01 Journal/Daily") && /Daily Note\.md$/.test(pn.daily?.template || ""); })(), "Settings → Periodic Notes");
