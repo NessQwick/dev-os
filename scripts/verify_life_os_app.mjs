@@ -48,8 +48,8 @@ check(
   manifest.version
 );
 check(
-  "Setup verifies the Life OS application",
-  setupView.includes('["life-os-app", "Life OS"]') &&
+  "Setup verifies the Dev OS application",
+  setupView.includes('["life-os-app", "Dev OS"]') &&
     setupView.includes('findCommand("life-os-app:open-home")')
 );
 check(
@@ -85,10 +85,12 @@ const quickAddById = new Map(
 const recordChoiceContracts = [
   ["lifeos-new-project", "Templates/Project.md", "04 Projects"],
   ["lifeos-new-person", "Templates/Person.md", "05 People"],
-  ["lifeos-new-newsletter", "Templates/Newsletter.md", "06 Writing/Newsletters"],
-  ["lifeos-new-video", "Templates/YouTube Script.md", "06 Writing/YouTube Scripts"],
+  ["lifeos-new-sprint", "Templates/Sprint.md", "04 Projects/Sprints"],
+  ["lifeos-new-meeting", "Templates/Meeting.md", "10 Meetings"],
+  ["lifeos-new-adr", "Templates/ADR.md", "06 Writing/Decisions"],
+  ["lifeos-new-tech-note", "Templates/Tech Note.md", "06 Writing/Tech Notes"],
+  ["lifeos-new-postmortem", "Templates/Postmortem.md", "06 Writing/Postmortems"],
   ["lifeos-new-article", "Templates/Article.md", "06 Writing/Articles"],
-  ["lifeos-new-course-lesson", "Templates/Course Lesson.md", "06 Writing/Course Content"],
   ["lifeos-new-book", "Templates/Book Note.md", "07 Library/Book Notes"],
   ["lifeos-new-study-note", "Templates/Study Note.md", "09 Reading/Study Notes"],
 ];
@@ -140,9 +142,7 @@ const prohibitedCapabilities = [
   "XMLHttpRequest",
   "WebSocket",
   "child_process",
-  "vault.create",
   "vault.modify",
-  "vault.process",
   "vault.delete",
   "vault.trash",
   "adapter.write",
@@ -150,10 +150,21 @@ const prohibitedCapabilities = [
 ];
 const capabilityHits = prohibitedCapabilities.filter((term) => source.includes(term));
 check(
-  "no network, process, or direct vault-write capability",
+  "no network, process, delete, or raw adapter capability",
   capabilityHits.length === 0,
   capabilityHits.join(", ")
 );
+// Writes are allowed only inside the LifeOSWriter class, so every change to a
+// note goes through one reviewed, line-checked path.
+const writerStart = source.indexOf("class LifeOSWriter {");
+const writerEnd = source.indexOf("\nclass ", writerStart + 1);
+const writerBlock = writerStart === -1 ? "" : source.slice(writerStart, writerEnd);
+const outsideWriter = writerStart === -1 ? source : source.slice(0, writerStart) + source.slice(writerEnd);
+const writeApis = ["vault.create", "vault.process", "vault.append", "processFrontMatter", "renameFile", "createFolder"];
+const leakedWrites = writeApis.filter((term) => outsideWriter.includes(term));
+check("vault writes live only in LifeOSWriter", writerBlock && leakedWrites.length === 0, leakedWrites.join(", "));
+check("writer guards task lines against stale content", writerBlock.includes("lines[index] !== task.raw"));
+check("writer never overwrites an existing note", writerBlock.includes("already exists. Nothing was overwritten."));
 
 class FakeElement {
   constructor(tag = "div", options = {}) {
@@ -235,6 +246,9 @@ class Modal extends Component {
 }
 
 class Plugin extends Component {
+  async loadData() { return Plugin.stored ?? null; }
+  async saveData(data) { Plugin.saved = JSON.parse(JSON.stringify(data)); }
+  addSettingTab(tab) { this.settingTab = tab; }
   registerView(type, factory) {
     this.views = this.views || new Map();
     this.views.set(type, factory);
@@ -255,16 +269,35 @@ class Plugin extends Component {
 class TFile {
   constructor(filePath = "") {
     this.path = filePath;
+    this.name = filePath.split("/").pop();
+    this.basename = this.name.replace(/\.md$/, "");
   }
 }
 
-class Notice {}
+class Notice {
+  constructor(message) { Notice.messages.push(message); }
+}
+Notice.messages = [];
+
+class PluginSettingTab {
+  constructor(app, plugin) { this.app = app; this.plugin = plugin; this.containerEl = new FakeElement(); }
+}
+
+class Setting {
+  constructor(container) { this.container = container; }
+  setName() { return this; }
+  setDesc() { return this; }
+  addToggle(callback) { callback({ setValue() { return this; }, onChange() { return this; } }); return this; }
+  addText(callback) { callback({ setPlaceholder() { return this; }, setValue() { return this; }, onChange() { return this; } }); return this; }
+  addButton(callback) { callback({ setButtonText() { return this; }, onClick() { return this; } }); return this; }
+}
 
 try {
   const moduleBox = { exports: {} };
-  vm.runInNewContext(
+  const sandbox = vm.createContext({});
+  vm.runInContext(
     source,
-    {
+    Object.assign(sandbox, {
       module: moduleBox,
       exports: moduleBox.exports,
       require(id) {
@@ -277,6 +310,8 @@ try {
           Modal,
           Notice,
           Plugin,
+          PluginSettingTab,
+          Setting,
           TFile,
           moment: () => {
             const date = new Date("2026-09-09T12:00:00Z");
@@ -317,7 +352,7 @@ try {
           setIcon: () => {},
         };
       },
-    },
+    }),
     { filename: mainPath }
   );
 
@@ -396,6 +431,8 @@ try {
     ["obsidian-local-rest-api", { settings: {} }],
   ]);
   const requestedPaths = [];
+  const writes = [];
+  const absentPaths = new Set();
   const fakeLeaf = {
     app: null,
     async setViewState(state) {
@@ -427,8 +464,35 @@ try {
       },
       getAbstractFileByPath: (filePath) => {
         requestedPaths.push(filePath);
+        if (absentPaths.has(filePath)) return null;
         return filePath.endsWith(".md") ? new TFile(filePath) : null;
       },
+      getFiles: () => fakeFiles,
+      read: async (file) => fileContents.get(file.path) || "",
+      process: async (file, transform) => {
+        const after = transform(fileContents.get(file.path) || "");
+        fileContents.set(file.path, after);
+        writes.push(["process", file.path, after]);
+        return after;
+      },
+      create: async (filePath, content) => {
+        absentPaths.delete(filePath);
+        fileContents.set(filePath, content);
+        writes.push(["create", filePath, content]);
+        const file = new TFile(filePath);
+        fakeFiles.push(file);
+        return file;
+      },
+      createFolder: async (folder) => { writes.push(["folder", folder]); },
+    },
+    fileManager: {
+      processFrontMatter: async (file, mutate) => {
+        const frontmatter = { ...(metadata.get(file.path) || {}) };
+        mutate(frontmatter);
+        metadata.set(file.path, frontmatter);
+        writes.push(["frontmatter", file.path, frontmatter]);
+      },
+      renameFile: async (file, target) => { writes.push(["rename", file.path, target]); },
     },
     workspace: {
       getLeavesOfType: () => [],
@@ -454,15 +518,19 @@ try {
     "open-brain",
     ...[
       "today",
+      "sprint",
+      "projects",
+      "meetings",
+      "docs",
+      "inbox",
       "plan",
       "focus",
       "review",
-      "projects",
       "people",
-      "create",
       "library",
       "ai",
     ].map((screen) => `open-${screen}`),
+    ...["project", "sprint", "meeting", "adr", "tech-note", "postmortem"].map((kind) => `new-${kind}`),
   ];
   const missingAppCommands = requiredCommandIds.filter((id) => !commandIds.has(id));
   check(
@@ -477,24 +545,30 @@ try {
   const screens = [
     "home",
     "today",
+    "sprint",
+    "projects",
+    "meetings",
+    "docs",
+    "inbox",
     "plan",
     "focus",
     "review",
-    "projects",
     "people",
-    "create",
     "library",
     "ai",
   ];
   const emptyScreens = [];
   const requiredPanels = {
-    today: "life-os-today-live",
+    today: "life-os-standup",
+    sprint: "life-os-sprint-live",
+    meetings: "life-os-meetings-live",
+    docs: "life-os-docs-live",
+    inbox: "life-os-inbox-live",
     plan: "life-os-plan-live",
     focus: "life-os-collection-live",
     review: "life-os-review-live",
     projects: "life-os-collection-live",
     people: "life-os-collection-live",
-    create: "life-os-pipeline-live",
     library: "life-os-collection-live",
     ai: "life-os-ai-live",
   };
@@ -528,8 +602,11 @@ try {
       homeHasSetupBanner = treeHasClass(view.contentEl, "life-os-setup-banner");
     }
     if (screen === "today") {
+      plugin.settings.showPersonal = true;
+      view.render();
       todayHasPropertyValues =
         treeHasText(view.contentEl, "8/10") && treeHasText(view.contentEl, "Done");
+      plugin.settings.showPersonal = false;
     }
   }
   check("all application screens render", emptyScreens.length === 0, emptyScreens.join(", "));
@@ -707,6 +784,11 @@ try {
       quarterly: "Custom/Quarterly",
       retreats: "Custom/Retreats",
       projects: "Custom/Projects",
+      sprints: "04 Projects/Sprints",
+      meetings: "10 Meetings",
+      decisions: "06 Writing/Decisions",
+      docs: "06 Writing",
+      clippings: "07 Library/Clippings",
     }),
     JSON.stringify(configuredFolders)
   );
@@ -785,7 +867,11 @@ try {
   view.render();
   const findText = (element, text) => element.options?.text === text ? element :
     element.children.map((child) => findText(child, text)).find(Boolean);
-  check("Home keeps full analytics in Review", !findText(view.contentEl, "7 days") && !!findText(view.contentEl, "Explore Review"));
+  check("Home hides personal analytics by default", !findText(view.contentEl, "7 days") && !findText(view.contentEl, "Explore Review"));
+  plugin.settings.showPersonal = true;
+  view.render();
+  check("Home links personal analytics when enabled", !findText(view.contentEl, "7 days") && !!findText(view.contentEl, "Explore Review"));
+  plugin.settings.showPersonal = false;
   view.activeScreen = "review";
   view.render();
   findText(view.contentEl, "7 days").handlers.click();
@@ -794,6 +880,89 @@ try {
   check("sample control changes state", view.includeExamples === true);
   view.analyticsDays = 30;
   view.includeExamples = false;
+
+  // Pure helpers that shape every write.
+  const today = "2026-09-09";
+  check("toggle completes with a done date", sandbox.toggleTaskText("- [ ] Ship it 📅 2026-09-10", today) === "- [x] Ship it 📅 2026-09-10 ✅ 2026-09-09");
+  check("toggle reopens and drops the done date", sandbox.toggleTaskText("  - [x] Ship it ✅ 2026-09-08", today) === "  - [ ] Ship it");
+  check("status change keeps text and sets in progress", sandbox.setTaskStatusText("- [ ] Ship it #sprint/s1", "/", today) === "- [/] Ship it #sprint/s1");
+  check("non-task lines are never rewritten", sandbox.toggleTaskText("Plain prose", today) === null && sandbox.setTaskDueText("- note", "2026-09-10") === null);
+  check("due date replaces the old one", sandbox.setTaskDueText("- [ ] Ship it 📅 2026-09-01 ➕ 2026-08-01", "2026-09-20") === "- [ ] Ship it ➕ 2026-08-01 📅 2026-09-20");
+  check("task line carries routing tags and dates", sandbox.buildTaskLine({ text: "Write runbook", project: "billing-api", sprint: "billing-sprint-1", owner: "alex", due: "2026-09-12", high: true, blocked: true, created: today }) === "- [ ] Write runbook #project/billing-api #sprint/billing-sprint-1 #p/alex #blocked ⏫ 📅 2026-09-12 ➕ 2026-09-09");
+  const inserted = sandbox.insertUnderHeading("# P\n\n## Tasks\n- [ ] One\n\n## Notes\nText", "## Tasks", "- [ ] Two");
+  check("insert lands at the end of the section", inserted === "# P\n\n## Tasks\n- [ ] One\n- [ ] Two\n\n## Notes\nText", JSON.stringify(inserted));
+  check("insert ignores headings inside code fences", sandbox.insertUnderHeading("```\n## Tasks\n```\n## Tasks\n- [ ] One", "## Tasks", "- [ ] Two").endsWith("## Tasks\n- [ ] One\n- [ ] Two"));
+  check("insert creates a missing heading at the end", sandbox.insertUnderHeading("Body", "## Tasks", "- [ ] Two") === "Body\n\n## Tasks\n- [ ] Two\n");
+  check("insert replaces an empty template bullet", sandbox.insertUnderHeading("## Notes\n- \n\n## Done", "## Notes", "- Point") === "## Notes\n- Point\n\n## Done");
+  check("ADR numbers continue from the highest", sandbox.nextAdrNumber([1, "3", "ADR-0007"]) === 8 && sandbox.nextAdrNumber([]) === 1 && sandbox.formatAdrNumber(8) === "ADR-0008");
+  check("standup text lists empty sections explicitly", sandbox.buildStandupText({ yesterday: ["A"], today: [], blockers: ["B"] }) === "- Yesterday:\n  - A\n- Today: none\n- Blockers:\n  - B");
+  check("decisions are read from the minutes section", JSON.stringify(sandbox.extractSection("## Decisions\n- Use Postgres\n- [ ] not a decision\n## Action items\n- x", "## Decisions")) === JSON.stringify(["Use Postgres"]));
+  const meetingNote = sandbox.buildMeetingNote({ title: "Kickoff", date: today, time: "10:00", project: "Billing API", projectSlug: "billing-api", attendees: ["Alex Rivera"], agenda: "Scope\nRisks", notes: "", decisions: ["Use Postgres", ""], actions: [{ text: "Share plan", owner: "alex-rivera", due: "2026-09-11" }], today });
+  check("meeting note links the project and tags action items",
+    meetingNote.includes('project: "[[Billing API]]"') && meetingNote.includes('time: "10:00"') && meetingNote.includes("  - \"[[Alex Rivera]]\"") &&
+    meetingNote.includes("- Scope\n- Risks") && meetingNote.includes("## Decisions\n- Use Postgres\n") &&
+    meetingNote.includes("- [ ] Share plan #project/billing-api #p/alex-rivera 📅 2026-09-11 ➕ 2026-09-09"), meetingNote);
+
+  // Interactive writes go through the writer and refuse stale lines.
+  writes.length = 0;
+  fileContents.set("04 Projects/Example.md", "- [ ] Ship the Life OS slice 📅 2026-09-09 ⏫\n## Tasks\n- [ ] Existing #project/example");
+  await view.refreshLiveData();
+  const shipTask = view.taskSnapshot.tasks.find((task) => task.text === "Ship the Life OS slice");
+  await view.runWrite(() => view.writer.toggleTask(shipTask), "done");
+  check("checkbox completes the source line", fileContents.get("04 Projects/Example.md").startsWith("- [x] Ship the Life OS slice 📅 2026-09-09 ⏫ ✅ 2026-09-09"), fileContents.get("04 Projects/Example.md"));
+  const before = fileContents.get("04 Projects/Example.md");
+  Notice.messages.length = 0;
+  const staleOk = await view.runWrite(() => view.writer.toggleTask({ ...shipTask, raw: "- [ ] Something else" }), "done");
+  check("stale task lines are not written", !staleOk && fileContents.get("04 Projects/Example.md") === before && Notice.messages.some((message) => String(message).includes("changed since Dev OS read it")));
+
+  // Project page: add a task and save meeting minutes from the UI.
+  view.activeScreen = "project";
+  view.activeProjectPath = "04 Projects/Example.md";
+  view.render();
+  check("project page renders tabs", treeHasClass(view.contentEl, "life-os-project-page") && treeHasClass(view.contentEl, "life-os-tabs"));
+  view.setProjectTab("04 Projects/Example.md", "tasks");
+  view.taskDrafts = { "04 Projects/Example.md": { text: "Write the runbook", due: "2026-09-20", scheduled: "", high: true, sprint: "", owner: "", blocked: false } };
+  view.render();
+  const addButton = findText(view.contentEl, "Add task");
+  const findParentWithHandler = (element, text) => {
+    if (element.handlers?.click && element.children.some((child) => child.options?.text === text)) return element;
+    return element.children.map((child) => findParentWithHandler(child, text)).find(Boolean);
+  };
+  const settle = async () => { for (let i = 0; i < 30; i += 1) await new Promise((resolve) => setImmediate(resolve)); };
+  findParentWithHandler(view.contentEl, "Add task")?.handlers.click();
+  await settle();
+  check("project page adds a task under its Tasks heading", Boolean(addButton) && fileContents.get("04 Projects/Example.md").endsWith("## Tasks\n- [ ] Existing #project/example\n- [ ] Write the runbook #project/example ⏫ 📅 2026-09-20 ➕ 2026-09-09"), fileContents.get("04 Projects/Example.md"));
+  view.setProjectTab("04 Projects/Example.md", "meetings");
+  view.composerOpen = true;
+  const draft = view.meetingDraft("04 Projects/Example.md");
+  Object.assign(draft, { title: "Sprint review", decisions: ["Ship behind a flag"], actions: [{ text: "Demo to support", owner: "", due: "2026-09-15" }] });
+  view.render();
+  check("meeting composer renders with its draft", treeHasClass(view.contentEl, "life-os-composer") && view.meetingDraft("04 Projects/Example.md").title === "Sprint review");
+  absentPaths.add("10 Meetings/2026-09-09 Sprint review.md");
+  findParentWithHandler(view.contentEl, "Save minutes")?.handlers.click();
+  await settle();
+  const created = writes.find((write) => write[0] === "create");
+  check("meeting minutes are saved as a linked note", created?.[1] === "10 Meetings/2026-09-09 Sprint review.md" && created[2].includes('project: "[[Example]]"') && created[2].includes("- Ship behind a flag") && created[2].includes("- [ ] Demo to support #project/example 📅 2026-09-15"), JSON.stringify(created));
+  check("saved minutes clear the draft", !Object.keys(plugin.settings.meetingDrafts || {}).includes("04 Projects/Example.md"));
+  absentPaths.delete("10 Meetings/2026-09-09 Sprint review.md");
+  const refused = await view.runWrite(() => view.writer.createNote("10 Meetings", "2026-09-09 Sprint review", "x"), "");
+  check("existing notes are never overwritten", !refused);
+  await view.runWrite(() => view.writer.setFrontmatter("04 Projects/Example.md", { status: "on-hold" }), "");
+  check("status selects write frontmatter", metadata.get("04 Projects/Example.md").status === "on-hold");
+  metadata.set("04 Projects/Example.md", { type: "project", status: "active" });
+
+  // Inbox lists only untriaged clippings.
+  fakeFiles.push(new TFile("07 Library/Clippings/New clip.md"), new TFile("07 Library/Clippings/Read clip.md"));
+  metadata.set("07 Library/Clippings/New clip.md", { type: "clipping", status: "inbox", source: "https://example.invalid/a" });
+  metadata.set("07 Library/Clippings/Read clip.md", { type: "clipping", status: "read" });
+  check("inbox shows only untriaged clips", view.inboxClips().map((file) => file.path).join() === "07 Library/Clippings/New clip.md");
+  view.activeScreen = "home";
+  view.render();
+  const railLabels = [];
+  const collect = (element) => { if (String(element.options?.cls || "").includes("life-os-nav-button")) railLabels.push(element.options.attr?.title); element.children.forEach(collect); };
+  collect(view.contentEl);
+  check("personal modules are hidden by default", !railLabels.includes("Plan") && !railLabels.includes("Review") && railLabels.includes("Sprint") && railLabels.includes("Inbox"), railLabels.join(","));
+  check("settings tab registered", Boolean(plugin.settingTab));
 
   if (process.env.LIFE_OS_PREVIEW) {
     // Generated visual-test artifact uses synthetic fixtures only.

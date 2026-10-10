@@ -6,6 +6,11 @@ weekly_folder: 01 Journal/Weekly
 quarterly_folder: 01 Journal/Quarterly
 retreat_folder: 02 Retreats
 projects_folder: 04 Projects
+sprints_folder: 04 Projects/Sprints
+meetings_folder: 10 Meetings
+decisions_folder: 06 Writing/Decisions
+docs_folder: 06 Writing
+clippings_folder: 07 Library/Clippings
 dq_prefix: dq_
 habit_prefix: habit_
 wheel_prefix: wheel_
@@ -41,6 +46,18 @@ wheel_areas:
 
 The single place the system reads its settings from. Every dashboard widget in `Meta/views/` starts with `dv.page("Meta/Compass Config")`, and the daily, retreat, and questions templates read the lists below when a new note is created. Change things here; nothing else needs to move.
 
+## Dev OS folders
+| Property | Used by | Default |
+| --- | --- | --- |
+| `projects_folder` | Projects screen, project page, task index | `04 Projects` |
+| `sprints_folder` | Sprint screen, project page | `04 Projects/Sprints` |
+| `meetings_folder` | Meetings screen, meeting minutes composer | `10 Meetings` |
+| `decisions_folder` | Docs screen, New ADR | `06 Writing/Decisions` |
+| `docs_folder` | Docs screen (tech notes, postmortems) | `06 Writing` |
+| `clippings_folder` | Inbox screen, Web Clipper templates | `07 Library/Clippings` |
+
+Change a folder here and in the Templater folder templates together. Web Clipper templates in `Meta/Web Clipper/` carry their own `path`; edit it there too.
+
 ## Personal
 | Property | Used by | Notes |
 | --- | --- | --- |
@@ -50,16 +67,15 @@ The single place the system reads its settings from. Every dashboard widget in `
 ## Daily questions (`questions`)
 "Did I do my best to ..." rated 1 to 10, from Marshall Goldsmith's *Triggers*. Effort, not results. The six shipped are Goldsmith's universal set. Edit the text, rename keys (keep the `dq_` prefix, lowercase, no spaces), add or remove entries. New daily notes pick the list up automatically; the end-of-day prompt asks them in this order; dashboards discover whatever `dq_*` exists.
 
-Preset from the video (Mike Schmitz), paste over the list if you prefer it:
+Preset for engineering work, paste over the list if you prefer it:
 ```yaml
 questions:
-  - {key: dq_spiritual, text: Did I do my best to grow spiritually?}
-  - {key: dq_spouse, text: Did I do my best to love my spouse?}
-  - {key: dq_kids, text: Did I do my best to love my kids?}
-  - {key: dq_friend, text: Did I do my best to be a good friend?}
+  - {key: dq_deep_work, text: Did I do my best to protect deep work?}
+  - {key: dq_unblock, text: Did I do my best to unblock others?}
+  - {key: dq_ship, text: Did I do my best to ship something small?}
   - {key: dq_learn, text: Did I do my best to learn something?}
-  - {key: dq_create, text: Did I do my best to create something?}
-  - {key: dq_exercise, text: Did I do my best to exercise?}
+  - {key: dq_communicate, text: Did I do my best to communicate clearly?}
+  - {key: dq_rest, text: Did I do my best to rest and recover?}
 ```
 
 ## Habits (`habits`)

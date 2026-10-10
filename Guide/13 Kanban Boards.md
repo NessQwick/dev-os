@@ -4,17 +4,16 @@ Plugin: Kanban 2.0.51 (`obsidian-kanban`, repo now at https://github.com/communi
 | Board | Lanes | Feeds from |
 | --- | --- | --- |
 | `04 Projects/Projects Board` | Ideas → This quarter → In progress → Waiting on someone → Done | QuickAdd **Project idea**; cards link to project notes |
-| `06 Writing/Newsletters/Newsletter Board` | Backlog → Outlining → Drafting → Editing → Ready to publish → Published | QuickAdd **Newsletter idea** |
-| `06 Writing/YouTube Scripts/YouTube Board` | same | QuickAdd **Video idea** |
-| `06 Writing/Articles/Article Board` | same | QuickAdd **Article idea** |
-| `06 Writing/Course Content/Course Board` | same | manual |
+| `06 Writing/Articles/Article Board` | Ideas → In progress → Done (add lanes such as Drafting, Editing, Published as you need) | QuickAdd **Article idea** |
+
+Sprints are not Kanban boards. A sprint is a note plus `#sprint/<slug>` tasks; the Dev OS Sprint screen shows it as a three-column board and moves cards by rewriting the task status (`[ ]`, `[/]`, `[x]`).
 
 ## How it is wired
 - Global defaults in `.obsidian/plugins/obsidian-kanban/data.json`: dates typed with `@` (for example `@{2026-09-30}`) link to the daily note, relative dates shown, archive stamps the date.
-- Each board's own settings (the `%% kanban:settings %%` block at the bottom) set **New note folder** and **Note template**, so "convert card to note" from the Newsletter board creates a note in `06 Writing/Newsletters` from `Templates/Newsletter.md`.
+- Each board's own settings (the `%% kanban:settings %%` block at the bottom) set **New note folder** and **Note template**, so "convert card to note" from the Article board can create a note in `06 Writing/Articles` from `Templates/Article.md`.
 - `Meta/views/boards.js` reads every note with `kanban-plugin` in its properties and shows lane counts. It is on the [[Compass Dashboard]] (compact) and in full on [[Boards]]. Lanes named in `board_done_lanes` (config) count as finished.
 
-## Practices (from the video, 17:42)
+## Practices
 - One board per type of work, in that type's folder. Capture to the backlog; drag left to right; the card reaches Published only when the thing is actually out.
 - Cards are pointers. The work lives in the note the card links to (task notes), not in the card text.
 - Archive done cards at the retreat so the board stays a picture of now.

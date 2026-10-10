@@ -1,4 +1,4 @@
-Every Kanban board in the vault, read live from the board files. Cards move left to right; the last lane (Done or Published) counts as finished. Boards are just markdown, so the QuickAdd "idea" commands append straight into a Backlog lane.
+Every Kanban board in the vault, read live from the board files. Cards move left to right; the last lane (Done or Published) counts as finished. Boards are just markdown, so the QuickAdd "idea" commands append straight into the Ideas lane. Sprints are not boards here: see [[Sprint Dashboard]] or the Dev OS Sprint screen.
 
 ```agent
 type: button

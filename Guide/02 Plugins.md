@@ -1,14 +1,14 @@
-## Named in the video
+## Core plugins of the original workflows
 | Plugin | ID (community) | Used for | Where configured |
 | --- | --- | --- | --- |
 | **QuickAdd** | `quickadd` | Capture journal entries, wins, gratitude to the daily note; tasks to the master list; ideas to the Kanban backlogs (4:40, 17:51) | `.obsidian/plugins/quickadd/data.json` (8 capture choices, all registered as commands) |
-| **Periodic Notes** | `periodic-notes` | Daily, weekly, quarterly notes with their own templates and folders (9:16) | `.obsidian/plugins/periodic-notes/data.json` |
-| **Obsidian Tasks** | `obsidian-tasks-plugin` | Inline tasks, `tasks` query blocks on dashboards, people, projects, and the Bible reading callout (14:37) | `.obsidian/plugins/obsidian-tasks-plugin/data.json` |
+| **Periodic Notes** | `periodic-notes` | Daily, weekly, quarterly notes with their own templates and folders | `.obsidian/plugins/periodic-notes/data.json` |
+| **Obsidian Tasks** | `obsidian-tasks-plugin` | Inline tasks, `tasks` query blocks on dashboards, people, projects, and the Bible reading callout | `.obsidian/plugins/obsidian-tasks-plugin/data.json` |
 | **Dataview** (DataviewJS) | `dataview` | Habit dashboard, daily questions widget, wheel of life, projects dashboard (10:47, 18:49) | `.obsidian/plugins/dataview/data.json`, JS enabled |
-| **Kanban** | `obsidian-kanban` | One board per writing type (17:44) | Boards in `06 Writing/*/… Board.md` |
-| **Bases** (core, Obsidian 1.9+) | built-in | Mike's "on this day" query in the daily note (5:01) | This vault uses a DataviewJS block for "on this day" so the daily note works on any version; a Bases equivalent is in the guide below |
+| **Kanban** | `obsidian-kanban` | One board per writing type | Boards in `06 Writing/*/… Board.md` |
+| **Bases** (core, Obsidian 1.9+) | built-in | Mike's "on this day" query in the daily note | This vault uses a DataviewJS block for "on this day" so the daily note works on any version; a Bases equivalent is in the guide below |
 
-## Added after the video (owner's choices)
+## Added for this vault
 | Plugin | ID | Used for | Guide |
 | --- | --- | --- | --- |
 | **Agent Client** 0.12.1 | `agent-client` | Claude Code inside Obsidian; buttons and embedded chat on the dashboards | [[14 Agent Client and Claude Code]] |
@@ -25,12 +25,12 @@
 ## First-party application
 | Plugin | ID | Why |
 | --- | --- | --- |
-| **Life OS** | `life-os-app` | Native app shell, persistent navigation, universal capture, live system status, and privacy-preserving workflow panels. It reads the same Markdown and properties as the dashboards and does not create a second database. See [[21 Life OS Application]]. |
+| **Dev OS** | `life-os-app` | The interactive dashboard: project page with tasks and meeting minutes, sprint board, docs, Web Clipper inbox, standup, capture forms, settings tab. It reads and writes the same Markdown and properties as the dashboards (one writer class, explicit clicks only) and does not create a second database. See [[21 Life OS Application]]. |
 
 Links: QuickAdd https://github.com/chhoumann/quickadd · Periodic Notes https://github.com/liamcain/obsidian-periodic-notes · Tasks https://github.com/obsidian-tasks-group/obsidian-tasks · Dataview https://github.com/blacksmithgu/obsidian-dataview · Kanban https://github.com/mgmeyers/obsidian-kanban · Templater https://github.com/SilentVoid13/Templater
 
 ## First open checklist
-All ten community plugins and the first-party Life OS plugin are **already installed** in `.obsidian/plugins/` and listed as enabled in `community-plugins.json`.
+All ten community plugins and the first-party Dev OS plugin are **already installed** in `.obsidian/plugins/` and listed as enabled in `community-plugins.json`.
 
 1. Settings → Community plugins → **Turn off Restricted mode** (Obsidian asks this once per vault; it is not stored in the vault files). If the plugins do not light up immediately, run the command **Reload app without saving**. Life OS opens automatically when the vault layout is ready. You can reopen it later with the compass ribbon icon or **Life OS: Open Life OS home**.
 2. Settings → Appearance → CSS snippets → make sure `lifeos` is on (custom callouts: `reading`, `intention`, `memento`, `theme`).
@@ -43,7 +43,7 @@ All ten community plugins and the first-party Life OS plugin are **already insta
 ## Hotkeys (pre-seeded in `.obsidian/hotkeys.json`)
 | Keys | Action |
 | --- | --- |
-| Ctrl/Cmd+Shift+L | Open the Life OS application |
+| Ctrl/Cmd+Shift+L | Open the Dev OS application |
 | Ctrl/Cmd+Shift+C | Open universal Capture |
 | Ctrl/Cmd+Shift+D | Create or open today's daily note (QuickAdd runs the template through Templater) |
 | Ctrl/Cmd+Alt+W | Create or open this week's note |
@@ -65,17 +65,13 @@ To update a plugin later use Settings → Community plugins → Check for update
 | 🏆 Log a win | same | `- {{VALUE}}` | `## Wins` |
 | 🙏 Gratitude | same | `- {{VALUE}}` | `## Gratitude` |
 | ✅ Add task | `08 Tasks/Tasks.md` | `- [ ] {{VALUE}} ➕ {{DATE:YYYY-MM-DD}}` | `## Inbox` |
-| ✉️ Newsletter idea | `06 Writing/Newsletters/Newsletter Board.md` | `- [ ] {{VALUE}}` | `## Backlog` |
-| 🎬 Video idea | `06 Writing/YouTube Scripts/YouTube Board.md` | `- [ ] {{VALUE}}` | `## Backlog` |
-| 📰 Article idea | `06 Writing/Articles/Article Board.md` | `- [ ] {{VALUE}}` | `## Backlog` |
+| 📰 Article idea | `06 Writing/Articles/Article Board.md` | `- [ ] {{VALUE}}` | `## Ideas` |
 | 💡 Project idea | `04 Projects/Projects Board.md` | `- [ ] {{VALUE}}` | `## Ideas` |
 | 📅 Open today's note, 🗓️ this week's, 🧭 this quarter's, 🏕️ New personal retreat | Template choices: create the note from the template in the right folder with the date name, run Templater, open it (or just open it if it exists) | | |
 | 📁 New project | `04 Projects/{{VALUE}}.md` from `Templates/Project.md` | Prompt for the project name, create and open the note; an existing note is never overwritten | |
 | 👤 New person | `05 People/{{VALUE}}.md` from `Templates/Person.md` | Prompt for the person's name, create and open the note; an existing note is never overwritten | |
-| ✉️ New newsletter | `06 Writing/Newsletters/{{VALUE}}.md` from `Templates/Newsletter.md` | Prompt for the title, create and open the draft; an existing note is never overwritten | |
-| 🎬 New video script | `06 Writing/YouTube Scripts/{{VALUE}}.md` from `Templates/YouTube Script.md` | Prompt for the title, create and open the script; an existing note is never overwritten | |
+| 🏃 New sprint, 🗣️ New meeting minutes, 🧭 New decision record (ADR), 🛠️ New tech note, 🚨 New postmortem | `04 Projects/Sprints`, `10 Meetings`, `06 Writing/Decisions`, `06 Writing/Tech Notes`, `06 Writing/Postmortems` from the matching template | Prompt for the title, create and open the note; an existing note is never overwritten | |
 | 📰 New article | `06 Writing/Articles/{{VALUE}}.md` from `Templates/Article.md` | Prompt for the title, create and open the draft; an existing note is never overwritten | |
-| 🎓 New course lesson | `06 Writing/Course Content/{{VALUE}}.md` from `Templates/Course Lesson.md` | Prompt for the title, create and open the lesson; an existing note is never overwritten | |
 | 📚 New book note | `07 Library/Book Notes/{{VALUE}}.md` from `Templates/Book Note.md` | Prompt for the title, create and open the book note; an existing note is never overwritten | |
 | 📖 New study note | `09 Reading/Study Notes/{{VALUE}}.md` from `Templates/Study Note.md` | Prompt for the title, create and open the study note; an existing note is never overwritten | |
 

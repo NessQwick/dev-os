@@ -1,15 +1,19 @@
 ---
 type: project
 status: active
+priority: normal
 area: 
+repo: 
 quarter: <% tp.date.now("YYYY-[Q]Q") %>
 started: <% tp.date.now("YYYY-MM-DD") %>
 due: 
+current_sprint: 
 people: []
+stakeholders: []
 tags:
   - project
 ---
-Tag tasks anywhere in the vault with `#project/<% tp.file.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") %>` and they roll up here. Every task stays one click from the context that explains why it exists.
+Tag tasks anywhere in the vault with `#project/<% tp.file.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") %>` and they roll up here. Open the Dev OS project page (Projects in the Dev OS view) to add tasks and meeting minutes without leaving the dashboard.
 
 ```agent
 type: button
@@ -29,7 +33,7 @@ tags include #project/<% tp.file.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")
 sort by due
 ```
 
-## Inline tasks
+## Tasks
 - [ ] First step #project/<% tp.file.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") %>
 
 ## Notes

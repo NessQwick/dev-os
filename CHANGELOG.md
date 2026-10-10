@@ -4,6 +4,33 @@ Format: Added, Changed, Templates (manual merge notes), Plugins, Breaking. Semve
 
 ## Unreleased
 
+### Dev OS: application 1.0.0 candidate
+Added
+- Interactive Dev OS dashboard for developers and IT project managers.
+  - Project page with editable status, priority, target date, repository, and stakeholders.
+  - Project page tabs: Overview; Tasks (add form with due, scheduled, sprint, owner, priority, blocked; checkbox, start, and due date per row); Meetings (minutes composer with attendees, agenda, notes, decisions, action items; expandable timeline with append and ADR promotion); Docs; Clips.
+  - Sprint board with To do, In progress, Done.
+  - Meetings screen, and a Docs screen (ADR, tech note, postmortem) with status selects.
+  - Inbox for Obsidian Web Clipper triage.
+  - Standup on Today, quick add, and Home cards.
+- Settings tab and persisted view preferences. Personal modules are hidden by default.
+- New ... forms and commands for project, sprint, meeting minutes, ADR (auto-numbered), tech note, and postmortem.
+- Templates: Sprint, Meeting, ADR, Tech Note, Postmortem. QuickAdd choices and Templater folder templates for each. `10 Meetings/`, `04 Projects/Sprints/`, `06 Writing/Decisions`, `Tech Notes`, `Postmortems`, and `07 Library/Clippings` with example seeds.
+- Obsidian Web Clipper templates in `Meta/Web Clipper/` (article, docs page, GitHub issue or PR, Stack Overflow). The Web viewer saves to the same folder. `Guide/24 Web Clipper.md`.
+- Prompts 17 Sprint Review and 18 Standup Draft. Prompt 10 became Docs and ADR Drafting. Prompts 07, 09, and 12 cover meetings, sprints, and clippings. `Sprint Dashboard` and `Decisions` dashboards.
+
+Changed
+- The plugin writes to notes, but only through `LifeOSWriter`. Writes happen on explicit clicks. Task-line writes refuse stale lines, notes are never overwritten, and nothing is deleted. The verifier enforces the single writer and still bans network, process, delete, and raw adapter APIs.
+- Project template: `priority`, `repo`, `stakeholders`, `current_sprint`, and a `## Tasks` section.
+- Daily note: `## Standup` and `## Work log`.
+- Config: folder keys for sprints, meetings, decisions, docs, and clippings, and an engineering question preset.
+- Setup checklist: work tiers first, personal layer optional.
+- README, AGENTS.md, Start Here, Task Management, Writing, Kanban, Plugins, and Application guides are rewritten for the Dev OS audience.
+
+Breaking
+- Removed the YouTube Script, Newsletter, and Course Lesson pipelines (templates, boards, folders, QuickAdd choices, Templater mappings) and the plugin's Create screen. Existing notes of those types still open as plain notes.
+- Removed video timestamps and YouTube link lists from the Guide. Attribution stays in `CREDITS.md`.
+
 ### Release preparation hardening
 - Skip live personal defaults before staging; rebuild canonical boards empty instead of copying live cards; remove the arbitrary Board.md exemption; reset core machine state and omit local agent directories.
 - Add disposable archive restore verification with checksum, traversal, duplicate-path, file-type, inventory, and per-file integrity checks. Eleven release-safety tests cover core rejection paths.

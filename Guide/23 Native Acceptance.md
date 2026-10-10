@@ -5,7 +5,7 @@ This separates reproducible development evidence from native acceptance. A local
 ## Identify the candidate
 
 - Template version: 1.1.0 candidate
-- Life OS plugin version: 0.20.0
+- Dev OS plugin (`life-os-app`) version: 1.0.0
 - Archive SHA256: use the exact candidate's external `.sha256` sidecar; not embedded here to avoid self-referential hashes
 - Operating system and Obsidian version: not recorded
 - Test date and reviewer: not recorded
@@ -38,7 +38,11 @@ Provider authentication, an actual AI request, external calendar integration, an
 
 Bind screenshots and results to the exact candidate checksum. Label synthetic fixtures visibly. Record failures and skipped checks. A passing static, mock-runtime, or browser test does not mark this record complete.
 
-## Development checks, 2026-09-09
+## Development checks, 2026-10-10
+
+Dev OS application 1.0.0 passed 89 static and mock-runtime checks, including writes confined to the writer class, stale task-line refusal, project page task and meeting minutes flows, and inbox filtering. The Assistant contract verifier passed 18 workflows. The dashboard browser fixture passed thirteen modules, the project page (add task, complete task, minutes composer and save), sprint card moves, inbox triage, narrow widths at 900, 620, and 390 px, and a light-theme smoke check. Native acceptance of the new write paths inside Obsidian (Tasks plugin rendering of edited lines, Templater not overwriting notes created with content, Web Clipper import) is still required.
+
+## Development checks, 2026-09-09 (Life OS 0.20.0)
 
 Life OS application 0.20.0 passed 59 static and mock-runtime checks. The Assistant contract verifier passed 16 explicit non-auto-send workflows and context disclosure checks. Eleven synthetic temporary-directory release-safety tests passed. The dashboard browser fixture passed all ten dashboard modules, Home spacing, task-source navigation, month navigation, charts, library filters, workload and discussion summaries, per-module visual controls, narrow document widths, and a light-theme smoke check.
 

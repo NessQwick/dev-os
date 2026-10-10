@@ -1645,3 +1645,170 @@
   .life-os-ai-diagram { grid-template-columns: minmax(0,1fr); }
   .life-os-ai-branches { grid-column: 1; }
 }
+
+/* ---------------------------------------------------------------------------
+   Dev OS: interactive screens. Same tokens as above: --life-os-accent,
+   --life-os-line, --life-os-raised; states use is-* modifiers. */
+
+.life-os-home .life-os-small-button { display: inline-flex; align-items: center; gap: 6px; height: auto; min-height: 30px; padding: 6px 11px; border: 1px solid var(--life-os-line); border-radius: 999px; background: var(--background-primary); color: var(--text-normal); box-shadow: none; font-size: 0.74rem; cursor: pointer; white-space: nowrap; }
+.life-os-home .life-os-small-button:hover { border-color: color-mix(in srgb, var(--life-os-accent) 48%, var(--life-os-line)); }
+.life-os-home .life-os-small-button.is-primary { color: #1d1714; border-color: var(--life-os-accent); background: var(--life-os-accent); font-weight: 650; }
+.life-os-small-button svg { width: 13px; height: 13px; }
+.life-os-home .life-os-input, .life-os-home .life-os-select, .life-os-home .life-os-textarea, .life-os-task-due { min-height: 32px; padding: 5px 9px; border: 1px solid var(--life-os-line); border-radius: 9px; background: var(--background-primary); color: var(--text-normal); font-size: 0.78rem; max-width: 100%; }
+.life-os-home .life-os-textarea { width: 100%; resize: vertical; font-family: inherit; line-height: 1.45; }
+.life-os-input.is-grow, .life-os-textarea.is-grow { flex: 1 1 220px; min-width: 0; }
+.life-os-home .life-os-input:focus, .life-os-home .life-os-select:focus, .life-os-home .life-os-textarea:focus { outline: 2px solid color-mix(in srgb, var(--life-os-accent) 60%, transparent); outline-offset: 0; }
+.life-os-select.is-accepted { border-color: color-mix(in srgb, var(--color-green) 55%, var(--life-os-line)); }
+.life-os-select.is-proposed { border-color: color-mix(in srgb, var(--life-os-accent) 55%, var(--life-os-line)); }
+.life-os-select.is-superseded, .life-os-select.is-deprecated, .life-os-select.is-rejected, .life-os-select.is-archived { color: var(--text-muted); }
+.life-os-form-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin: 8px 0; }
+.life-os-form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.life-os-form-hint { flex: 1 1 260px; color: var(--text-faint); font-size: 0.7rem; line-height: 1.4; }
+.life-os-field { display: grid; gap: 4px; min-width: 0; }
+.life-os-field.is-wide { grid-column: 1 / -1; }
+.life-os-field-label { color: var(--text-muted); font-size: 0.66rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.life-os-field-hint { color: var(--text-faint); font-size: 0.7rem; }
+.life-os-inline-check, .life-os-flags { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 0.76rem; }
+.life-os-flags { gap: 14px; align-self: center; }
+.life-os-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 14px; }
+.life-os-home button.life-os-filter { height: auto; min-height: 30px; padding: 6px 12px; border: 1px solid var(--life-os-line); border-radius: 999px; background: transparent; box-shadow: none; color: var(--text-muted); font-size: 0.74rem; cursor: pointer; }
+.life-os-home button.life-os-filter[aria-pressed="true"] { color: var(--life-os-accent-soft); border-color: var(--life-os-accent); background: color-mix(in srgb, var(--life-os-accent) 9%, transparent); }
+.life-os-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border: 1px solid var(--life-os-line); border-radius: 999px; color: var(--text-muted); font-size: 0.68rem; font-weight: 650; white-space: nowrap; }
+.life-os-chip.is-person { color: var(--text-normal); }
+.life-os-chip.is-alert { color: var(--color-red); border-color: color-mix(in srgb, var(--color-red) 45%, var(--life-os-line)); }
+.life-os-chip.is-accepted { color: var(--color-green); }
+.life-os-chip.is-proposed { color: var(--life-os-accent-soft); }
+.life-os-home button.life-os-chip.is-toggle { height: auto; background: transparent; box-shadow: none; cursor: pointer; }
+.life-os-home button.life-os-chip.is-toggle[aria-pressed="true"] { color: var(--life-os-accent-soft); border-color: var(--life-os-accent); background: color-mix(in srgb, var(--life-os-accent) 10%, transparent); }
+.life-os-home button.life-os-chip-remove { height: 16px; min-height: 0; padding: 0 4px; border: 0; background: none; box-shadow: none; color: var(--text-faint); cursor: pointer; }
+.life-os-meter { position: relative; height: 6px; margin: 10px 0 6px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--text-normal) 9%, transparent); }
+.life-os-meter-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--life-os-accent), var(--life-os-accent-soft)); }
+.life-os-external { color: var(--life-os-accent-soft); font-size: 0.76rem; }
+.life-os-nav-badge { margin-left: auto; padding: 1px 7px; border-radius: 999px; background: var(--life-os-accent); color: #1d1714; font-size: 0.64rem; font-weight: 750; }
+.life-os-subheading { margin: 22px 0 10px; color: var(--text-muted); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; }
+
+/* Interactive task rows: checkbox, open button, metadata. */
+.life-os-task-row.is-interactive { grid-template-columns: auto minmax(0, 1fr) auto; cursor: default; }
+.life-os-task-row.is-done strong { color: var(--text-faint); text-decoration: line-through; }
+.life-os-task-check { width: 16px; height: 16px; margin: 0; accent-color: var(--life-os-accent); cursor: pointer; }
+.life-os-home button.life-os-task-open { display: grid; min-width: 0; height: auto; gap: 3px; padding: 0; border: 0; background: none; box-shadow: none; color: inherit; text-align: left; cursor: pointer; }
+.life-os-task-open strong { overflow: hidden; font-size: 0.78rem; text-overflow: ellipsis; white-space: nowrap; }
+.life-os-task-open > span { color: var(--text-faint); font-size: 0.66rem; }
+.life-os-task-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
+.life-os-task-badge { padding: 3px 7px; border-radius: 999px; font-size: 0.62rem; font-weight: 700; }
+.life-os-task-badge.is-blocked { color: var(--color-red); background: color-mix(in srgb, var(--color-red) 12%, transparent); }
+.life-os-task-badge.is-progress { color: var(--life-os-accent-soft); background: color-mix(in srgb, var(--life-os-accent) 10%, transparent); }
+.life-os-task-due { min-height: 28px; padding: 2px 6px; font-size: 0.68rem; }
+.life-os-task-group h4 { margin: 18px 0 8px; color: var(--text-muted); font-size: 0.74rem; }
+
+/* Home dashboard cards and quick add. */
+.life-os-home-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 20px 0; }
+.life-os-home-card, .life-os-panel-card { min-width: 0; padding: 16px; border: 1px solid var(--life-os-line); border-radius: 16px; background: var(--background-secondary); }
+.life-os-home-card p, .life-os-panel-card p { margin: 6px 0; color: var(--text-muted); font-size: 0.76rem; line-height: 1.45; }
+.life-os-home-card small, .life-os-panel-card small { color: var(--text-faint); font-size: 0.68rem; }
+.life-os-home-card-heading { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+.life-os-home-card-heading h3 { flex: 1; margin: 0; font-size: 0.86rem; }
+.life-os-panel-card h3 { margin: 0 0 10px; font-size: 0.86rem; }
+.life-os-big-number { display: block; color: var(--life-os-accent-soft); font-size: 2rem; line-height: 1.1; }
+.life-os-home button.life-os-link-row { display: block; width: 100%; height: auto; margin: 4px 0; padding: 6px 0; border: 0; border-bottom: 1px solid var(--life-os-line); border-radius: 0; background: none; box-shadow: none; color: var(--text-normal); font-size: 0.76rem; text-align: left; cursor: pointer; white-space: normal; }
+.life-os-home button.life-os-project-mini { display: grid; width: 100%; height: auto; gap: 0; margin: 4px 0; padding: 6px 0; border: 0; background: none; box-shadow: none; color: var(--text-normal); font-size: 0.76rem; text-align: left; cursor: pointer; }
+.life-os-project-mini .life-os-meter { margin: 5px 0 0; height: 4px; }
+.life-os-quick-add, .life-os-standup, .life-os-sprint-live, .life-os-meetings-live, .life-os-docs-live, .life-os-inbox-live, .life-os-clipper-setup { margin: 0 0 34px; padding: 20px; border: 1px solid var(--life-os-line); border-radius: 18px; background: var(--life-os-raised); }
+.life-os-quick-add h2 { margin: 0 0 4px; font-size: 1.02rem; }
+.life-os-standup { border-color: color-mix(in srgb, var(--life-os-accent) 24%, var(--life-os-line)); background: color-mix(in srgb, var(--life-os-accent) 4%, var(--life-os-raised)); }
+.life-os-standup-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; }
+.life-os-standup-column { min-width: 0; padding: 14px; border: 1px solid var(--life-os-line); border-radius: 14px; background: var(--background-primary); }
+.life-os-standup-column.is-alert { border-color: color-mix(in srgb, var(--color-red) 40%, var(--life-os-line)); }
+.life-os-standup-column h3 { margin: 0 0 10px; font-size: 0.86rem; }
+.life-os-standup-column p { color: var(--text-muted); font-size: 0.74rem; }
+
+/* Projects list and project page. */
+.life-os-project-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.life-os-project-card { min-width: 0; padding: 14px; border: 1px solid var(--life-os-line); border-radius: 14px; background: var(--background-primary); }
+.life-os-project-card.is-high { border-color: color-mix(in srgb, var(--life-os-accent) 40%, var(--life-os-line)); }
+.life-os-home button.life-os-project-card-open { display: grid; width: 100%; height: auto; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; padding: 0; border: 0; background: none; box-shadow: none; color: var(--text-normal); text-align: left; cursor: pointer; white-space: normal; }
+.life-os-project-card-open > div { display: grid; gap: 3px; min-width: 0; }
+.life-os-project-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.life-os-project-page { display: grid; gap: 18px; }
+.life-os-breadcrumb { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 0.78rem; }
+.life-os-project-header { padding: 22px; border: 1px solid color-mix(in srgb, var(--life-os-accent) 24%, var(--life-os-line)); border-radius: 18px; background: radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--life-os-accent) 10%, transparent), transparent 22rem), var(--life-os-raised); }
+.life-os-project-headline h1 { margin: 8px 0 16px; font-size: clamp(1.8rem, 4.4vw, 3rem); line-height: 1.05; overflow-wrap: anywhere; }
+.life-os-project-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.life-os-project-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+.life-os-project-stat { display: grid; gap: 2px; padding: 12px; border: 1px solid var(--life-os-line); border-radius: 12px; background: var(--background-primary); }
+.life-os-project-stat strong { font-size: 1.3rem; }
+.life-os-project-stat span { color: var(--text-faint); font-size: 0.68rem; }
+.life-os-people-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+.life-os-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; border: 1px solid var(--life-os-line); border-radius: 999px; background: var(--background-secondary); width: fit-content; max-width: 100%; }
+.life-os-home button.life-os-tab { height: auto; min-height: 32px; padding: 6px 14px; border: 0; border-radius: 999px; background: transparent; box-shadow: none; color: var(--text-muted); font-size: 0.78rem; cursor: pointer; }
+.life-os-home button.life-os-tab[aria-selected="true"] { background: var(--life-os-accent); color: #1d1714; font-weight: 700; }
+.life-os-tab-panel { display: grid; gap: 14px; }
+.life-os-overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.life-os-task-form { padding: 16px; border: 1px solid color-mix(in srgb, var(--life-os-accent) 24%, var(--life-os-line)); border-radius: 16px; background: color-mix(in srgb, var(--life-os-accent) 4%, var(--life-os-raised)); }
+.life-os-task-form h3, .life-os-composer h3 { margin: 0 0 6px; font-size: 0.92rem; }
+
+/* Meeting minutes composer and timeline. */
+.life-os-composer { padding: 18px; border: 1px solid color-mix(in srgb, var(--life-os-accent) 30%, var(--life-os-line)); border-radius: 16px; background: color-mix(in srgb, var(--life-os-accent) 4%, var(--life-os-raised)); }
+.life-os-composer-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 10px 0; }
+.life-os-composer-list { margin: 12px 0; }
+.life-os-composer-list h4 { margin: 0 0 6px; color: var(--text-muted); font-size: 0.74rem; }
+.life-os-composer-list p { color: var(--text-faint); font-size: 0.74rem; }
+.life-os-timeline { position: relative; display: grid; gap: 10px; padding-left: 16px; border-left: 2px solid var(--life-os-line); }
+.life-os-meeting-card { position: relative; border: 1px solid var(--life-os-line); border-radius: 14px; background: var(--background-primary); }
+.life-os-meeting-card::before { content: ""; position: absolute; left: -23px; top: 18px; width: 10px; height: 10px; border-radius: 50%; background: var(--life-os-accent); }
+.life-os-meeting-card.is-open { border-color: color-mix(in srgb, var(--life-os-accent) 40%, var(--life-os-line)); }
+.life-os-home button.life-os-meeting-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; width: 100%; height: auto; padding: 12px 14px; border: 0; background: none; box-shadow: none; color: var(--text-normal); text-align: left; cursor: pointer; white-space: normal; }
+.life-os-meeting-head strong { flex: 1 1 200px; font-size: 0.82rem; }
+.life-os-meeting-date { color: var(--life-os-accent-soft); font-size: 0.72rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.life-os-meeting-body { padding: 0 14px 14px; }
+.life-os-decision-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--life-os-line); font-size: 0.78rem; }
+
+/* Sprint board. */
+.life-os-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.life-os-board-column { display: grid; align-content: start; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--life-os-line); border-radius: 14px; background: var(--background-secondary); }
+.life-os-board-column.is-doing { border-color: color-mix(in srgb, var(--life-os-accent) 32%, var(--life-os-line)); }
+.life-os-board-heading { display: flex; align-items: center; justify-content: space-between; }
+.life-os-board-heading h3 { margin: 0; font-size: 0.82rem; }
+.life-os-board-card { display: grid; gap: 8px; padding: 11px; border: 1px solid var(--life-os-line); border-radius: 11px; background: var(--background-primary); }
+.life-os-board-card.is-blocked { border-color: color-mix(in srgb, var(--color-red) 45%, var(--life-os-line)); }
+.life-os-board-card .life-os-task-open strong { white-space: normal; }
+.life-os-board-card .life-os-task-meta { justify-content: flex-start; }
+
+/* Docs table and clipped inbox. */
+.life-os-doc-table { display: grid; margin: 10px 0 14px; border: 1px solid var(--life-os-line); border-radius: 14px; overflow: hidden; }
+.life-os-doc-row { display: grid; grid-template-columns: minmax(0, 2.4fr) auto minmax(110px, 0.8fr) minmax(0, 1fr) 92px; align-items: center; gap: 10px; padding: 9px 12px; border-top: 1px solid var(--life-os-line); background: var(--background-primary); font-size: 0.76rem; }
+.life-os-doc-row.is-header { border-top: 0; background: var(--background-secondary); color: var(--text-muted); font-size: 0.66rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.life-os-home button.life-os-doc-title { height: auto; padding: 0; border: 0; background: none; box-shadow: none; color: var(--text-normal); font-weight: 650; text-align: left; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
+.life-os-home button.life-os-doc-title:hover { color: var(--life-os-accent-soft); }
+.life-os-clip-list { display: grid; gap: 10px; }
+.life-os-clip-card { padding: 14px; border: 1px solid var(--life-os-line); border-radius: 14px; background: var(--background-primary); }
+.life-os-clip-head { font-size: 0.86rem; }
+.life-os-clip-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; color: var(--text-faint); font-size: 0.7rem; }
+.life-os-clipper-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.life-os-clipper-grid .life-os-panel-card { display: grid; gap: 10px; align-content: space-between; }
+.life-os-clipper-grid strong { font-size: 0.78rem; }
+
+/* Capture and form dialogs. */
+.life-os-quick-task { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.life-os-quick-task input[type="text"] { flex: 1 1 220px; }
+.life-os-form-modal .life-os-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 12px 0; }
+.life-os-form-modal .life-os-form input, .life-os-form-modal .life-os-form select, .life-os-form-modal .life-os-form textarea { width: 100%; }
+.life-os-form-error { min-height: 1em; color: var(--color-red); font-size: 0.78rem; }
+.life-os-form-modal .life-os-form-actions { justify-content: flex-end; }
+
+@container (max-width: 980px) {
+  .life-os-home-cards, .life-os-clipper-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .life-os-project-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .life-os-project-fields, .life-os-project-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container (max-width: 700px) {
+  .life-os-standup-grid, .life-os-board, .life-os-overview-grid, .life-os-composer-grid { grid-template-columns: 1fr; }
+  .life-os-doc-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .life-os-doc-row > :nth-child(n + 4) { display: none; }
+}
+@container (max-width: 520px) {
+  .life-os-home-cards, .life-os-project-grid, .life-os-clipper-grid, .life-os-project-fields, .life-os-project-stats { grid-template-columns: 1fr; }
+  .life-os-task-row.is-interactive { grid-template-columns: auto minmax(0, 1fr); }
+  .life-os-task-row.is-interactive .life-os-task-meta { grid-column: 2; justify-content: flex-start; }
+  .life-os-form-modal .life-os-form { grid-template-columns: 1fr; }
+}

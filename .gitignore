@@ -19,3 +19,7 @@ Meta/Agent Chats/
 # Local Claude Code settings and build output.
 .claude/settings.local.json
 build/
+
+# Python bytecode from running the build and verify scripts
+__pycache__/
+*.pyc

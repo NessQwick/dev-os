@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 const root = path.resolve(process.argv[2] || ".");
 const source = fs.readFileSync(path.join(root, "00 Dashboards/Assistant.md"), "utf8");
 const buttons = [...source.matchAll(/```agent\n([\s\S]*?)```/g)];
-assert.equal(buttons.length, 16, "All 16 assistant workflows must remain available");
+assert.equal(buttons.length, 18, "All 18 assistant workflows must remain available");
 for (const [, block] of buttons) {
   assert.match(block, /^autoSend: false$/m, "Workflow must require a separate send action");
   assert.match(block, /^type: button$/m);
@@ -19,4 +19,4 @@ assert.match(source, /## Before you send/);
 assert.match(source, /policy, not a technical guarantee/);
 assert.match(source, /noteContext: hosting/);
 assert.match(source, /not proof of authentication/);
-console.log("Assistant contracts passed: 16 explicit non-auto-send workflows, local prompt paths, context and authority disclosure. Native client behavior not tested.");
+console.log("Assistant contracts passed: 18 explicit non-auto-send workflows, local prompt paths, context and authority disclosure. Native client behavior not tested.");

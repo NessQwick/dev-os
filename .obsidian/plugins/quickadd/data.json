@@ -181,96 +181,6 @@
       }
     },
     {
-      "id": "lifeos-newsletter-idea",
-      "name": "✉️ Newsletter idea → backlog",
-      "type": "Capture",
-      "command": true,
-      "captureTo": "06 Writing/Newsletters/Newsletter Board.md",
-      "captureToActiveFile": false,
-      "createFileIfItDoesntExist": {
-        "enabled": false,
-        "createWithTemplate": false,
-        "template": ""
-      },
-      "format": {
-        "enabled": true,
-        "format": "- [ ] {{VALUE}}\n"
-      },
-      "prepend": false,
-      "appendLink": false,
-      "task": false,
-      "insertAfter": {
-        "enabled": true,
-        "after": "## Backlog",
-        "insertAtEnd": true,
-        "considerSubsections": false,
-        "createIfNotFound": false,
-        "createIfNotFoundLocation": "top"
-      },
-      "newLineCapture": {
-        "enabled": false,
-        "direction": "below"
-      },
-      "openFile": false,
-      "openFileInNewTab": {
-        "enabled": false,
-        "direction": "vertical",
-        "focus": true
-      },
-      "openFileInMode": "default",
-      "fileOpening": {
-        "location": "tab",
-        "direction": "vertical",
-        "focus": true,
-        "mode": "default"
-      }
-    },
-    {
-      "id": "lifeos-video-idea",
-      "name": "🎬 Video idea → backlog",
-      "type": "Capture",
-      "command": true,
-      "captureTo": "06 Writing/YouTube Scripts/YouTube Board.md",
-      "captureToActiveFile": false,
-      "createFileIfItDoesntExist": {
-        "enabled": false,
-        "createWithTemplate": false,
-        "template": ""
-      },
-      "format": {
-        "enabled": true,
-        "format": "- [ ] {{VALUE}}\n"
-      },
-      "prepend": false,
-      "appendLink": false,
-      "task": false,
-      "insertAfter": {
-        "enabled": true,
-        "after": "## Backlog",
-        "insertAtEnd": true,
-        "considerSubsections": false,
-        "createIfNotFound": false,
-        "createIfNotFoundLocation": "top"
-      },
-      "newLineCapture": {
-        "enabled": false,
-        "direction": "below"
-      },
-      "openFile": false,
-      "openFileInNewTab": {
-        "enabled": false,
-        "direction": "vertical",
-        "focus": true
-      },
-      "openFileInMode": "default",
-      "fileOpening": {
-        "location": "tab",
-        "direction": "vertical",
-        "focus": true,
-        "mode": "default"
-      }
-    },
-    {
       "id": "lifeos-article-idea",
       "name": "📰 Article idea → backlog",
       "type": "Capture",
@@ -291,7 +201,7 @@
       "task": false,
       "insertAfter": {
         "enabled": true,
-        "after": "## Backlog",
+        "after": "## Ideas",
         "insertAtEnd": true,
         "considerSubsections": false,
         "createIfNotFound": false,
@@ -541,15 +451,15 @@
       "setFileExistsBehavior": true
     },
     {
-      "id": "lifeos-new-newsletter",
-      "name": "✉️ New newsletter",
+      "id": "lifeos-new-sprint",
+      "name": "🏃 New sprint",
       "type": "Template",
       "command": true,
-      "templatePath": "Templates/Newsletter.md",
+      "templatePath": "Templates/Sprint.md",
       "folder": {
         "enabled": true,
         "folders": [
-          "06 Writing/Newsletters"
+          "04 Projects/Sprints"
         ],
         "chooseWhenCreatingNote": false,
         "createInSameFolderAsActiveFile": false,
@@ -557,7 +467,7 @@
       },
       "fileNameFormat": {
         "enabled": true,
-        "format": "{{VALUE:title|label:Newsletter title|trim}}"
+        "format": "{{VALUE:title|label:Sprint name (Project Sprint N)|trim}}"
       },
       "appendLink": false,
       "openFile": true,
@@ -571,15 +481,15 @@
       "setFileExistsBehavior": true
     },
     {
-      "id": "lifeos-new-video",
-      "name": "🎬 New video script",
+      "id": "lifeos-new-meeting",
+      "name": "🗣️ New meeting minutes",
       "type": "Template",
       "command": true,
-      "templatePath": "Templates/YouTube Script.md",
+      "templatePath": "Templates/Meeting.md",
       "folder": {
         "enabled": true,
         "folders": [
-          "06 Writing/YouTube Scripts"
+          "10 Meetings"
         ],
         "chooseWhenCreatingNote": false,
         "createInSameFolderAsActiveFile": false,
@@ -587,7 +497,97 @@
       },
       "fileNameFormat": {
         "enabled": true,
-        "format": "{{VALUE:title|label:Video title|trim}}"
+        "format": "{{VALUE:title|label:Meeting title (YYYY-MM-DD Topic)|trim}}"
+      },
+      "appendLink": false,
+      "openFile": true,
+      "openFileInNewTab": {
+        "enabled": false,
+        "direction": "vertical",
+        "focus": true
+      },
+      "openFileInMode": "default",
+      "fileExistsMode": "Nothing",
+      "setFileExistsBehavior": true
+    },
+    {
+      "id": "lifeos-new-adr",
+      "name": "🧭 New decision record (ADR)",
+      "type": "Template",
+      "command": true,
+      "templatePath": "Templates/ADR.md",
+      "folder": {
+        "enabled": true,
+        "folders": [
+          "06 Writing/Decisions"
+        ],
+        "chooseWhenCreatingNote": false,
+        "createInSameFolderAsActiveFile": false,
+        "chooseFromSubfolders": false
+      },
+      "fileNameFormat": {
+        "enabled": true,
+        "format": "{{VALUE:title|label:Decision title (ADR-0001 Title)|trim}}"
+      },
+      "appendLink": false,
+      "openFile": true,
+      "openFileInNewTab": {
+        "enabled": false,
+        "direction": "vertical",
+        "focus": true
+      },
+      "openFileInMode": "default",
+      "fileExistsMode": "Nothing",
+      "setFileExistsBehavior": true
+    },
+    {
+      "id": "lifeos-new-tech-note",
+      "name": "🛠️ New tech note",
+      "type": "Template",
+      "command": true,
+      "templatePath": "Templates/Tech Note.md",
+      "folder": {
+        "enabled": true,
+        "folders": [
+          "06 Writing/Tech Notes"
+        ],
+        "chooseWhenCreatingNote": false,
+        "createInSameFolderAsActiveFile": false,
+        "chooseFromSubfolders": false
+      },
+      "fileNameFormat": {
+        "enabled": true,
+        "format": "{{VALUE:title|label:Tech note title|trim}}"
+      },
+      "appendLink": false,
+      "openFile": true,
+      "openFileInNewTab": {
+        "enabled": false,
+        "direction": "vertical",
+        "focus": true
+      },
+      "openFileInMode": "default",
+      "fileExistsMode": "Nothing",
+      "setFileExistsBehavior": true
+    },
+    {
+      "id": "lifeos-new-postmortem",
+      "name": "🚨 New postmortem",
+      "type": "Template",
+      "command": true,
+      "templatePath": "Templates/Postmortem.md",
+      "folder": {
+        "enabled": true,
+        "folders": [
+          "06 Writing/Postmortems"
+        ],
+        "chooseWhenCreatingNote": false,
+        "createInSameFolderAsActiveFile": false,
+        "chooseFromSubfolders": false
+      },
+      "fileNameFormat": {
+        "enabled": true,
+        "format": "{{VALUE:title|label:Incident title|trim}}"
       },
       "appendLink": false,
       "openFile": true,
@@ -618,36 +618,6 @@
       "fileNameFormat": {
         "enabled": true,
         "format": "{{VALUE:title|label:Article title|trim}}"
-      },
-      "appendLink": false,
-      "openFile": true,
-      "openFileInNewTab": {
-        "enabled": false,
-        "direction": "vertical",
-        "focus": true
-      },
-      "openFileInMode": "default",
-      "fileExistsMode": "Nothing",
-      "setFileExistsBehavior": true
-    },
-    {
-      "id": "lifeos-new-course-lesson",
-      "name": "🎓 New course lesson",
-      "type": "Template",
-      "command": true,
-      "templatePath": "Templates/Course Lesson.md",
-      "folder": {
-        "enabled": true,
-        "folders": [
-          "06 Writing/Course Content"
-        ],
-        "chooseWhenCreatingNote": false,
-        "createInSameFolderAsActiveFile": false,
-        "chooseFromSubfolders": false
-      },
-      "fileNameFormat": {
-        "enabled": true,
-        "format": "{{VALUE:title|label:Lesson title|trim}}"
       },
       "appendLink": false,
       "openFile": true,

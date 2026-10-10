@@ -4,6 +4,8 @@ const {
   Modal,
   Notice,
   Plugin,
+  PluginSettingTab,
+  Setting,
   TFile,
   moment,
   setIcon,
@@ -17,6 +19,11 @@ const DEFAULT_FOLDERS = Object.freeze({
   quarterly: "01 Journal/Quarterly",
   retreats: "02 Retreats",
   projects: "04 Projects",
+  sprints: "04 Projects/Sprints",
+  meetings: "10 Meetings",
+  decisions: "06 Writing/Decisions",
+  docs: "06 Writing",
+  clippings: "07 Library/Clippings",
 });
 
 const TASK_STATUS_TYPES = Object.freeze({
@@ -62,6 +69,376 @@ function habitState(value) {
   return "invalid";
 }
 
+const DEFAULT_SETTINGS = Object.freeze({
+  showPersonal: false,
+  includeSamples: false,
+  showVisuals: true,
+  compactLayout: false,
+  itemLimit: 6,
+  defaultProject: "",
+  taskHeading: "## Tasks",
+  projectTabs: {},
+  meetingDrafts: {},
+});
+
+const TASK_LINE = /^(\s*(?:[-+*]|\d+[.)])\s+\[)([^\]])(\]\s*)(.*)$/u;
+
+function slugify(title) {
+  return String(title || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function safeFileName(name) {
+  return String(name || "")
+    .replace(/[\\/:*?"<>|#^[\]]+/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+}
+
+function linkTarget(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^!?\[\[/, "")
+    .replace(/\]\]$/, "")
+    .split("|")[0]
+    .split("#")[0]
+    .split("/")
+    .pop()
+    .replace(/\.md$/i, "")
+    .trim();
+}
+
+function linkList(value) {
+  const list = Array.isArray(value) ? value : value ? [value] : [];
+  return list.map(linkTarget).filter(Boolean);
+}
+
+function wikiLink(title) {
+  return `[[${title}]]`;
+}
+
+function isoAddDays(iso, days) {
+  const date = new Date(`${iso}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function daysBetween(fromIso, toIso) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fromIso) || !/^\d{4}-\d{2}-\d{2}$/.test(toIso)) return null;
+  return Math.round((new Date(`${toIso}T12:00:00Z`) - new Date(`${fromIso}T12:00:00Z`)) / 86400000);
+}
+
+function isoDate(value) {
+  const text = String(value ?? "").trim();
+  return /^\d{4}-\d{2}-\d{2}/.test(text) ? text.slice(0, 10) : "";
+}
+
+// Turns one Markdown task line into a new line. Returns null when the line is
+// not a task, so callers never rewrite prose.
+function setTaskStatusText(line, symbol, today) {
+  const match = String(line).match(TASK_LINE);
+  if (!match) return null;
+  let body = match[4].replace(/\s*✅\s*\d{4}-\d{2}-\d{2}/gu, "");
+  if (symbol === "x") body = `${body.trimEnd()} ✅ ${today}`;
+  return `${match[1]}${symbol}${match[3]}${body}`;
+}
+
+function toggleTaskText(line, today) {
+  const match = String(line).match(TASK_LINE);
+  if (!match) return null;
+  const closed = match[2] === "x" || match[2] === "X";
+  return setTaskStatusText(line, closed ? " " : "x", today);
+}
+
+function setTaskDueText(line, due) {
+  const match = String(line).match(TASK_LINE);
+  if (!match) return null;
+  let body = match[4].replace(/\s*📅\s*\d{4}-\d{2}-\d{2}/gu, "").trimEnd();
+  if (due) {
+    const done = body.match(/\s*✅\s*\d{4}-\d{2}-\d{2}/u);
+    body = done ? `${body.slice(0, done.index)} 📅 ${due}${body.slice(done.index)}` : `${body} 📅 ${due}`;
+  }
+  return `${match[1]}${match[2]}${match[3]}${body}`;
+}
+
+function buildTaskLine({ text, project = "", sprint = "", owner = "", due = "", scheduled = "", high = false, blocked = false, created = "" }) {
+  const clean = String(text || "").replace(/\s+/g, " ").trim();
+  if (!clean) return "";
+  const parts = [`- [ ] ${clean}`];
+  if (project && !clean.includes(`#project/${project}`)) parts.push(`#project/${project}`);
+  if (sprint && !clean.includes(`#sprint/${sprint}`)) parts.push(`#sprint/${sprint}`);
+  if (owner && !clean.includes(`#p/${owner}`)) parts.push(`#p/${owner}`);
+  if (blocked && !/(^|\s)#blocked(\s|$)/.test(clean)) parts.push("#blocked");
+  if (high) parts.push("⏫");
+  if (scheduled) parts.push(`⏳ ${scheduled}`);
+  if (due) parts.push(`📅 ${due}`);
+  if (created) parts.push(`➕ ${created}`);
+  return parts.join(" ");
+}
+
+// Inserts text at the end of the section that starts with `heading`, before
+// the trailing blank lines and before the next heading of the same or a
+// higher level. A missing heading is appended at the end of the note.
+function insertUnderHeading(content, heading, text, alternatives = []) {
+  const lines = String(content).split("\n");
+  const fenced = [];
+  let inFence = false;
+  for (const line of lines) {
+    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
+    fenced.push(inFence);
+  }
+  const level = (line) => line.match(/^(#{1,6})\s/)?.[1].length || 0;
+  const wanted = [heading, ...alternatives].map((item) => item.trim());
+  let start = -1;
+  for (const candidate of wanted) {
+    start = lines.findIndex((line, index) => !fenced[index] && line.trim() === candidate);
+    if (start !== -1) break;
+  }
+  if (start === -1) {
+    const trimmed = String(content).replace(/\s+$/, "");
+    return `${trimmed}${trimmed ? "\n\n" : ""}${heading}\n${text}\n`;
+  }
+  const ownLevel = level(lines[start]);
+  let end = lines.length;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const next = level(lines[index]);
+    if (!fenced[index] && next && next <= ownLevel) { end = index; break; }
+  }
+  let insertAt = end;
+  while (insertAt > start + 1 && lines[insertAt - 1].trim() === "") insertAt -= 1;
+  // Drop a lone placeholder bullet such as "- " or "- [ ] " left by a template.
+  if (insertAt > start + 1 && /^\s*-\s*(\[ \]\s*)?$/.test(lines[insertAt - 1])) {
+    lines.splice(insertAt - 1, 1);
+    insertAt -= 1;
+    end -= 1;
+  }
+  const blankAfter = insertAt === end && end < lines.length ? [""] : [];
+  lines.splice(insertAt, 0, ...String(text).split("\n"), ...blankAfter);
+  return lines.join("\n");
+}
+
+function extractSection(content, heading) {
+  const lines = String(content || "").split("\n");
+  const start = lines.findIndex((line) => line.trim().toLowerCase() === heading.toLowerCase());
+  if (start === -1) return [];
+  const own = lines[start].match(/^(#{1,6})\s/)?.[1].length || 2;
+  const out = [];
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const level = lines[index].match(/^(#{1,6})\s/)?.[1].length || 0;
+    if (level && level <= own) break;
+    const bullet = lines[index].match(/^\s*[-*+]\s+(?!\[.\])(.*\S)/);
+    if (bullet) out.push(bullet[1].trim());
+  }
+  return out;
+}
+
+function nextAdrNumber(values) {
+  const numbers = values
+    .map((value) => Number.parseInt(String(value).replace(/^\D+/, ""), 10))
+    .filter((value) => Number.isFinite(value));
+  return numbers.length ? Math.max(...numbers) + 1 : 1;
+}
+
+function formatAdrNumber(number) {
+  return `ADR-${String(number).padStart(4, "0")}`;
+}
+
+function buildStandupText({ yesterday = [], today = [], blockers = [] }) {
+  const block = (label, items) =>
+    items.length ? [`- ${label}:`, ...items.map((item) => `  - ${item}`)] : [`- ${label}: none`];
+  return [...block("Yesterday", yesterday), ...block("Today", today), ...block("Blockers", blockers)].join("\n");
+}
+
+function yamlScalar(value) {
+  const text = String(value ?? "");
+  if (text === "") return "";
+  return /^[A-Za-z0-9][\w .,/@()+-]*$/.test(text) && !/\s$/.test(text) ? text : JSON.stringify(text);
+}
+
+function frontmatterBlock(fields) {
+  const lines = ["---"];
+  for (const [key, value] of Object.entries(fields)) {
+    if (Array.isArray(value)) {
+      if (!value.length) lines.push(`${key}: []`);
+      else lines.push(`${key}:`, ...value.map((item) => `  - ${yamlScalar(item)}`));
+    } else if (typeof value === "number" || typeof value === "boolean") {
+      lines.push(`${key}: ${value}`);
+    } else {
+      const scalar = yamlScalar(value);
+      lines.push(scalar ? `${key}: ${scalar}` : `${key}: `);
+    }
+  }
+  lines.push("---");
+  return lines.join("\n");
+}
+
+function buildProjectNote({ title, status = "active", priority = "normal", due = "", repo = "", stakeholders = [], today, quarter }) {
+  const slug = slugify(title);
+  return `${frontmatterBlock({
+    type: "project", status, priority, area: "", repo, quarter, started: today, due,
+    current_sprint: "", people: [], stakeholders: stakeholders.map(wikiLink), tags: ["project"],
+  })}
+Tag tasks anywhere in the vault with \`#project/${slug}\` and they roll up here.
+
+## Outcome
+What "done" looks like:
+-
+
+## Next actions
+\`\`\`tasks
+not done
+tags include #project/${slug}
+sort by due
+\`\`\`
+
+## Tasks
+- [ ] First step #project/${slug}
+
+## Notes
+
+
+## Log
+- ${today} Created.
+
+## Done
+\`\`\`tasks
+done
+tags include #project/${slug}
+sort by done reverse
+limit 20
+\`\`\`
+`;
+}
+
+function buildSprintNote({ title, project = "", number = 1, start, end, goal = "", status = "planned" }) {
+  const slug = slugify(title);
+  return `${frontmatterBlock({
+    type: "sprint", project: project ? wikiLink(project) : "", number: Number(number) || 1,
+    start, end, goal, status, tags: ["sprint"],
+  })}
+Sprint tag: \`#sprint/${slug}\`. Add it to any task to pull the task into this sprint. In progress is \`- [/]\`, blocked is \`#blocked\`.
+
+## Goal
+${goal}
+
+## Board
+\`\`\`tasks
+tags include #sprint/${slug}
+group by status.type
+sort by priority
+\`\`\`
+
+## Review
+- What shipped:
+- What slipped:
+
+## Retro
+- Keep:
+- Change:
+- Try:
+`;
+}
+
+function buildMeetingNote({ title, kind = "meeting", date, time = "", project = "", projectSlug = "", attendees = [], agenda = "", notes = "", decisions = [], actions = [], today }) {
+  const bullets = (text) => String(text || "").split("\n").map((line) => line.trim()).filter(Boolean)
+    .map((line) => (/^[-*+]\s/.test(line) ? line : `- ${line}`));
+  const agendaLines = bullets(agenda);
+  const noteLines = bullets(notes);
+  const decisionLines = decisions.map((item) => String(item || "").trim()).filter(Boolean).map((item) => `- ${item}`);
+  const actionLines = actions
+    .map((action) => buildTaskLine({ text: action.text, project: projectSlug, owner: action.owner, due: action.due, created: today }))
+    .filter(Boolean);
+  return `${frontmatterBlock({
+    type: "meeting", kind, date, time, project: project ? wikiLink(project) : "",
+    attendees: attendees.map((name) => (name.startsWith("[[") ? name : wikiLink(name))), tags: ["meeting"],
+  })}
+# ${title}
+
+## Agenda
+${(agendaLines.length ? agendaLines : ["- "]).join("\n")}
+
+## Notes
+${noteLines.join("\n")}
+
+## Decisions
+${(decisionLines.length ? decisionLines : ["- "]).join("\n")}
+
+## Action items
+${actionLines.join("\n")}
+`;
+}
+
+function buildAdrNote({ title, number, status = "proposed", date, project = "", deciders = [], context = "", decision = "" }) {
+  return `${frontmatterBlock({
+    type: "adr", adr_number: Number(number), status, date, project: project ? wikiLink(project) : "",
+    deciders: deciders.map(wikiLink), supersedes: "", tags: ["adr"],
+  })}
+# ${formatAdrNumber(number)} ${title}
+
+## Context
+${context || "What is the issue that motivates this decision?"}
+
+## Decision
+${decision || "What is the change that we are proposing or have agreed to?"}
+
+## Options considered
+1.
+
+## Consequences
+What becomes easier or harder because of this change?
+
+## Follow-up
+- [ ]
+`;
+}
+
+function buildDocNote({ type, title, project = "", today, topic = "", severity = "sev3" }) {
+  const projectLink = project ? wikiLink(project) : "";
+  if (type === "postmortem") {
+    return `${frontmatterBlock({ type, status: "draft", project: projectLink, incident_date: today, severity, tags: ["postmortem"] })}
+# ${title}
+
+Blameless: describe systems and decisions, not people.
+
+## Summary
+
+
+## Impact
+
+
+## Timeline
+-
+
+## Root cause
+
+
+## What went well
+
+
+## What went wrong
+
+
+## Action items
+- [ ]
+`;
+  }
+  return `${frontmatterBlock({ type: "tech-note", status: "draft", project: projectLink, topic, created: today, sources: [], tags: ["tech-note"] })}
+# ${title}
+
+## Summary
+
+
+## Details
+
+
+## References
+-
+`;
+}
+
 const CAPTURE_ACTIONS = [
   {
     icon: "notebook-pen",
@@ -98,18 +475,6 @@ const CAPTURE_MENU_ACTIONS = [
     command: "quickadd:choice:lifeos-project-idea",
   },
   {
-    icon: "mail",
-    label: "Newsletter idea",
-    description: "Add an idea to the newsletter backlog.",
-    command: "quickadd:choice:lifeos-newsletter-idea",
-  },
-  {
-    icon: "video",
-    label: "Video idea",
-    description: "Add an idea to the video backlog.",
-    command: "quickadd:choice:lifeos-video-idea",
-  },
-  {
     icon: "newspaper",
     label: "Article idea",
     description: "Add an idea to the article backlog.",
@@ -128,28 +493,10 @@ const CAPTURE_MENU_ACTIONS = [
     command: "quickadd:choice:lifeos-new-person",
   },
   {
-    icon: "file-plus-2",
-    label: "New newsletter",
-    description: "Create a newsletter draft from its template.",
-    command: "quickadd:choice:lifeos-new-newsletter",
-  },
-  {
-    icon: "file-video-2",
-    label: "New video script",
-    description: "Create a video script from its template.",
-    command: "quickadd:choice:lifeos-new-video",
-  },
-  {
     icon: "file-pen-line",
     label: "New article",
     description: "Create an article draft from its template.",
     command: "quickadd:choice:lifeos-new-article",
-  },
-  {
-    icon: "graduation-cap",
-    label: "New course lesson",
-    description: "Create a course lesson from its template.",
-    command: "quickadd:choice:lifeos-new-course-lesson",
   },
   {
     icon: "book-plus",
@@ -192,69 +539,100 @@ const PERIOD_ACTIONS = [
   },
 ];
 
-const DESTINATIONS = [
-  {
-    icon: "layout-dashboard",
-    label: "Compass",
-    description: "Direction, habits, questions, and life wheel.",
-    path: "00 Dashboards/Compass Dashboard.md",
-  },
-  {
-    icon: "list-checks",
-    label: "Tasks",
-    description: "See the full task system.",
-    path: "00 Dashboards/Task Dashboard.md",
-  },
-  {
-    icon: "folder-kanban",
-    label: "Projects",
-    description: "Review active projects and ideas.",
-    path: "00 Dashboards/Projects Dashboard.md",
-  },
-  {
-    icon: "columns-3",
-    label: "Boards",
-    description: "Open writing and project boards.",
-    path: "00 Dashboards/Boards.md",
-  },
-];
-
 const NAV_ITEMS = [
   { id: "home", icon: "home", label: "Home" },
   { id: "today", icon: "sun", label: "Today" },
-  { id: "plan", icon: "calendar-range", label: "Plan" },
-  { id: "focus", icon: "crosshair", label: "Focus" },
-  { id: "review", icon: "line-chart", label: "Review" },
+  { id: "sprint", icon: "kanban", label: "Sprint" },
   { id: "projects", icon: "folder-kanban", label: "Projects" },
+  { id: "meetings", icon: "messages-square", label: "Meetings" },
+  { id: "docs", icon: "milestone", label: "Docs" },
+  { id: "inbox", icon: "inbox", label: "Inbox" },
+  { id: "focus", icon: "list-checks", label: "Tasks" },
   { id: "people", icon: "users", label: "People" },
-  { id: "create", icon: "pen-tool", label: "Create" },
   { id: "library", icon: "library", label: "Library" },
   { id: "brain", icon: "brain", label: "Brain" },
   { id: "ai", icon: "sparkles", label: "AI" },
+  { id: "plan", icon: "calendar-range", label: "Plan", personal: true },
+  { id: "review", icon: "line-chart", label: "Review", personal: true },
 ];
 
 const MODULES = {
   today: {
     eyebrow: "Daily operating system",
     title: "Today",
-    description:
-      "Choose what matters, capture what happens, and close the day honestly.",
+    description: "Standup, what is due, and what is blocked. Tick tasks off here; the note changes with you.",
     actions: [
       PERIOD_ACTIONS[0],
-      ...CAPTURE_ACTIONS,
       {
         icon: "list-checks",
-        label: "Today’s tasks",
-        description: "Open the task recommendation dashboard.",
+        label: "Task dashboard",
+        description: "Every Tasks query in one note.",
         path: "00 Dashboards/Task Dashboard.md",
       },
+    ],
+  },
+  sprint: {
+    eyebrow: "Iteration",
+    title: "Sprint",
+    description: "Move work between To do, In progress, and Done. Each move rewrites one task line.",
+    actions: [
       {
-        icon: "activity",
-        label: "Habits",
-        description: "Review current habit consistency.",
-        path: "00 Dashboards/Habit Canvas.md",
+        icon: "layout-dashboard",
+        label: "Sprint dashboard",
+        description: "Tasks queries for every sprint.",
+        path: "00 Dashboards/Sprint Dashboard.md",
       },
     ],
+  },
+  projects: {
+    eyebrow: "Outcomes with context",
+    title: "Projects",
+    description: "Status, priority, progress, and the next action for every project. Open one for its full page.",
+    actions: [
+      {
+        icon: "layout-dashboard",
+        label: "Projects dashboard",
+        description: "Review all active projects.",
+        path: "00 Dashboards/Projects Dashboard.md",
+      },
+      {
+        icon: "columns-3",
+        label: "Projects board",
+        description: "Move ideas and projects through the pipeline.",
+        path: "04 Projects/Projects Board.md",
+      },
+    ],
+  },
+  project: {
+    eyebrow: "Project",
+    title: "Project",
+    description: "",
+    actions: [],
+  },
+  meetings: {
+    eyebrow: "Conversations with outcomes",
+    title: "Meetings",
+    description: "Minutes, decisions, and action items, linked to the project they move.",
+    actions: [],
+  },
+  docs: {
+    eyebrow: "Decisions and knowledge",
+    title: "Docs",
+    description: "Architecture decisions, tech notes, and postmortems in one place.",
+    actions: [
+      {
+        icon: "layout-dashboard",
+        label: "Decision log",
+        description: "Dataview table of every ADR.",
+        path: "00 Dashboards/Decisions.md",
+      },
+    ],
+  },
+  inbox: {
+    eyebrow: "Web Clipper",
+    title: "Inbox",
+    description: "Everything you clipped from the web, waiting to be filed.",
+    actions: [],
   },
   plan: {
     eyebrow: "Connected time horizons",
@@ -263,12 +641,6 @@ const MODULES = {
       "Keep today, this week, and this quarter connected to the same direction.",
     actions: [
       ...PERIOD_ACTIONS,
-      {
-        icon: "folder-kanban",
-        label: "Projects",
-        description: "Review active projects and quarter alignment.",
-        path: "00 Dashboards/Projects Dashboard.md",
-      },
       {
         icon: "clock-3",
         label: "Ideal week",
@@ -279,33 +651,15 @@ const MODULES = {
   },
   focus: {
     eyebrow: "Attention, not noise",
-    title: "Focus",
+    title: "Tasks",
     description:
-      "See the commitments competing for attention and return to the work that matters.",
+      "Every open task in the vault, grouped by urgency. Tick, reschedule, or open at the source line.",
     actions: [
       {
-        icon: "compass",
-        label: "Compass",
-        description: "Return to the whole-life overview.",
-        path: "00 Dashboards/Compass Dashboard.md",
-      },
-      {
         icon: "list-checks",
-        label: "Task recommendations",
+        label: "Task dashboard",
         description: "Review due, scheduled, priority, and discuss tasks.",
         path: "00 Dashboards/Task Dashboard.md",
-      },
-      {
-        icon: "folder-kanban",
-        label: "Project momentum",
-        description: "Find active projects that need a next action.",
-        path: "00 Dashboards/Projects Dashboard.md",
-      },
-      {
-        icon: "activity",
-        label: "Habit signals",
-        description: "See consistency alongside the days that explain it.",
-        path: "00 Dashboards/Habit Canvas.md",
       },
     ],
   },
@@ -338,54 +692,16 @@ const MODULES = {
       },
     ],
   },
-  projects: {
-    eyebrow: "Outcomes with context",
-    title: "Projects",
-    description:
-      "Keep outcomes, next actions, people, notes, and quarter commitments together.",
-    actions: [
-      {
-        icon: "layout-dashboard",
-        label: "Projects dashboard",
-        description: "Review all active projects.",
-        path: "00 Dashboards/Projects Dashboard.md",
-      },
-      {
-        icon: "columns-3",
-        label: "Projects board",
-        description: "Move ideas and projects through the pipeline.",
-        path: "04 Projects/Projects Board.md",
-      },
-      {
-        icon: "lightbulb",
-        label: "Capture an idea",
-        description: "Add a project idea to the board.",
-        command: "quickadd:choice:lifeos-project-idea",
-      },
-      {
-        icon: "folder-plus",
-        label: "New project",
-        description: "Create a project note with the canonical template.",
-        command: "quickadd:choice:lifeos-new-project",
-      },
-      {
-        icon: "calendar-range",
-        label: "Quarter plan",
-        description: "Check which projects serve this quarter.",
-        command: "quickadd:choice:lifeos-quarterly",
-      },
-    ],
-  },
   people: {
-    eyebrow: "Relationships with memory",
+    eyebrow: "Teammates and stakeholders",
     title: "People",
     description:
-      "Bring follow-ups, meeting context, and discussion items back to the relationship.",
+      "Follow-ups, one-on-ones, and discussion items, kept with the person.",
     actions: [
       {
         icon: "user-plus",
         label: "New person",
-        description: "Create a private person note from its template.",
+        description: "Create a person note from its template.",
         command: "quickadd:choice:lifeos-new-person",
       },
       {
@@ -394,44 +710,13 @@ const MODULES = {
         description: "Open tasks grouped by person and discussion context.",
         path: "00 Dashboards/Task Dashboard.md",
       },
-      {
-        icon: "search",
-        label: "Search people",
-        description: "Search the vault for a person or meeting context.",
-        command: "global-search:open",
-      },
-    ],
-  },
-  create: {
-    eyebrow: "Ideas into finished work",
-    title: "Create",
-    description:
-      "Move ideas into newsletters, videos, articles, and course material without losing sources.",
-    actions: [
-      {
-        icon: "columns-3",
-        label: "Creative boards",
-        description: "Open every writing pipeline.",
-        path: "00 Dashboards/Boards.md",
-      },
-      ...CAPTURE_MENU_ACTIONS.filter((action) =>
-        [
-          "quickadd:choice:lifeos-newsletter-idea",
-          "quickadd:choice:lifeos-video-idea",
-          "quickadd:choice:lifeos-article-idea",
-          "quickadd:choice:lifeos-new-newsletter",
-          "quickadd:choice:lifeos-new-video",
-          "quickadd:choice:lifeos-new-article",
-          "quickadd:choice:lifeos-new-course-lesson",
-        ].includes(action.command)
-      ),
     ],
   },
   library: {
     eyebrow: "Knowledge in context",
     title: "Library",
     description:
-      "Keep books, sources, reading, and ideas close to the work they inform.",
+      "Books, clippings, and sources close to the work they inform.",
     actions: [
       {
         icon: "book-plus",
@@ -440,28 +725,10 @@ const MODULES = {
         command: "quickadd:choice:lifeos-new-book",
       },
       {
-        icon: "book-open-check",
-        label: "New study note",
-        description: "Create a reading study note.",
-        command: "quickadd:choice:lifeos-new-study-note",
-      },
-      {
-        icon: "book-open",
-        label: "Reading plan",
-        description: "Open the current reading plan.",
-        path: "09 Reading/Reading Plan.md",
-      },
-      {
         icon: "search",
         label: "Search the library",
         description: "Search books, sources, and connected notes.",
         command: "global-search:open",
-      },
-      {
-        icon: "pen-tool",
-        label: "Writing pipelines",
-        description: "Use the library in active creative work.",
-        path: "00 Dashboards/Boards.md",
       },
     ],
   },
@@ -476,12 +743,6 @@ const MODULES = {
         label: "Open assistant",
         description: "Use the complete prompt library.",
         path: "00 Dashboards/Assistant.md",
-      },
-      {
-        icon: "sun",
-        label: "What matters today",
-        description: "Open the Compass brief and daily context.",
-        path: "00 Dashboards/Compass Dashboard.md",
       },
       {
         icon: "list-checks",
@@ -499,6 +760,384 @@ const MODULES = {
   },
 };
 
+// The only code in Dev OS that changes vault files. Every method runs because
+// of one explicit click or submit in the view, edits one file, and refuses to
+// write when the target line or file no longer matches what was shown.
+class LifeOSWriter {
+  constructor(app) {
+    this.app = app;
+  }
+
+  today() {
+    return moment().format("YYYY-MM-DD");
+  }
+
+  file(path) {
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) throw new Error(`Dev OS could not find ${path}.`);
+    return file;
+  }
+
+  async updateTaskLine(task, transform) {
+    const file = this.file(task.path);
+    let outcome = "stale";
+    await this.app.vault.process(file, (data) => {
+      const newline = data.includes("\r\n") ? "\r\n" : "\n";
+      const lines = data.split(/\r?\n/);
+      const index = task.line - 1;
+      if (index < 0 || index >= lines.length || lines[index] !== task.raw) return data;
+      const next = transform(lines[index]);
+      if (next === null || next === undefined) return data;
+      lines[index] = next;
+      outcome = "written";
+      return lines.join(newline);
+    });
+    if (outcome !== "written") {
+      throw new Error("This task changed since Dev OS read it. Refreshed; try again.");
+    }
+    return true;
+  }
+
+  toggleTask(task) {
+    return this.updateTaskLine(task, (line) => toggleTaskText(line, this.today()));
+  }
+
+  setTaskStatus(task, symbol) {
+    return this.updateTaskLine(task, (line) => setTaskStatusText(line, symbol, this.today()));
+  }
+
+  setTaskDue(task, due) {
+    return this.updateTaskLine(task, (line) => setTaskDueText(line, due));
+  }
+
+  async appendUnderHeading(path, heading, text, alternatives = []) {
+    const file = this.file(path);
+    await this.app.vault.process(file, (data) => insertUnderHeading(data, heading, text, alternatives));
+    return file;
+  }
+
+  async setFrontmatter(path, patch) {
+    const file = this.file(path);
+    await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+      for (const [key, value] of Object.entries(patch)) {
+        if (value === undefined) delete frontmatter[key];
+        else frontmatter[key] = value;
+      }
+    });
+    return file;
+  }
+
+  async ensureFolder(folder) {
+    if (!folder || this.app.vault.getAbstractFileByPath(folder)) return;
+    const parts = folder.split("/");
+    for (let index = 1; index <= parts.length; index += 1) {
+      const partial = parts.slice(0, index).join("/");
+      if (!this.app.vault.getAbstractFileByPath(partial)) await this.app.vault.createFolder(partial);
+    }
+  }
+
+  async createNote(folder, name, content) {
+    const fileName = safeFileName(name);
+    if (!fileName) throw new Error("A title is required.");
+    const path = `${folder}/${fileName}.md`;
+    if (this.app.vault.getAbstractFileByPath(path)) throw new Error(`${path} already exists. Nothing was overwritten.`);
+    await this.ensureFolder(folder);
+    return this.app.vault.create(path, content);
+  }
+
+  async moveFile(path, folder) {
+    const file = this.file(path);
+    const target = `${folder}/${file.name || path.split("/").pop()}`;
+    if (this.app.vault.getAbstractFileByPath(target)) throw new Error(`${target} already exists. Nothing was moved.`);
+    await this.ensureFolder(folder);
+    await this.app.fileManager.renameFile(file, target);
+    return target;
+  }
+}
+
+// Small form dialog used by every "New ..." action. Fields are plain inputs;
+// the submit handler decides what to write.
+class LifeOSFormModal extends Modal {
+  constructor(app, options) {
+    super(app);
+    this.options = options;
+    this.values = {};
+  }
+
+  onOpen() {
+    const root = this.contentEl;
+    root.empty();
+    root.addClass("life-os-form-modal");
+    root.createEl("h2", { text: this.options.title });
+    if (this.options.description) root.createEl("p", { text: this.options.description });
+    const form = root.createDiv({ cls: "life-os-form" });
+    for (const field of this.options.fields) {
+      this.values[field.key] = field.value ?? (field.type === "checkbox" ? false : "");
+      const row = form.createEl("label", { cls: `life-os-field${field.wide ? " is-wide" : ""}` });
+      row.createSpan({ cls: "life-os-field-label", text: field.label });
+      let input;
+      if (field.type === "select") {
+        input = row.createEl("select", { attr: { "aria-label": field.label } });
+        for (const option of field.options || []) {
+          input.createEl("option", { text: option.label ?? option.value, attr: { value: option.value } });
+        }
+      } else if (field.type === "textarea") {
+        input = row.createEl("textarea", { attr: { "aria-label": field.label, rows: "3", placeholder: field.placeholder || "" } });
+      } else {
+        input = row.createEl("input", { attr: { "aria-label": field.label, type: field.type || "text", placeholder: field.placeholder || "" } });
+      }
+      if (field.type === "checkbox") input.checked = Boolean(this.values[field.key]);
+      else input.value = String(this.values[field.key]);
+      const sync = () => { this.values[field.key] = field.type === "checkbox" ? input.checked : input.value; };
+      input.addEventListener(field.type === "checkbox" || field.type === "select" ? "change" : "input", sync);
+      if (field.type !== "textarea") {
+        input.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") { event.preventDefault?.(); sync(); void this.submit(); }
+        });
+      }
+      if (field.hint) row.createEl("small", { cls: "life-os-field-hint", text: field.hint });
+    }
+    this.errorEl = root.createDiv({ cls: "life-os-form-error" });
+    const actions = root.createDiv({ cls: "life-os-form-actions" });
+    const cancel = actions.createEl("button", { text: "Cancel" });
+    cancel.type = "button";
+    cancel.addEventListener("click", () => this.close());
+    const submit = actions.createEl("button", { cls: "mod-cta", text: this.options.submitLabel || "Create" });
+    submit.type = "button";
+    submit.addEventListener("click", () => void this.submit());
+  }
+
+  async submit() {
+    const missing = this.options.fields.filter((field) => field.required && !String(this.values[field.key] || "").trim());
+    if (missing.length) {
+      this.errorEl.textContent = `Required: ${missing.map((field) => field.label).join(", ")}.`;
+      return;
+    }
+    try {
+      const done = await this.options.onSubmit({ ...this.values });
+      if (done !== false) this.close();
+    } catch (error) {
+      this.errorEl.textContent = error?.message || "Could not save.";
+    }
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+// Read-only lookups shared by the view, the capture dialog, and the forms.
+class LifeOSData {
+  constructor(app, settings = () => DEFAULT_SETTINGS) {
+    this.app = app;
+    this.settings = settings;
+  }
+
+  frontmatter(file) {
+    return file instanceof TFile ? this.app.metadataCache.getFileCache(file)?.frontmatter || {} : {};
+  }
+
+  config() {
+    return this.frontmatter(this.app.vault.getAbstractFileByPath("Meta/Compass Config.md"));
+  }
+
+  folders(config = this.config()) {
+    return {
+      daily: normalizeFolder(config.daily_folder, DEFAULT_FOLDERS.daily),
+      weekly: normalizeFolder(config.weekly_folder, DEFAULT_FOLDERS.weekly),
+      quarterly: normalizeFolder(config.quarterly_folder, DEFAULT_FOLDERS.quarterly),
+      retreats: normalizeFolder(config.retreat_folder, DEFAULT_FOLDERS.retreats),
+      projects: normalizeFolder(config.projects_folder, DEFAULT_FOLDERS.projects),
+      sprints: normalizeFolder(config.sprints_folder, DEFAULT_FOLDERS.sprints),
+      meetings: normalizeFolder(config.meetings_folder, DEFAULT_FOLDERS.meetings),
+      decisions: normalizeFolder(config.decisions_folder, DEFAULT_FOLDERS.decisions),
+      docs: normalizeFolder(config.docs_folder, DEFAULT_FOLDERS.docs),
+      clippings: normalizeFolder(config.clippings_folder, DEFAULT_FOLDERS.clippings),
+    };
+  }
+
+  isExample(data) {
+    const tags = Array.isArray(data.tags) ? data.tags : String(data.tags || "").split(/[\s,]+/);
+    return data.example === true || tags.some((tag) => String(tag).replace(/^#/, "") === "example");
+  }
+
+  title(file) {
+    return file.basename || file.path.split("/").pop().replace(/\.md$/i, "");
+  }
+
+  typed(type, folder, { includeClosed = true } = {}) {
+    const samples = Boolean(this.settings().includeSamples);
+    return this.app.vault
+      .getMarkdownFiles()
+      .filter((file) => !folder || file.path.startsWith(`${folder}/`))
+      .filter((file) => {
+        const data = this.frontmatter(file);
+        if ((Array.isArray(type) ? !type.includes(data.type) : data.type !== type)) return false;
+        if (!samples && this.isExample(data)) return false;
+        if (!includeClosed && ["done", "complete", "completed", "archived", "closed", "cancelled"].includes(String(data.status || "").toLowerCase())) return false;
+        return true;
+      })
+      .sort((left, right) => this.title(left).localeCompare(this.title(right)));
+  }
+
+  projects(options) { return this.typed("project", this.folders().projects, options); }
+  people() { return this.typed("person", "05 People"); }
+  sprints() { return this.typed("sprint", this.folders().sprints); }
+  meetings() { return this.typed("meeting", this.folders().meetings); }
+  docs() { return this.typed(["adr", "tech-note", "postmortem"], this.folders().docs); }
+  clippings() { return this.typed("clipping", this.folders().clippings); }
+
+  linksTo(value, file) {
+    const title = this.title(file);
+    return linkList(value).some((target) => target === title);
+  }
+
+  forProject(files, project, key = "project") {
+    return files.filter((file) => this.linksTo(this.frontmatter(file)[key], project));
+  }
+
+  adrNumbers() {
+    const all = this.app.vault.getMarkdownFiles().filter((file) => file.path.startsWith(`${this.folders().decisions}/`));
+    return all.flatMap((file) => {
+      const data = this.frontmatter(file);
+      const fromName = this.title(file).match(/ADR-(\d+)/i)?.[1];
+      return [data.adr_number, fromName].filter((value) => value !== undefined && value !== null && value !== "");
+    });
+  }
+
+  fileByTitle(title, files) {
+    return files.find((file) => this.title(file) === title) || null;
+  }
+}
+
+function projectOptions(data, { blank = "No project" } = {}) {
+  return [{ value: "", label: blank }, ...data.projects({ includeClosed: false }).map((file) => ({ value: data.title(file), label: data.title(file) }))];
+}
+
+function personOptions(data, blank = "Nobody") {
+  return [{ value: "", label: blank }, ...data.people().map((file) => ({ value: slugify(data.title(file)), label: data.title(file) }))];
+}
+
+// Opens a "New ..." form and writes the note through the writer. `preset`
+// prefills fields; `done(file)` runs after a successful write.
+function openCreateForm(plugin, kind, preset = {}, done = () => {}) {
+  const app = plugin.app;
+  const data = plugin.data;
+  const writer = plugin.writer;
+  const folders = data.folders();
+  const today = moment().format("YYYY-MM-DD");
+  const projects = projectOptions(data);
+  const finish = (file, label) => {
+    new Notice(`${label} created.`);
+    done(file);
+    return true;
+  };
+  const forms = {
+    project: {
+      title: "New project",
+      fields: [
+        { key: "title", label: "Project name", required: true, value: preset.title || "" },
+        { key: "status", label: "Status", type: "select", value: "active", options: ["idea", "active", "on-hold", "done"].map((value) => ({ value })) },
+        { key: "priority", label: "Priority", type: "select", value: "normal", options: ["low", "normal", "high"].map((value) => ({ value })) },
+        { key: "due", label: "Target date", type: "date" },
+        { key: "repo", label: "Repository URL", placeholder: "https://..." },
+      ],
+      submit: async (values) => {
+        const content = buildProjectNote({ ...values, today, quarter: moment().format("YYYY-[Q]Q") });
+        return finish(await writer.createNote(folders.projects, values.title, content), "Project");
+      },
+    },
+    sprint: {
+      title: "New sprint",
+      fields: [
+        { key: "project", label: "Project", type: "select", options: projects, value: preset.project || "" },
+        { key: "number", label: "Sprint number", type: "number", value: preset.number || "1" },
+        { key: "start", label: "Start", type: "date", value: preset.start || today, required: true },
+        { key: "end", label: "End", type: "date", value: preset.end || isoAddDays(today, 13), required: true },
+        { key: "goal", label: "Sprint goal", wide: true, value: preset.goal || "" },
+        { key: "status", label: "Status", type: "select", value: preset.status || "planned", options: ["planned", "active"].map((value) => ({ value })) },
+      ],
+      submit: async (values) => {
+        const title = `${values.project || "Team"} Sprint ${values.number || 1}`;
+        const file = await writer.createNote(folders.sprints, title, buildSprintNote({ ...values, title: safeFileName(title) }));
+        if (values.project && values.status === "active") {
+          const project = data.fileByTitle(values.project, data.projects());
+          if (project) await writer.setFrontmatter(project.path, { current_sprint: wikiLink(data.title(file)) });
+        }
+        return finish(file, "Sprint");
+      },
+    },
+    meeting: {
+      title: "New meeting minutes",
+      description: "Creates a meeting note. Use the project page for the full minutes composer.",
+      fields: [
+        { key: "title", label: "Title", required: true, value: preset.title || "" },
+        { key: "date", label: "Date", type: "date", value: preset.date || today, required: true },
+        { key: "kind", label: "Kind", type: "select", value: "meeting", options: MEETING_KINDS.map((value) => ({ value })) },
+        { key: "project", label: "Project", type: "select", options: projects, value: preset.project || "" },
+        { key: "agenda", label: "Agenda", type: "textarea", wide: true },
+      ],
+      submit: async (values) => {
+        const content = buildMeetingNote({ ...values, projectSlug: slugify(values.project), today });
+        return finish(await writer.createNote(folders.meetings, `${values.date} ${values.title}`, content), "Meeting");
+      },
+    },
+    adr: {
+      title: "New decision record",
+      description: `Numbered automatically as ${formatAdrNumber(nextAdrNumber(data.adrNumbers()))}.`,
+      fields: [
+        { key: "title", label: "Decision", required: true, value: preset.title || "" },
+        { key: "status", label: "Status", type: "select", value: preset.status || "proposed", options: ADR_STATUSES.map((value) => ({ value })) },
+        { key: "project", label: "Project", type: "select", options: projects, value: preset.project || "" },
+        { key: "context", label: "Context", type: "textarea", wide: true, value: preset.context || "" },
+        { key: "decision", label: "Decision text", type: "textarea", wide: true, value: preset.decision || "" },
+      ],
+      submit: async (values) => {
+        const number = nextAdrNumber(data.adrNumbers());
+        const content = buildAdrNote({ ...values, number, date: today });
+        return finish(await writer.createNote(folders.decisions, `${formatAdrNumber(number)} ${values.title}`, content), "Decision record");
+      },
+    },
+    "tech-note": {
+      title: "New tech note",
+      fields: [
+        { key: "title", label: "Title", required: true },
+        { key: "topic", label: "Topic" },
+        { key: "project", label: "Project", type: "select", options: projects, value: preset.project || "" },
+      ],
+      submit: async (values) => finish(await writer.createNote(`${folders.docs}/Tech Notes`, values.title, buildDocNote({ ...values, type: "tech-note", today })), "Tech note"),
+    },
+    postmortem: {
+      title: "New postmortem",
+      fields: [
+        { key: "title", label: "Incident", required: true },
+        { key: "severity", label: "Severity", type: "select", value: "sev3", options: ["sev1", "sev2", "sev3", "sev4"].map((value) => ({ value })) },
+        { key: "project", label: "Project", type: "select", options: projects, value: preset.project || "" },
+      ],
+      submit: async (values) => finish(await writer.createNote(`${folders.docs}/Postmortems`, values.title, buildDocNote({ ...values, type: "postmortem", today })), "Postmortem"),
+    },
+  };
+  const form = forms[kind];
+  if (!form) return null;
+  const modal = new LifeOSFormModal(app, { title: form.title, description: form.description, fields: form.fields, submitLabel: "Create", onSubmit: form.submit });
+  modal.open();
+  return modal;
+}
+
+const MEETING_KINDS = ["meeting", "standup", "one-on-one", "review", "retro", "planning"];
+const ADR_STATUSES = ["proposed", "accepted", "superseded", "deprecated", "rejected"];
+const PROJECT_STATUSES = ["idea", "active", "on-hold", "done"];
+const PRIORITIES = ["low", "normal", "high"];
+
+const CREATE_ACTIONS = [
+  { kind: "project", icon: "folder-plus", label: "Project", description: "Outcome, status, repo, and a task section." },
+  { kind: "sprint", icon: "timer", label: "Sprint", description: "Dates, goal, and a sprint tag for tasks." },
+  { kind: "meeting", icon: "messages-square", label: "Meeting minutes", description: "Agenda, notes, decisions, action items." },
+  { kind: "adr", icon: "milestone", label: "Decision (ADR)", description: "Numbered architecture decision record." },
+  { kind: "tech-note", icon: "file-code-2", label: "Tech note", description: "How-to, snippet, or reference." },
+  { kind: "postmortem", icon: "siren", label: "Postmortem", description: "Blameless incident review." },
+];
+
 class LifeOSCaptureModal extends Modal {
   constructor(app, plugin) {
     super(app);
@@ -510,35 +1149,55 @@ class LifeOSCaptureModal extends Modal {
     root.empty();
     root.addClass("life-os-capture-modal");
     root.createEl("h2", { text: "Capture" });
-    root.createEl("p", {
-      text: "Choose what this is. Life OS will route it to the right place.",
-    });
+    root.createEl("p", { text: "Add a task, start a note, or run a capture. Dev OS writes only when you press a button." });
 
-    const groups = [
-      { title: "Quick capture", actions: CAPTURE_MENU_ACTIONS.slice(0, 4) },
-      { title: "Ideas", actions: CAPTURE_MENU_ACTIONS.slice(4, 8) },
-      { title: "Create notes", actions: CAPTURE_MENU_ACTIONS.slice(8) },
-    ];
-    for (const group of groups) {
-      const section = root.createDiv({ cls: "life-os-capture-section" });
-      section.createEl("h3", { text: group.title });
-      const grid = section.createDiv({ cls: "life-os-capture-grid" });
-      for (const action of group.actions) {
-        const button = grid.createEl("button", {
-          cls: "life-os-capture-choice",
-        });
-        button.type = "button";
-        const icon = button.createSpan();
-        setIcon(icon, action.icon);
-        const copy = button.createSpan();
-        copy.createEl("strong", { text: action.label });
-        copy.createEl("small", { text: action.description });
-        this.registerDomEvent(button, "click", () => {
-          this.close();
-          this.plugin.runCommand(action.command, action.label);
-        });
-      }
+    const data = this.plugin.data;
+    const quick = root.createDiv({ cls: "life-os-capture-section" });
+    quick.createEl("h3", { text: "Quick task" });
+    const form = quick.createDiv({ cls: "life-os-quick-task" });
+    const text = form.createEl("input", { attr: { type: "text", placeholder: "What needs doing?", "aria-label": "Task" } });
+    const target = form.createEl("select", { attr: { "aria-label": "Task destination" } });
+    target.createEl("option", { text: "Inbox (Tasks.md)", attr: { value: "" } });
+    for (const project of data.projects({ includeClosed: false })) {
+      target.createEl("option", { text: data.title(project), attr: { value: project.path } });
     }
+    target.value = data.projects().find((file) => data.title(file) === this.plugin.settings?.defaultProject)?.path || "";
+    const due = form.createEl("input", { attr: { type: "date", "aria-label": "Due date" } });
+    const highLabel = form.createEl("label", { cls: "life-os-inline-check", text: "High" });
+    const high = highLabel.createEl("input", { attr: { type: "checkbox", "aria-label": "High priority" } });
+    const add = form.createEl("button", { cls: "mod-cta", text: "Add task" });
+    add.type = "button";
+    const submit = async () => {
+      const ok = await this.plugin.addTask({ text: text.value, projectPath: target.value, due: due.value, high: high.checked });
+      if (ok) { text.value = ""; due.value = ""; high.checked = false; }
+    };
+    add.addEventListener("click", () => void submit());
+    text.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault?.(); void submit(); } });
+
+    const create = root.createDiv({ cls: "life-os-capture-section" });
+    create.createEl("h3", { text: "Create" });
+    const createGrid = create.createDiv({ cls: "life-os-capture-grid" });
+    for (const action of CREATE_ACTIONS) {
+      this.addChoice(createGrid, action, () => { this.close(); openCreateForm(this.plugin, action.kind, {}, (file) => this.plugin.afterCreate(file)); });
+    }
+
+    const more = root.createDiv({ cls: "life-os-capture-section" });
+    more.createEl("h3", { text: "More captures" });
+    const moreGrid = more.createDiv({ cls: "life-os-capture-grid" });
+    for (const action of CAPTURE_MENU_ACTIONS.filter((item) => item.command !== "quickadd:choice:lifeos-task")) {
+      this.addChoice(moreGrid, action, () => { this.close(); this.plugin.runCommand(action.command, action.label); });
+    }
+  }
+
+  addChoice(grid, action, onClick) {
+    const button = grid.createEl("button", { cls: "life-os-capture-choice" });
+    button.type = "button";
+    const icon = button.createSpan();
+    setIcon(icon, action.icon);
+    const copy = button.createSpan();
+    copy.createEl("strong", { text: action.label });
+    copy.createEl("small", { text: action.description });
+    button.addEventListener("click", onClick);
   }
 
   onClose() {
@@ -555,13 +1214,17 @@ class LifeOSHomeView extends ItemView {
     this.refreshSequence = 0;
     this.refreshTimer = null;
     this.analyticsDays = 30;
-    this.includeExamples = false;
-    this.showVisuals = true;
+    const settings = { ...DEFAULT_SETTINGS, ...(plugin?.settings || {}) };
+    this.includeExamples = Boolean(settings.includeSamples);
+    this.showVisuals = settings.showVisuals !== false;
     this.visualOptions = {};
-    this.itemLimit = 6;
+    this.itemLimit = [3, 6, 12].includes(settings.itemLimit) ? settings.itemLimit : 6;
     this.focusGroup = "all";
     this.libraryStatus = "all";
-    this.compactLayout = false;
+    this.compactLayout = Boolean(settings.compactLayout);
+    this.activeProjectPath = null;
+    this.data = new LifeOSData(this.app, () => this.settingsSnapshot());
+    this.writer = plugin?.writer || new LifeOSWriter(this.app);
   }
 
   getViewType() {
@@ -569,7 +1232,7 @@ class LifeOSHomeView extends ItemView {
   }
 
   getDisplayText() {
-    return "Life OS";
+    return "Dev OS";
   }
 
   getIcon() {
@@ -587,6 +1250,7 @@ class LifeOSHomeView extends ItemView {
   }
 
   async onClose() {
+    this.saveDrafts();
     this.refreshSequence += 1;
     this.closeBrain();
     if (this.refreshTimer) {
@@ -613,7 +1277,25 @@ class LifeOSHomeView extends ItemView {
       return;
     }
     this.taskSnapshot = taskSnapshot;
+    if (this.isEditing()) {
+      // Keep the field the person is typing in; render once they leave it.
+      this.deferRender();
+      return;
+    }
     this.render();
+  }
+
+  isEditing() {
+    const active = globalThis.document?.activeElement;
+    if (!active || !this.contentEl.contains?.(active)) return false;
+    return /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName) && active.type !== "checkbox" && !this.forceRender;
+  }
+
+  deferRender() {
+    const active = globalThis.document?.activeElement;
+    if (!active || active.dataset?.devOsDeferred) return;
+    active.dataset.devOsDeferred = "1";
+    active.addEventListener("blur", () => { delete active.dataset.devOsDeferred; this.render(); }, { once: true });
   }
 
   render(force = false) {
@@ -637,7 +1319,9 @@ class LifeOSHomeView extends ItemView {
     }
     const shell = main.createDiv({ cls: "life-os-shell" });
     if (this.activeScreen === "home") {
-      this.renderHome(shell);
+      this.renderDevHome(shell);
+    } else if (this.activeScreen === "project") {
+      this.renderProjectPage(shell);
     } else {
       this.renderModule(shell);
     }
@@ -651,84 +1335,6 @@ class LifeOSHomeView extends ItemView {
     }
     this.previewBrain = null;
     this.embeddedBrain = null;
-  }
-
-  renderHome(shell) {
-    const hero = shell.createEl("header", { cls: "life-os-hero" });
-    const identity = hero.createDiv({ cls: "life-os-identity" });
-    const mark = identity.createSpan({ cls: "life-os-mark" });
-    setIcon(mark, "compass");
-
-    const words = identity.createDiv();
-    words.createEl("h1", { text: "LIFE" });
-    words.createEl("p", {
-      text: "See clearly. Choose deliberately. Live fully.",
-    });
-
-    hero.createDiv({
-      cls: "life-os-date",
-      text: moment().format("dddd, D MMMM YYYY"),
-    });
-
-    const status = hero.createDiv({ cls: "life-os-status-row" });
-    this.addStatus(status, "shield-check", "Local-first", true);
-
-    const aiReady =
-      this.pluginLoaded("agent-client") &&
-      this.pluginLoaded("obsidian-local-rest-api");
-
-    this.addStatus(
-      status,
-      "sparkles",
-      aiReady ? "AI tools loaded" : "AI unavailable",
-      aiReady
-    );
-
-    const heroActions = hero.createDiv({ cls: "life-os-hero-actions" });
-    this.addButton(heroActions, {
-      icon: "calendar-days",
-      label: "Open today",
-      description: "Start with the current day.",
-      primary: true,
-      onClick: () =>
-        this.runCommand("quickadd:choice:lifeos-daily", "Today’s note"),
-    });
-
-    this.addButton(heroActions, {
-      icon: "sparkles",
-      label: "Ask Life OS",
-      description: "Open the governed AI workspace.",
-      onClick: () => this.openPath("00 Dashboards/Assistant.md"),
-    });
-
-    this.renderSetupBanner(shell);
-    const overview = shell.createDiv({ cls: "life-os-home-overview" });
-    const now = overview.createEl("section", { cls: "life-os-home-now" });
-    now.createEl("h2", { text: "Now" });
-    this.renderTaskLive(now, { limit: 3, attention: true });
-    if (this.visualEnabled()) {
-      const card = overview.createEl("section", { cls: "life-os-brain-card" });
-      card.createEl("h2", { text: "Your connected notes" });
-      const host = card.createDiv({ cls: "life-os-brain-preview" });
-      this.previewBrain = new LifeOSBrainRenderer(this.app, host, true);
-      this.previewBrain.brainGeometry = this.previewGeometry;
-      this.addChild(this.previewBrain);
-      this.addButton(card, { icon: "brain", label: "Explore Brain", description: "Open the full graph in this dashboard.", onClick: () => { this.activeScreen = "brain"; this.render(); } });
-    }
-
-    this.renderActionSection(
-      shell,
-      "Capture",
-      "Put something into the system without breaking your flow.",
-      CAPTURE_ACTIONS,
-      (action) => this.runCommand(action.command, action.label)
-    );
-    this.renderPlanLive(shell);
-    const signals = shell.createEl("section", { cls: "life-os-signals" });
-    const model = this.getAnalytics();
-    signals.createEl("h2", { text: "Recorded signals" });
-    signals.createEl("p", { text: `${model.scored} scored days in ${this.analyticsDays} days · ${model.average === null ? "No effort scores yet" : `${model.average.toFixed(1)} / 10 mean daily effort`}. Missing days are not zero.${this.includeExamples ? " Samples included." : " Samples excluded."}` });
-    this.addButton(signals, { icon: "chart-line", label: "Explore Review", description: "Effort, habit rhythm, and life areas.", onClick: () => { this.activeScreen = "review"; this.render(); } });
   }
 
   isExample(data) {
@@ -881,32 +1487,35 @@ class LifeOSHomeView extends ItemView {
   renderRail(parent) {
     const rail = parent.createEl("aside", {
       cls: "life-os-rail",
-      attr: { "aria-label": "Life OS navigation" },
+      attr: { "aria-label": "Dev OS navigation" },
     });
 
     const brand = rail.createEl("button", {
       cls: "life-os-rail-brand",
-      attr: { "aria-label": "Open Life OS home" },
+      attr: { "aria-label": "Open Dev OS home" },
     });
     brand.type = "button";
     const mark = brand.createSpan();
     setIcon(mark, "compass");
-    brand.createSpan({ text: "LIFE" });
+    brand.createSpan({ text: "DEV OS" });
     brand.addEventListener("click", () => {
       this.activeScreen = "home";
       this.render();
     });
 
     const nav = rail.createEl("nav", { cls: "life-os-nav" });
+    const current = this.activeScreen === "project" ? "projects" : this.activeScreen;
     for (const item of NAV_ITEMS) {
+      if (item.personal && !this.showPersonal() && current !== item.id) continue;
+      const badge = item.id === "inbox" ? this.inboxClips().length : 0;
       const button = nav.createEl("button", {
         cls:
-          this.activeScreen === item.id
+          current === item.id
             ? "life-os-nav-button is-active"
             : "life-os-nav-button",
         attr: {
           "aria-current":
-            this.activeScreen === item.id ? "page" : "false",
+            current === item.id ? "page" : "false",
           title: item.label,
         },
       });
@@ -914,6 +1523,7 @@ class LifeOSHomeView extends ItemView {
       const icon = button.createSpan();
       setIcon(icon, item.icon);
       button.createSpan({ text: item.label });
+      if (badge) button.createSpan({ cls: "life-os-nav-badge", text: String(badge), attr: { "aria-label": `${badge} waiting` } });
       button.addEventListener("click", () => {
         this.activeScreen = item.id;
         this.render();
@@ -929,7 +1539,7 @@ class LifeOSHomeView extends ItemView {
   renderTopbar(parent) {
     const topbar = parent.createEl("header", { cls: "life-os-topbar" });
     const context = topbar.createDiv({ cls: "life-os-topbar-context" });
-    context.createSpan({ text: "Life OS" });
+    context.createSpan({ text: "Dev OS" });
     context.createEl("strong", { text: this.getScreenTitle() });
 
     const actions = topbar.createDiv({ cls: "life-os-topbar-actions" });
@@ -942,14 +1552,26 @@ class LifeOSHomeView extends ItemView {
     const display = actions.createEl("details", { cls: "life-os-display-options" });
     display.createEl("summary", { text: "View" });
     const options = display.createDiv();
-    options.createEl("p", { text: "This view only. No vault settings changed." });
+    options.createEl("p", { text: "Display preferences, saved with the plugin. No notes change." });
     const density = options.createEl("button", { text: this.compactLayout ? "Use comfortable spacing" : "Use compact spacing" });
     density.type = "button";
-    this.registerDomEvent(density, "click", () => { this.compactLayout = !this.compactLayout; this.render(true); });
+    this.registerDomEvent(density, "click", () => { this.compactLayout = !this.compactLayout; this.persistViewSettings(); this.render(true); });
     const visuals = options.createEl("button", { text: this.showVisuals ? "Hide optional visuals" : "Show optional visuals" });
     visuals.type = "button";
-    this.registerDomEvent(visuals, "click", () => { this.showVisuals = !this.showVisuals; this.render(true); });
-    if (["home", "today", "focus", "projects", "people", "create", "library", "ai"].includes(this.activeScreen)) {
+    this.registerDomEvent(visuals, "click", () => { this.showVisuals = !this.showVisuals; this.persistViewSettings(); this.render(true); });
+    const samples = options.createEl("button", { text: this.includeExamples ? "Hide sample data" : "Show sample data" });
+    samples.type = "button";
+    this.registerDomEvent(samples, "click", () => { this.includeExamples = !this.includeExamples; this.persistViewSettings(); void this.refreshLiveData(); });
+    const personal = options.createEl("button", { text: this.showPersonal() ? "Hide personal modules" : "Show personal modules" });
+    personal.type = "button";
+    this.registerDomEvent(personal, "click", () => {
+      if (this.plugin?.settings) {
+        this.plugin.settings.showPersonal = !this.showPersonal();
+        void this.plugin.saveSettings?.();
+      }
+      this.render(true);
+    });
+    if (["home", "today", "focus", "projects", "people", "library", "ai"].includes(this.activeScreen)) {
       const local = options.createEl("button", { text: this.visualOptions[this.activeScreen] === false ? "Show this module's visual" : "Hide this module's visual" });
       local.type = "button";
       this.registerDomEvent(local, "click", () => { this.visualOptions[this.activeScreen] = this.visualOptions[this.activeScreen] === false; this.render(true); });
@@ -958,10 +1580,10 @@ class LifeOSHomeView extends ItemView {
     const limit = label.createEl("select", { attr: { "aria-label": "Items per list" } });
     for (const count of [3, 6, 12]) limit.createEl("option", { text: String(count), attr: { value: String(count) } });
     limit.value = String(this.itemLimit);
-    this.registerDomEvent(limit, "change", () => { this.itemLimit = Number(limit.value); this.render(true); });
+    this.registerDomEvent(limit, "change", () => { this.itemLimit = Number(limit.value); this.persistViewSettings(); this.render(true); });
     const reset = options.createEl("button", { text: "Restore view defaults" });
     reset.type = "button";
-    this.registerDomEvent(reset, "click", () => { this.showVisuals = true; this.visualOptions = {}; this.itemLimit = 6; this.compactLayout = false; this.focusGroup = "all"; this.libraryStatus = "all"; this.libraryType = "all"; this.pipelinePath = null; this.render(true); });
+    this.registerDomEvent(reset, "click", () => { this.showVisuals = true; this.visualOptions = {}; this.itemLimit = 6; this.compactLayout = false; this.focusGroup = "all"; this.libraryStatus = "all"; this.libraryType = "all"; this.persistViewSettings(); this.render(true); });
     this.addTopbarButton(actions, "plus", "Capture", () => {
       this.plugin.openCapture();
     }, true);
@@ -984,6 +1606,7 @@ class LifeOSHomeView extends ItemView {
   }
 
   getScreenTitle() {
+    if (this.activeScreen === "project") return "Project";
     return NAV_ITEMS.find((item) => item.id === this.activeScreen)?.label || "Home";
   }
 
@@ -1001,17 +1624,20 @@ class LifeOSHomeView extends ItemView {
     header.createEl("p", { text: module.description });
 
     if (this.activeScreen === "today") {
-      this.renderTodayLive(shell);
-      this.renderTaskLive(shell, { limit: 5, attention: true });
+      this.renderStandup(shell);
+      this.renderQuickAdd(shell);
+      this.renderTaskLive(shell, { limit: this.itemLimit, attention: true });
+      if (this.showPersonal()) this.renderTodayLive(shell);
     } else {
       this.renderModuleLive(shell);
     }
 
     if (this.activeScreen === "ai") this.renderSystemSummary(shell);
+    if (!module.actions.length) return;
     this.renderActionSection(
       shell,
-      "Open and act",
-      "Every control below opens a real note, dashboard, or capture workflow.",
+      "Shortcuts",
+      "Dashboards and captures backed by the same Markdown notes.",
       module.actions,
       (action) => {
         if (action.command) {
@@ -1030,7 +1656,7 @@ class LifeOSHomeView extends ItemView {
       copy.createEl("strong", { text: "AI-managed, human-authorized" });
       copy.createEl("p", {
         text:
-          "Life OS can retrieve, summarize, and draft. Review context before sending. Human approval is the operating policy, not a guarantee enforced across every connected tool.",
+          "Dev OS can retrieve, summarize, and draft. Review context before sending. Human approval is the operating policy, not a guarantee enforced across every connected tool.",
       });
     }
   }
@@ -1222,8 +1848,15 @@ class LifeOSHomeView extends ItemView {
       return;
     }
 
-    if (this.activeScreen === "create") {
-      this.renderPipelineLive(parent);
+    const screens = {
+      sprint: () => this.renderSprintScreen(parent),
+      projects: () => this.renderProjectsScreen(parent),
+      meetings: () => this.renderMeetingsScreen(parent),
+      docs: () => this.renderDocsScreen(parent),
+      inbox: () => this.renderInboxScreen(parent),
+    };
+    if (screens[this.activeScreen]) {
+      screens[this.activeScreen]();
       return;
     }
 
@@ -1409,73 +2042,6 @@ class LifeOSHomeView extends ItemView {
     }
   }
 
-  renderPipelineLive(parent) {
-    const pipelines = [
-      { type: "newsletter", label: "Newsletters", icon: "mail", path: "06 Writing/Newsletters/Newsletter Board.md" },
-      { type: "youtube-script", label: "Videos", icon: "video", path: "06 Writing/YouTube Scripts/YouTube Board.md" },
-      { type: "article", label: "Articles", icon: "newspaper", path: "06 Writing/Articles/Article Board.md" },
-      { type: "course-lesson", label: "Courses", icon: "graduation-cap", path: "06 Writing/Course Content/Course Board.md" },
-    ];
-    const files = this.app.vault.getMarkdownFiles();
-    const section = parent.createEl("section", { cls: "life-os-pipeline-live" });
-    this.renderLiveHeading(
-      section,
-      "Creative studio",
-      "Every pipeline stays backed by its Markdown notes and Kanban board.",
-      `${pipelines.reduce((sum, pipeline) => sum + this.countType(files, pipeline.type), 0)} notes`
-    );
-    const grid = section.createDiv({ cls: "life-os-pipeline-grid" });
-    for (const pipeline of pipelines) {
-      const button = grid.createEl("button", { cls: "life-os-pipeline-card" });
-      button.type = "button";
-      const icon = button.createSpan();
-      setIcon(icon, pipeline.icon);
-      const copy = button.createDiv();
-      copy.createEl("strong", { text: pipeline.label });
-      copy.createSpan({ text: `${this.countType(files, pipeline.type)} notes` });
-      const selected = (this.pipelinePath || pipelines[0].path) === pipeline.path;
-      if (this.visualEnabled()) button.setAttribute("aria-pressed", String(selected));
-      this.registerDomEvent(button, "click", () => {
-        if (!this.visualEnabled()) { void this.openPath(pipeline.path); return; }
-        this.pipelinePath = pipeline.path;
-        this.render();
-      });
-      if (this.visualEnabled() && selected) {
-        const file = this.app.vault.getAbstractFileByPath(pipeline.path);
-        const cache = file instanceof TFile ? this.app.metadataCache.getFileCache(file) : null;
-        const lanes = cache?.headings?.filter(heading => heading.level === 2) || [];
-        const flow = section.createDiv({ cls: "life-os-workflow-lanes" });
-        flow.createEl("h3", { text: pipeline.label });
-        this.addButton(flow, { icon: "kanban", label: "Open board", description: "Edit cards in the original board.", onClick: () => this.openPath(pipeline.path) });
-        if (!file || !cache || !lanes.length || !Array.isArray(cache.listItems)) {
-          flow.createEl("p", { text: "Board lane counts unavailable. Open the board to inspect its workflow." });
-          continue;
-        }
-        if (this.isExample(this.getFrontmatter(file))) {
-          flow.createEl("p", { text: "Sample board excluded from workflow counts." });
-          continue;
-        }
-        for (let i = 0; i < lanes.length; i++) {
-          const start = lanes[i].position.start.line;
-          const end = lanes[i + 1]?.position.start.line ?? Infinity;
-          const cards = cache.listItems.filter(item => item.task !== undefined && item.position.start.line > start && item.position.start.line < end);
-          const laneBox = flow.createDiv({ cls: "life-os-lane-preview" });
-          const lane = laneBox.createEl("button", { text: `${lanes[i].heading} · ${cards.length}` });
-          lane.type = "button";
-          this.registerDomEvent(lane, "click", () => void this.openPath(pipeline.path, start + 1));
-          const tasks = this.taskSnapshot?.tasks.filter(task => task.path === pipeline.path && task.line > start + 1 && task.line <= end) || [];
-          for (const task of tasks.slice(0, 3)) {
-            const item = laneBox.createEl("button", { cls: "life-os-lane-item", text: task.text });
-            item.type = "button";
-            this.registerDomEvent(item, "click", () => void this.openPath(task.path, task.line));
-          }
-          laneBox.createEl("p", { text: !this.taskSnapshot ? "Loading open items" : this.taskSnapshot.error ? "Open-item index unavailable" : `${Math.min(tasks.length, 3)} of ${tasks.length} indexed open items shown${this.taskSnapshot.state === "partial" ? " · partial index" : ""}` });
-        }
-        flow.createEl("p", { text: "Checkbox items by actual board heading, including checked items. Not a completion percentage." });
-      }
-    }
-  }
-
   renderAiLive(parent) {
     const agentSettings = this.pluginSettings("agent-client");
     const restSettings = this.pluginSettings("obsidian-local-rest-api");
@@ -1657,8 +2223,7 @@ class LifeOSHomeView extends ItemView {
   }
 
   tasksForRecord(file, prefix) {
-    const slug = this.getFileTitle(file).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-    const tag = `#${prefix}/${slug}`;
+    const tag = `#${prefix}/${slugify(this.getFileTitle(file))}`;
     return (this.taskSnapshot?.tasks || []).filter(task => task.text.split(/\s+/).includes(tag));
   }
 
@@ -1683,13 +2248,7 @@ class LifeOSHomeView extends ItemView {
   }
 
   getConfiguredFolders(config = this.getConfigFrontmatter()) {
-    return {
-      daily: normalizeFolder(config.daily_folder, DEFAULT_FOLDERS.daily),
-      weekly: normalizeFolder(config.weekly_folder, DEFAULT_FOLDERS.weekly),
-      quarterly: normalizeFolder(config.quarterly_folder, DEFAULT_FOLDERS.quarterly),
-      retreats: normalizeFolder(config.retreat_folder, DEFAULT_FOLDERS.retreats),
-      projects: normalizeFolder(config.projects_folder, DEFAULT_FOLDERS.projects),
-    };
+    return this.data.folders(config);
   }
 
   summarizeDailyProperties(data, questionKeys, habitKeys) {
@@ -1728,8 +2287,8 @@ class LifeOSHomeView extends ItemView {
   }
 
   isDomainRecord(file) {
-    const projects = `${this.getConfiguredFolders().projects}/`;
-    return [projects, "05 People/", "06 Writing/", "07 Library/"]
+    const folders = this.getConfiguredFolders();
+    return [`${folders.projects}/`, `${folders.meetings}/`, "05 People/", "06 Writing/", "07 Library/"]
       .some((folder) => file.path.startsWith(folder)) &&
       (this.includeExamples || !this.isExample(this.getFrontmatter(file)));
   }
@@ -1765,15 +2324,32 @@ class LifeOSHomeView extends ItemView {
       .replace(/\s*[🔺⏫🔼🔽⏬]/gu, "")
       .replace(/\s+/g, " ")
       .trim();
+    const tagged = (prefix) => [...raw.matchAll(new RegExp(`(?:^|\\s)#${prefix}/([\\w-]+)`, "gu"))].map((item) => item[1].toLowerCase());
+    const closed = this.resolveTaskStatus(statusSymbol) === "closed";
+    const display = text
+      .replace(/(^|\s)#(?:project|sprint)\/[\w-]+/gu, "")
+      .replace(/(^|\s)#blocked(?=\s|$)/gu, "")
+      .replace(/\s+/g, " ")
+      .trim() || text;
     return {
       text,
+      display,
+      raw: line,
+      status: statusSymbol,
+      closed,
+      inProgress: statusSymbol === "/",
       due,
       scheduled,
-      overdue,
+      overdue: overdue && !closed,
       dueToday,
       scheduledToday,
       high,
       discuss,
+      blocked: /(^|\s)#blocked(?:\s|$)/.test(raw),
+      projects: tagged("project"),
+      sprints: tagged("sprint"),
+      owners: tagged("p"),
+      doneDate: raw.match(/✅\s*(\d{4}-\d{2}-\d{2})/)?.[1] || "",
       path: file.path,
       line: lineNumber,
     };
@@ -1784,8 +2360,10 @@ class LifeOSHomeView extends ItemView {
     const sources = [
       "08 Tasks/Tasks.md",
       `${paths.projects}/`,
+      `${paths.meetings}/`,
       "05 People/",
       "06 Writing/",
+      `${paths.docs}/`,
     ];
     const files = this.app.vault
       .getMarkdownFiles()
@@ -1796,8 +2374,10 @@ class LifeOSHomeView extends ItemView {
       );
     const today = moment().format("YYYY-MM-DD");
     const tasks = [];
-    const exampleFiles = files.filter((file) => this.isExample(this.getFrontmatter(file)));
-    const indexFiles = files.filter((file) => !this.isExample(this.getFrontmatter(file)));
+    const closedTasks = [];
+    const sections = {};
+    const exampleFiles = this.includeExamples ? [] : files.filter((file) => this.isExample(this.getFrontmatter(file)));
+    const indexFiles = this.includeExamples ? files : files.filter((file) => !this.isExample(this.getFrontmatter(file)));
 
     try {
       const contents = await Promise.all(
@@ -1838,6 +2418,9 @@ class LifeOSHomeView extends ItemView {
           continue;
         }
         const lines = content.split(/\r?\n/);
+        if (file.path.startsWith(`${paths.meetings}/`)) {
+          sections[file.path] = { decisions: extractSection(content, "## Decisions").filter((item) => item !== "") };
+        }
         for (const item of listItems) {
           if (typeof item.task !== "string") {
             continue;
@@ -1853,7 +2436,7 @@ class LifeOSHomeView extends ItemView {
             unresolvedStatuses += 1;
             continue;
           }
-          if (status !== "open") {
+          if (status !== "open" && symbol !== "x" && symbol !== "X") {
             continue;
           }
           const task = this.parseTaskLine(
@@ -1867,7 +2450,7 @@ class LifeOSHomeView extends ItemView {
             malformedItems += 1;
             continue;
           }
-          tasks.push(task);
+          (task.closed ? closedTasks : tasks).push(task);
         }
       }
       tasks.sort((left, right) => {
@@ -1891,8 +2474,11 @@ class LifeOSHomeView extends ItemView {
         );
       });
       const skipped = contents.filter((item) => item.error).length;
+      closedTasks.sort((left, right) => right.doneDate.localeCompare(left.doneDate) || left.path.localeCompare(right.path) || left.line - right.line);
       return {
         tasks,
+        closedTasks,
+        sections,
         error: "",
         state: skipped || unresolvedStatuses || malformedItems ? "partial" : "ready",
         skipped,
@@ -1905,6 +2491,8 @@ class LifeOSHomeView extends ItemView {
     } catch (error) {
       return {
         tasks: [],
+        closedTasks: [],
+        sections: {},
         error: error?.message || "Task index unavailable",
         state: "unavailable",
         skipped: files.length,
@@ -1973,7 +2561,7 @@ class LifeOSHomeView extends ItemView {
     this.renderLiveHeading(
       section,
       attention ? "Needs attention" : "Commitment feed",
-      attention ? "Overdue, due today, scheduled today, or high priority. Open a task at its source." : "Open tasks from the master inbox, projects, people, and writing notes.",
+      attention ? "Overdue, due today, scheduled today, or high priority. Tick to complete; click the text to open it at its source." : "Open tasks from the inbox, projects, meetings, people, and docs.",
       coverage
     );
 
@@ -1998,30 +2586,19 @@ class LifeOSHomeView extends ItemView {
 
     const selected = attention ? snapshot.tasks.filter(task => task.overdue || task.dueToday || task.scheduledToday || task.high) : snapshot.tasks.filter(task => group === "all" || this.taskGroup(task) === group);
     if (!selected.length) section.createDiv({ cls: "life-os-live-empty", text: attention ? "Nothing urgent in the indexed tasks. Other open tasks remain available below." : "No indexed tasks in this group." });
-    const list = section.createDiv({ cls: "life-os-task-list" });
-    for (const task of selected.slice(0, limit)) {
-      const button = list.createEl("button", {
-        cls: task.overdue
-          ? "life-os-task-row is-overdue"
-          : task.dueToday || task.scheduledToday
-            ? "life-os-task-row is-today"
-            : "life-os-task-row",
-      });
-      button.type = "button";
-      const marker = button.createSpan({ cls: "life-os-task-marker" });
-      setIcon(marker, task.discuss ? "messages-square" : "circle");
-      const copy = button.createDiv();
-      copy.createEl("strong", { text: task.text });
-      copy.createSpan({ text: this.getTaskContext(task) });
-      if (task.high) {
-        button.createSpan({ cls: "life-os-task-priority", text: "High" });
-      }
-      this.registerDomEvent(button, "click", () => void this.openPath(task.path, task.line));
-    }
-    this.addButton(section, { icon: "list-checks", label: "All tasks", description: !selected.length ? `View all ${snapshot.tasks.length} indexed open tasks.` : `Showing ${Math.min(selected.length, limit)} of ${selected.length} matching tasks.`, onClick: () => this.openPath("00 Dashboards/Task Dashboard.md") });
+    this.renderTaskList(section, selected.slice(0, limit), { context: true, dueControl: !attention, statusControl: !attention });
+    this.addButton(section, {
+      icon: "list-checks",
+      label: "All tasks",
+      description: !selected.length ? `View all ${snapshot.tasks.length} indexed open tasks.` : `Showing ${Math.min(selected.length, limit)} of ${selected.length} matching tasks.`,
+      onClick: () => (this.activeScreen === "focus" ? this.openPath("00 Dashboards/Task Dashboard.md") : this.go("focus")),
+    });
   }
 
   getTaskContext(task) {
+    if (task.closed) {
+      return task.doneDate ? `Done ${task.doneDate}` : "Done";
+    }
     if (task.overdue) {
       return `Overdue · ${task.due}`;
     }
@@ -2068,7 +2645,7 @@ class LifeOSHomeView extends ItemView {
     const icon = banner.createSpan({ cls: "life-os-setup-icon" });
     setIcon(icon, "route");
     const copy = banner.createDiv();
-    copy.createEl("strong", { text: "Finish your Life OS setup" });
+    copy.createEl("strong", { text: "Finish your Dev OS setup" });
     copy.createEl("p", {
       text: "Complete the guided checklist before depending on automations or AI connections.",
     });
@@ -2117,9 +2694,9 @@ class LifeOSHomeView extends ItemView {
       { icon: "folder-kanban", value: activeProjects, label: "Active projects" },
       { icon: "users", value: typeCount(["person"]), label: "People" },
       {
-        icon: "pen-tool",
-        value: typeCount(["newsletter", "youtube-script", "article", "course-lesson"]),
-        label: "Creative notes",
+        icon: "milestone",
+        value: typeCount(["adr", "tech-note", "postmortem"]),
+        label: "Decisions and docs",
       },
       {
         icon: "sparkles",
@@ -2202,7 +2779,7 @@ class LifeOSHomeView extends ItemView {
     const file = this.app.vault.getAbstractFileByPath(path);
 
     if (!(file instanceof TFile)) {
-      new Notice(`Life OS could not find ${path}.`);
+      new Notice(`Dev OS could not find ${path}.`);
       return;
     }
 
@@ -2215,6 +2792,1088 @@ class LifeOSHomeView extends ItemView {
       editor.scrollIntoView?.({ from: position, to: position }, true);
     }
     await this.app.workspace.revealLeaf(leaf);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Dev OS: shared interaction helpers
+
+  settingsSnapshot() {
+    return { ...DEFAULT_SETTINGS, ...(this.plugin?.settings || {}), includeSamples: this.includeExamples };
+  }
+
+  persistViewSettings() {
+    const settings = this.plugin?.settings;
+    if (!settings) return;
+    Object.assign(settings, {
+      includeSamples: this.includeExamples,
+      showVisuals: this.showVisuals,
+      compactLayout: this.compactLayout,
+      itemLimit: this.itemLimit,
+    });
+    void this.plugin.saveSettings?.();
+  }
+
+  showPersonal() {
+    return Boolean(this.settingsSnapshot().showPersonal);
+  }
+
+  today() {
+    return moment().format("YYYY-MM-DD");
+  }
+
+  async runWrite(action, message) {
+    let ok = false;
+    try {
+      await action();
+      ok = true;
+      if (message) new Notice(message);
+    } catch (error) {
+      new Notice(error?.message || "Dev OS could not save that change.");
+    }
+    this.forceRender = true;
+    try {
+      await this.refreshLiveData();
+    } finally {
+      this.forceRender = false;
+    }
+    return ok;
+  }
+
+  go(screen, extra = {}) {
+    Object.assign(this, extra);
+    this.activeScreen = screen;
+    this.render();
+  }
+
+  openProject(path) {
+    this.go("project", { activeProjectPath: path });
+  }
+
+  allTasks() {
+    const snapshot = this.taskSnapshot;
+    return snapshot ? [...snapshot.tasks, ...(snapshot.closedTasks || [])] : [];
+  }
+
+  tasksForProject(file) {
+    const slug = slugify(this.getFileTitle(file));
+    return this.allTasks().filter((task) => task.path === file.path || (task.projects || []).includes(slug));
+  }
+
+  tasksForSprint(file) {
+    const slug = slugify(this.getFileTitle(file));
+    return this.allTasks().filter((task) => (task.sprints || []).includes(slug));
+  }
+
+  projectProgress(tasks) {
+    const done = tasks.filter((task) => task.closed).length;
+    return { done, total: tasks.length, open: tasks.length - done, overdue: tasks.filter((task) => !task.closed && task.overdue).length, ratio: tasks.length ? done / tasks.length : 0 };
+  }
+
+  activeSprints() {
+    return this.data.sprints()
+      .filter((file) => String(this.getFrontmatter(file).status || "").toLowerCase() === "active")
+      .sort((left, right) => String(this.getFrontmatter(right).start || "").localeCompare(String(this.getFrontmatter(left).start || "")));
+  }
+
+  addMeter(parent, ratio, label) {
+    const meter = parent.createDiv({ cls: "life-os-meter", attr: { role: "meter", "aria-label": label, "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": String(Math.round(ratio * 100)) } });
+    meter.createDiv({ cls: "life-os-meter-fill", attr: { style: `width:${Math.round(ratio * 100)}%` } });
+    return meter;
+  }
+
+  addChip(parent, text, cls = "") {
+    return parent.createSpan({ cls: `life-os-chip${cls ? ` ${cls}` : ""}`, text });
+  }
+
+  addSmallButton(parent, label, onClick, { icon = "", primary = false, title = "" } = {}) {
+    const button = parent.createEl("button", { cls: primary ? "life-os-small-button is-primary" : "life-os-small-button", attr: title ? { title, "aria-label": title } : {} });
+    button.type = "button";
+    if (icon) setIcon(button.createSpan(), icon);
+    if (label) button.createSpan({ text: label });
+    this.registerDomEvent(button, "click", () => void onClick());
+    return button;
+  }
+
+  addSelect(parent, label, options, value, onChange, cls = "life-os-select") {
+    const select = parent.createEl("select", { cls, attr: { "aria-label": label } });
+    for (const option of options) {
+      const item = typeof option === "string" ? { value: option, label: option } : option;
+      select.createEl("option", { text: item.label ?? item.value, attr: { value: item.value } });
+    }
+    select.value = value ?? "";
+    this.registerDomEvent(select, "change", () => void onChange(select.value));
+    return select;
+  }
+
+  externalLink(parent, url, text) {
+    if (!/^https?:\/\//i.test(String(url || ""))) return null;
+    return parent.createEl("a", { cls: "life-os-external", text: text || url, attr: { href: url, target: "_blank", rel: "noopener noreferrer" } });
+  }
+
+  renderTaskRow(list, task, { context = true, statusControl = false, dueControl = false } = {}) {
+    const state = task.closed ? " is-done" : task.overdue ? " is-overdue" : task.dueToday || task.scheduledToday ? " is-today" : "";
+    const row = list.createDiv({ cls: `life-os-task-row is-interactive${state}` });
+    const check = row.createEl("input", { cls: "life-os-task-check", attr: { type: "checkbox", "aria-label": `${task.closed ? "Reopen" : "Complete"}: ${task.display || task.text}` } });
+    check.checked = Boolean(task.closed);
+    this.registerDomEvent(check, "change", () => void this.runWrite(() => this.writer.toggleTask(task), task.closed ? "Task reopened." : "Task completed."));
+    const open = row.createEl("button", { cls: "life-os-task-open", attr: { title: "Open at its source line" } });
+    open.type = "button";
+    open.createEl("strong", { text: task.display || task.text });
+    if (context) open.createSpan({ text: this.getTaskContext(task) });
+    this.registerDomEvent(open, "click", () => void this.openPath(task.path, task.line));
+    const meta = row.createDiv({ cls: "life-os-task-meta" });
+    if (task.blocked && !task.closed) meta.createSpan({ cls: "life-os-task-badge is-blocked", text: "Blocked" });
+    if (task.inProgress) meta.createSpan({ cls: "life-os-task-badge is-progress", text: "In progress" });
+    if (task.high && !task.closed) meta.createSpan({ cls: "life-os-task-priority", text: "High" });
+    if (dueControl && !task.closed) {
+      const due = meta.createEl("input", { cls: "life-os-task-due", attr: { type: "date", "aria-label": `Due date: ${task.display || task.text}` } });
+      due.value = task.due || "";
+      this.registerDomEvent(due, "change", () => void this.runWrite(() => this.writer.setTaskDue(task, due.value), due.value ? `Due ${due.value}.` : "Due date cleared."));
+    }
+    if (statusControl && !task.closed) {
+      const next = task.inProgress ? "x" : "/";
+      this.addSmallButton(meta, task.inProgress ? "Done" : "Start", () => this.runWrite(() => this.writer.setTaskStatus(task, next), task.inProgress ? "Task completed." : "Task started."), { icon: task.inProgress ? "check" : "play" });
+    }
+    return row;
+  }
+
+  renderTaskList(parent, tasks, options = {}) {
+    const list = parent.createDiv({ cls: "life-os-task-list" });
+    for (const task of tasks) this.renderTaskRow(list, task, options);
+    return list;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Home
+
+  renderDevHome(shell) {
+    const hero = shell.createEl("header", { cls: "life-os-hero" });
+    const identity = hero.createDiv({ cls: "life-os-identity" });
+    const mark = identity.createSpan({ cls: "life-os-mark" });
+    setIcon(mark, "compass");
+    const words = identity.createDiv();
+    words.createEl("h1", { text: "DEV OS" });
+    words.createEl("p", { text: "Plan the work. Ship the work. Remember why." });
+    hero.createDiv({ cls: "life-os-date", text: moment().format("dddd, D MMMM YYYY") });
+    const status = hero.createDiv({ cls: "life-os-status-row" });
+    this.addStatus(status, "shield-check", "Local-first", true);
+    const aiReady = this.pluginLoaded("agent-client") && this.pluginLoaded("obsidian-local-rest-api");
+    this.addStatus(status, "sparkles", aiReady ? "AI tools loaded" : "AI unavailable", aiReady);
+    if (this.includeExamples) this.addStatus(status, "flask-conical", "Sample data shown", true);
+    const heroActions = hero.createDiv({ cls: "life-os-hero-actions" });
+    this.addButton(heroActions, { icon: "sun", label: "Today and standup", description: "Your tasks, blockers, and standup draft.", primary: true, onClick: () => this.go("today") });
+    this.addButton(heroActions, { icon: "sparkles", label: "Ask Dev OS", description: "Open the governed AI workspace.", onClick: () => this.openPath("00 Dashboards/Assistant.md") });
+
+    this.renderSetupBanner(shell);
+    const overview = shell.createDiv({ cls: "life-os-home-overview" });
+    const now = overview.createEl("section", { cls: "life-os-home-now" });
+    now.createEl("h2", { text: "My work" });
+    this.renderTaskLive(now, { limit: 5, attention: true });
+    if (this.visualEnabled()) {
+      const card = overview.createEl("section", { cls: "life-os-brain-card" });
+      card.createEl("h2", { text: "Your connected notes" });
+      const host = card.createDiv({ cls: "life-os-brain-preview" });
+      this.previewBrain = new LifeOSBrainRenderer(this.app, host, true);
+      this.previewBrain.brainGeometry = this.previewGeometry;
+      this.addChild(this.previewBrain);
+      this.addButton(card, { icon: "brain", label: "Explore Brain", description: "Open the full graph in this dashboard.", onClick: () => this.go("brain") });
+    }
+
+    const cards = shell.createDiv({ cls: "life-os-home-cards" });
+    this.renderSprintCard(cards);
+    this.renderMeetingsCard(cards);
+    this.renderInboxCard(cards);
+    this.renderProjectsCard(cards);
+    this.renderQuickAdd(shell);
+
+    if (this.showPersonal()) {
+      this.renderPlanLive(shell);
+      const signals = shell.createEl("section", { cls: "life-os-signals" });
+      const model = this.getAnalytics();
+      signals.createEl("h2", { text: "Recorded signals" });
+      signals.createEl("p", { text: `${model.scored} scored days in ${this.analyticsDays} days · ${model.average === null ? "No effort scores yet" : `${model.average.toFixed(1)} / 10 mean daily effort`}. Missing days are not zero.${this.includeExamples ? " Samples included." : " Samples excluded."}` });
+      this.addButton(signals, { icon: "chart-line", label: "Explore Review", description: "Effort, habit rhythm, and life areas.", onClick: () => this.go("review") });
+    }
+  }
+
+  homeCard(parent, icon, title, action) {
+    const card = parent.createEl("section", { cls: "life-os-home-card" });
+    const heading = card.createDiv({ cls: "life-os-home-card-heading" });
+    setIcon(heading.createSpan({ cls: "life-os-record-icon" }), icon);
+    heading.createEl("h3", { text: title });
+    if (action) this.addSmallButton(heading, action.label, action.onClick, { icon: "arrow-right" });
+    return card;
+  }
+
+  renderSprintCard(parent) {
+    const card = this.homeCard(parent, "timer", "Active sprint", { label: "Sprint", onClick: () => this.go("sprint") });
+    const sprint = this.activeSprints()[0];
+    if (!sprint) {
+      card.createEl("p", { text: "No active sprint." });
+      this.addSmallButton(card, "Plan a sprint", () => this.openForm("sprint"), { icon: "plus" });
+      return;
+    }
+    const data = this.getFrontmatter(sprint);
+    const progress = this.projectProgress(this.tasksForSprint(sprint));
+    card.createEl("strong", { text: this.getFileTitle(sprint) });
+    card.createEl("p", { text: data.goal ? String(data.goal) : "No goal written yet." });
+    this.addMeter(card, progress.ratio, "Sprint progress");
+    const left = daysBetween(this.today(), isoDate(data.end));
+    card.createEl("small", { text: `${progress.done} of ${progress.total} done${left === null ? "" : ` · ${left >= 0 ? `${left} days left` : `${-left} days over`}`}` });
+  }
+
+  renderMeetingsCard(parent) {
+    const card = this.homeCard(parent, "messages-square", "Meetings today", { label: "Meetings", onClick: () => this.go("meetings") });
+    const today = this.data.meetings().filter((file) => isoDate(this.getFrontmatter(file).date) === this.today());
+    if (!today.length) card.createEl("p", { text: "Nothing on record for today." });
+    for (const file of today.slice(0, 3)) {
+      const button = card.createEl("button", { cls: "life-os-link-row", text: this.getFileTitle(file) });
+      button.type = "button";
+      this.registerDomEvent(button, "click", () => void this.openPath(file.path));
+    }
+    const actions = this.allTasks().filter((task) => !task.closed && task.path.startsWith(`${this.data.folders().meetings}/`));
+    card.createEl("small", { text: `${actions.length} open action ${actions.length === 1 ? "item" : "items"} across meetings` });
+  }
+
+  renderInboxCard(parent) {
+    const card = this.homeCard(parent, "inbox", "Clipped inbox", { label: "Inbox", onClick: () => this.go("inbox") });
+    const clips = this.inboxClips();
+    card.createEl("strong", { cls: "life-os-big-number", text: String(clips.length) });
+    card.createEl("p", { text: clips.length ? "Web clips waiting for triage." : "Nothing waiting. Clip a page with Obsidian Web Clipper." });
+  }
+
+  renderProjectsCard(parent) {
+    const card = this.homeCard(parent, "folder-kanban", "Projects", { label: "All", onClick: () => this.go("projects") });
+    const projects = this.data.projects({ includeClosed: false });
+    if (!projects.length) {
+      card.createEl("p", { text: "No active projects yet." });
+      this.addSmallButton(card, "New project", () => this.openForm("project"), { icon: "plus" });
+      return;
+    }
+    for (const file of projects.slice(0, 4)) {
+      const progress = this.projectProgress(this.tasksForProject(file));
+      const row = card.createEl("button", { cls: "life-os-project-mini" });
+      row.type = "button";
+      row.createSpan({ text: this.getFileTitle(file) });
+      this.addMeter(row, progress.ratio, `${this.getFileTitle(file)} progress`);
+      this.registerDomEvent(row, "click", () => this.openProject(file.path));
+    }
+  }
+
+  renderQuickAdd(parent, { projectPath = "", heading = "Quick add" } = {}) {
+    const section = parent.createEl("section", { cls: "life-os-quick-add" });
+    section.createEl("h2", { text: heading });
+    const row = section.createDiv({ cls: "life-os-form-row" });
+    const text = row.createEl("input", { cls: "life-os-input is-grow", attr: { type: "text", placeholder: "Add a task and press Enter", "aria-label": "New task" } });
+    let target = projectPath;
+    if (!projectPath) {
+      const options = [{ value: "", label: "Inbox" }, ...this.data.projects({ includeClosed: false }).map((file) => ({ value: file.path, label: this.getFileTitle(file) }))];
+      const preferred = this.data.projects().find((file) => this.getFileTitle(file) === this.settingsSnapshot().defaultProject);
+      target = preferred?.path || "";
+      this.addSelect(row, "Task destination", options, target, (value) => { target = value; });
+    }
+    const due = row.createEl("input", { cls: "life-os-input", attr: { type: "date", "aria-label": "Due date" } });
+    const submit = async () => {
+      const ok = await this.plugin.addTask?.({ text: text.value, projectPath: target, due: due.value }, this);
+      if (ok) { text.value = ""; due.value = ""; }
+    };
+    this.addSmallButton(row, "Add", submit, { icon: "plus", primary: true });
+    this.registerDomEvent(text, "keydown", (event) => { if (event.key === "Enter") { event.preventDefault?.(); void submit(); } });
+  }
+
+  openForm(kind, preset = {}) {
+    if (!this.plugin?.data) {
+      new Notice("Dev OS forms need the plugin to be loaded.");
+      return null;
+    }
+    return openCreateForm(this.plugin, kind, preset, (file) => this.afterCreate(file, kind));
+  }
+
+  async afterCreate(file, kind) {
+    await this.refreshLiveData();
+    if (kind === "project" && file?.path) this.openProject(file.path);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Today: standup and task list
+
+  renderStandup(parent) {
+    const model = this.getStandupModel();
+    const section = parent.createEl("section", { cls: "life-os-standup" });
+    this.renderLiveHeading(section, "Standup", "Drafted from task metadata: done since your last working day, what is due or in progress, and what is blocked.", this.taskSnapshot ? `${model.today.length} today · ${model.blockers.length} blocked` : "Loading");
+    const grid = section.createDiv({ cls: "life-os-standup-grid" });
+    for (const [title, items, empty] of [
+      ["Yesterday", model.yesterday, "Nothing completed since the last working day."],
+      ["Today", model.today, "Nothing due, scheduled, or in progress."],
+      ["Blockers", model.blockers, "No #blocked tasks."],
+    ]) {
+      const column = grid.createDiv({ cls: `life-os-standup-column${title === "Blockers" && items.length ? " is-alert" : ""}` });
+      column.createEl("h3", { text: title });
+      if (!items.length) column.createEl("p", { text: empty });
+      else this.renderTaskList(column, items.slice(0, this.itemLimit), { context: true });
+    }
+    const actions = section.createDiv({ cls: "life-os-form-actions" });
+    const text = buildStandupText({
+      yesterday: model.yesterday.map((task) => task.display),
+      today: model.today.map((task) => task.display),
+      blockers: model.blockers.map((task) => task.display),
+    });
+    this.addSmallButton(actions, "Copy standup", async () => {
+      try {
+        await globalThis.navigator?.clipboard?.writeText(text);
+        new Notice("Standup copied.");
+      } catch (error) {
+        new Notice("Clipboard unavailable.");
+      }
+    }, { icon: "copy" });
+    this.addSmallButton(actions, "Write to daily note", () => this.writeStandup(text), { icon: "file-pen-line", primary: true });
+  }
+
+  getStandupModel() {
+    const today = this.today();
+    const weekday = new Date(`${today}T12:00:00Z`).getUTCDay();
+    const since = isoAddDays(today, weekday === 1 ? -3 : weekday === 0 ? -2 : -1);
+    const all = this.allTasks();
+    return {
+      yesterday: all.filter((task) => task.closed && task.doneDate && task.doneDate >= since && task.doneDate < today),
+      today: all.filter((task) => !task.closed && !task.blocked && (task.inProgress || task.overdue || task.dueToday || task.scheduledToday)),
+      blockers: all.filter((task) => !task.closed && task.blocked),
+    };
+  }
+
+  async writeStandup(text) {
+    const path = `${this.getConfiguredFolders().daily}/${this.today()}.md`;
+    if (!this.fileExists(path)) {
+      new Notice("Create today's note first, then write the standup.");
+      this.runCommand("quickadd:choice:lifeos-daily", "Today's note");
+      return false;
+    }
+    return this.runWrite(() => this.writer.appendUnderHeading(path, "## Standup", text), "Standup written to today's note.");
+  }
+
+  // ---------------------------------------------------------------------------
+  // Projects
+
+  renderProjectsScreen(parent) {
+    const projects = this.data.projects();
+    const section = parent.createEl("section", { cls: "life-os-collection-live" });
+    this.renderLiveHeading(section, "Projects", "Status and priority change here and write to the note's properties. Open a card for the full project page.", `${projects.length} ${projects.length === 1 ? "project" : "projects"}`);
+    const toolbar = section.createDiv({ cls: "life-os-toolbar" });
+    const filter = this.projectFilter || "open";
+    for (const [id, label] of [["open", "Open"], ["active", "Active"], ["on-hold", "On hold"], ["idea", "Ideas"], ["done", "Done"], ["all", "All"]]) {
+      const button = toolbar.createEl("button", { cls: "life-os-filter", text: label, attr: { "aria-pressed": String(filter === id) } });
+      button.type = "button";
+      this.registerDomEvent(button, "click", () => { this.projectFilter = id; this.render(); });
+    }
+    this.addSmallButton(toolbar, "New project", () => this.openForm("project"), { icon: "plus", primary: true });
+    const visible = projects.filter((file) => {
+      const status = String(this.getFrontmatter(file).status || "active").toLowerCase();
+      if (filter === "all") return true;
+      if (filter === "open") return !["done", "archived", "cancelled"].includes(status);
+      return status === filter;
+    });
+    if (!visible.length) {
+      section.createDiv({ cls: "life-os-live-empty", text: projects.length ? "No projects match this filter." : "No projects yet. Create one, or show sample data from the View menu." });
+      return;
+    }
+    const grid = section.createDiv({ cls: "life-os-project-grid" });
+    for (const file of visible) {
+      const data = this.getFrontmatter(file);
+      const progress = this.projectProgress(this.tasksForProject(file));
+      const card = grid.createDiv({ cls: `life-os-project-card is-${slugify(data.priority || "normal")}` });
+      const open = card.createEl("button", { cls: "life-os-project-card-open" });
+      open.type = "button";
+      setIcon(open.createSpan({ cls: "life-os-record-icon" }), "folder-kanban");
+      const copy = open.createDiv();
+      copy.createEl("strong", { text: this.getFileTitle(file) });
+      copy.createSpan({ cls: "life-os-record-metrics", text: !this.taskSnapshot ? "Loading tasks" : `${progress.open} open · ${progress.done} done${progress.overdue ? ` · ${progress.overdue} overdue` : ""}` });
+      this.registerDomEvent(open, "click", () => this.openProject(file.path));
+      this.addMeter(card, progress.ratio, `${this.getFileTitle(file)} progress`);
+      const controls = card.createDiv({ cls: "life-os-project-controls" });
+      this.addSelect(controls, `Status of ${this.getFileTitle(file)}`, PROJECT_STATUSES, String(data.status || "active"), (value) => this.runWrite(() => this.writer.setFrontmatter(file.path, { status: value }), `Status set to ${value}.`));
+      this.addSelect(controls, `Priority of ${this.getFileTitle(file)}`, PRIORITIES, String(data.priority || "normal"), (value) => this.runWrite(() => this.writer.setFrontmatter(file.path, { priority: value }), `Priority set to ${value}.`));
+      if (isoDate(data.due)) this.addChip(controls, `Due ${isoDate(data.due)}`, isoDate(data.due) < this.today() ? "is-alert" : "");
+    }
+  }
+
+  renderProjectPage(shell) {
+    const file = this.app.vault.getAbstractFileByPath(this.activeProjectPath || "");
+    if (!(file instanceof TFile)) {
+      this.activeScreen = "projects";
+      this.render();
+      return;
+    }
+    const data = this.getFrontmatter(file);
+    const title = this.getFileTitle(file);
+    const slug = slugify(title);
+    const tasks = this.tasksForProject(file);
+    const progress = this.projectProgress(tasks);
+    const page = shell.createDiv({ cls: "life-os-project-page" });
+
+    const crumbs = page.createDiv({ cls: "life-os-breadcrumb" });
+    this.addSmallButton(crumbs, "Projects", () => this.go("projects"), { icon: "arrow-left" });
+    crumbs.createSpan({ text: "/" });
+    crumbs.createSpan({ text: title });
+
+    const header = page.createEl("header", { cls: "life-os-project-header" });
+    const headline = header.createDiv({ cls: "life-os-project-headline" });
+    headline.createSpan({ cls: "life-os-eyebrow", text: `#project/${slug}` });
+    headline.createEl("h1", { text: title });
+    const fields = header.createDiv({ cls: "life-os-project-fields" });
+    const field = (label) => {
+      const wrap = fields.createEl("label", { cls: "life-os-field" });
+      wrap.createSpan({ cls: "life-os-field-label", text: label });
+      return wrap;
+    };
+    this.addSelect(field("Status"), "Project status", PROJECT_STATUSES, String(data.status || "active"), (value) => this.runWrite(() => this.writer.setFrontmatter(file.path, { status: value }), `Status set to ${value}.`));
+    this.addSelect(field("Priority"), "Project priority", PRIORITIES, String(data.priority || "normal"), (value) => this.runWrite(() => this.writer.setFrontmatter(file.path, { priority: value }), `Priority set to ${value}.`));
+    const due = field("Target date").createEl("input", { cls: "life-os-input", attr: { type: "date", "aria-label": "Project target date" } });
+    due.value = isoDate(data.due);
+    this.registerDomEvent(due, "change", () => void this.runWrite(() => this.writer.setFrontmatter(file.path, { due: due.value || "" }), "Target date saved."));
+    const repo = field("Repository").createEl("input", { cls: "life-os-input", attr: { type: "url", placeholder: "https://...", "aria-label": "Repository URL" } });
+    repo.value = String(data.repo || "");
+    this.registerDomEvent(repo, "change", () => void this.runWrite(() => this.writer.setFrontmatter(file.path, { repo: repo.value.trim() }), "Repository saved."));
+
+    const stats = header.createDiv({ cls: "life-os-project-stats" });
+    const left = daysBetween(this.today(), isoDate(data.due));
+    for (const [value, label] of [
+      [`${Math.round(progress.ratio * 100)}%`, `${progress.done} of ${progress.total} tasks done`],
+      [String(progress.open), "open tasks"],
+      [String(progress.overdue), "overdue"],
+      [left === null ? "No date" : left >= 0 ? `${left}d` : `${-left}d late`, "to target"],
+    ]) {
+      const stat = stats.createDiv({ cls: "life-os-project-stat" });
+      stat.createEl("strong", { text: value });
+      stat.createSpan({ text: label });
+    }
+    this.addMeter(header, progress.ratio, "Project progress");
+
+    const people = header.createDiv({ cls: "life-os-people-row" });
+    people.createSpan({ cls: "life-os-field-label", text: "Stakeholders" });
+    const stakeholders = linkList(data.stakeholders);
+    for (const name of stakeholders) {
+      const chip = people.createSpan({ cls: "life-os-chip is-person" });
+      chip.createSpan({ text: name });
+      const remove = chip.createEl("button", { cls: "life-os-chip-remove", text: "×", attr: { "aria-label": `Remove ${name}` } });
+      remove.type = "button";
+      this.registerDomEvent(remove, "click", () => void this.runWrite(() => this.writer.setFrontmatter(file.path, { stakeholders: stakeholders.filter((item) => item !== name).map(wikiLink) }), `${name} removed.`));
+    }
+    const candidates = this.data.people().map((person) => this.getFileTitle(person)).filter((name) => !stakeholders.includes(name));
+    if (candidates.length) {
+      this.addSelect(people, "Add stakeholder", [{ value: "", label: "+ Add person" }, ...candidates], "", (value) => {
+        if (!value) return;
+        return this.runWrite(() => this.writer.setFrontmatter(file.path, { stakeholders: [...stakeholders, value].map(wikiLink) }), `${value} added.`);
+      });
+    }
+    const links = header.createDiv({ cls: "life-os-form-actions" });
+    this.externalLink(links, data.repo, "Open repository");
+    this.addSmallButton(links, "Open note", () => this.openPath(file.path), { icon: "file-text" });
+
+    const tabs = page.createDiv({ cls: "life-os-tabs", attr: { role: "tablist" } });
+    const tab = this.projectTab(file.path);
+    const meetings = this.data.forProject(this.data.meetings(), file).sort((a, b) => String(this.getFrontmatter(b).date || "").localeCompare(String(this.getFrontmatter(a).date || "")));
+    const docs = this.data.forProject(this.data.docs(), file);
+    const clips = this.data.forProject(this.data.clippings(), file);
+    for (const [id, label, count] of [["overview", "Overview", null], ["tasks", "Tasks", progress.open], ["meetings", "Meetings", meetings.length], ["docs", "Docs", docs.length], ["clips", "Clips", clips.length]]) {
+      const button = tabs.createEl("button", { cls: "life-os-tab", text: count === null ? label : `${label} · ${count}`, attr: { role: "tab", "aria-selected": String(tab === id) } });
+      button.type = "button";
+      this.registerDomEvent(button, "click", () => { this.setProjectTab(file.path, id); this.render(); });
+    }
+    const panel = page.createDiv({ cls: "life-os-tab-panel" });
+    const context = { file, data, title, slug, tasks, meetings, docs, clips };
+    if (tab === "tasks") this.renderProjectTasks(panel, context);
+    else if (tab === "meetings") this.renderProjectMeetings(panel, context);
+    else if (tab === "docs") this.renderProjectDocs(panel, context);
+    else if (tab === "clips") this.renderProjectClips(panel, context);
+    else this.renderProjectOverview(panel, context);
+  }
+
+  projectTab(path) {
+    return this.settingsSnapshot().projectTabs?.[path] || (this.projectTabs || {})[path] || "overview";
+  }
+
+  setProjectTab(path, tab) {
+    this.projectTabs = { ...(this.projectTabs || {}), [path]: tab };
+    if (this.plugin?.settings) {
+      this.plugin.settings.projectTabs = { ...(this.plugin.settings.projectTabs || {}), [path]: tab };
+      void this.plugin.saveSettings?.();
+    }
+  }
+
+  renderProjectOverview(panel, { file, data, tasks, meetings, docs }) {
+    const grid = panel.createDiv({ cls: "life-os-overview-grid" });
+    const next = grid.createEl("section", { cls: "life-os-panel-card" });
+    next.createEl("h3", { text: "Next up" });
+    const open = tasks.filter((task) => !task.closed);
+    if (!open.length) next.createEl("p", { text: "No open tasks. Add one in the Tasks tab." });
+    else this.renderTaskList(next, open.slice(0, 5), { context: true });
+    this.addSmallButton(next, "All tasks", () => { this.setProjectTab(file.path, "tasks"); this.render(); }, { icon: "list-checks" });
+
+    const sprintCard = grid.createEl("section", { cls: "life-os-panel-card" });
+    sprintCard.createEl("h3", { text: "Sprint" });
+    const sprints = this.data.forProject(this.data.sprints(), file);
+    const current = this.data.fileByTitle(linkTarget(data.current_sprint), this.data.sprints()) || sprints.find((sprint) => String(this.getFrontmatter(sprint).status) === "active");
+    if (current) {
+      const sprintData = this.getFrontmatter(current);
+      const sprintProgress = this.projectProgress(this.tasksForSprint(current));
+      sprintCard.createEl("strong", { text: this.getFileTitle(current) });
+      sprintCard.createEl("p", { text: String(sprintData.goal || "No goal written yet.") });
+      this.addMeter(sprintCard, sprintProgress.ratio, "Sprint progress");
+      sprintCard.createEl("small", { text: `${sprintProgress.done} of ${sprintProgress.total} done · ends ${isoDate(sprintData.end) || "unknown"}` });
+      this.addSmallButton(sprintCard, "Open sprint board", () => this.go("sprint", { activeSprintPath: current.path }), { icon: "kanban" });
+    } else {
+      sprintCard.createEl("p", { text: "No active sprint for this project." });
+      this.addSmallButton(sprintCard, "Plan a sprint", () => this.openForm("sprint", { project: this.getFileTitle(file), number: String(sprints.length + 1), status: "active" }), { icon: "plus" });
+    }
+
+    const meetingCard = grid.createEl("section", { cls: "life-os-panel-card" });
+    meetingCard.createEl("h3", { text: "Last meeting" });
+    const last = meetings[0];
+    if (last) {
+      meetingCard.createEl("strong", { text: this.getFileTitle(last) });
+      const actions = this.allTasks().filter((task) => task.path === last.path && !task.closed);
+      meetingCard.createEl("p", { text: `${isoDate(this.getFrontmatter(last).date)} · ${actions.length} open action ${actions.length === 1 ? "item" : "items"}` });
+      if (actions.length) this.renderTaskList(meetingCard, actions.slice(0, 3), { context: false });
+    } else meetingCard.createEl("p", { text: "No meeting minutes yet." });
+    this.addSmallButton(meetingCard, "Write minutes", () => { this.setProjectTab(file.path, "meetings"); this.composerOpen = true; this.render(); }, { icon: "plus", primary: true });
+
+    const decisionCard = grid.createEl("section", { cls: "life-os-panel-card" });
+    decisionCard.createEl("h3", { text: "Latest decision" });
+    const adrs = docs.filter((doc) => this.getFrontmatter(doc).type === "adr").sort((a, b) => String(this.getFrontmatter(b).date || "").localeCompare(String(this.getFrontmatter(a).date || "")));
+    if (adrs[0]) {
+      const button = decisionCard.createEl("button", { cls: "life-os-link-row", text: this.getFileTitle(adrs[0]) });
+      button.type = "button";
+      this.registerDomEvent(button, "click", () => void this.openPath(adrs[0].path));
+      this.addChip(decisionCard, String(this.getFrontmatter(adrs[0]).status || "proposed"), `is-${slugify(this.getFrontmatter(adrs[0]).status || "proposed")}`);
+    } else decisionCard.createEl("p", { text: "No decision records yet." });
+    this.addSmallButton(decisionCard, "New ADR", () => this.openForm("adr", { project: this.getFileTitle(file) }), { icon: "plus" });
+  }
+
+  renderProjectTasks(panel, { file, slug, tasks }) {
+    const form = panel.createEl("section", { cls: "life-os-task-form" });
+    form.createEl("h3", { text: "Add a task" });
+    const draft = (this.taskDrafts ||= {})[file.path] ||= { text: "", due: "", scheduled: "", high: false, sprint: "", owner: "", blocked: false };
+    const row = form.createDiv({ cls: "life-os-form-row" });
+    const text = row.createEl("input", { cls: "life-os-input is-grow", attr: { type: "text", placeholder: "Describe the task", "aria-label": "Task description" } });
+    text.value = draft.text;
+    this.registerDomEvent(text, "input", () => { draft.text = text.value; });
+    const options = form.createDiv({ cls: "life-os-form-row" });
+    const dated = (label, key) => {
+      const wrap = options.createEl("label", { cls: "life-os-field" });
+      wrap.createSpan({ cls: "life-os-field-label", text: label });
+      const input = wrap.createEl("input", { cls: "life-os-input", attr: { type: "date", "aria-label": label } });
+      input.value = draft[key];
+      this.registerDomEvent(input, "change", () => { draft[key] = input.value; });
+    };
+    dated("Due", "due");
+    dated("Scheduled", "scheduled");
+    const sprintField = options.createEl("label", { cls: "life-os-field" });
+    sprintField.createSpan({ cls: "life-os-field-label", text: "Sprint" });
+    const sprints = this.data.forProject(this.data.sprints(), file).filter((sprint) => String(this.getFrontmatter(sprint).status || "") !== "closed");
+    this.addSelect(sprintField, "Sprint", [{ value: "", label: "Backlog" }, ...sprints.map((sprint) => ({ value: slugify(this.getFileTitle(sprint)), label: this.getFileTitle(sprint) }))], draft.sprint, (value) => { draft.sprint = value; });
+    const ownerField = options.createEl("label", { cls: "life-os-field" });
+    ownerField.createSpan({ cls: "life-os-field-label", text: "Owner" });
+    this.addSelect(ownerField, "Owner", personOptions(this.data, "Me"), draft.owner, (value) => { draft.owner = value; });
+    const flags = options.createDiv({ cls: "life-os-flags" });
+    for (const [key, label] of [["high", "High priority"], ["blocked", "Blocked"]]) {
+      const wrap = flags.createEl("label", { cls: "life-os-inline-check", text: label });
+      const box = wrap.createEl("input", { attr: { type: "checkbox", "aria-label": label } });
+      box.checked = Boolean(draft[key]);
+      this.registerDomEvent(box, "change", () => { draft[key] = box.checked; });
+    }
+    const submit = async () => {
+      draft.text = text.value;
+      const line = buildTaskLine({ ...draft, project: slug, created: this.today() });
+      if (!line) { new Notice("Write the task first."); return; }
+      const heading = this.settingsSnapshot().taskHeading || "## Tasks";
+      const ok = await this.runWrite(() => this.writer.appendUnderHeading(file.path, heading, line, ["## Tasks", "## Inline tasks"]), "Task added.");
+      if (ok) Object.assign(draft, { text: "", due: "", scheduled: "", high: false, blocked: false });
+    };
+    this.addSmallButton(row, "Add task", submit, { icon: "plus", primary: true });
+    this.registerDomEvent(text, "keydown", (event) => { if (event.key === "Enter") { event.preventDefault?.(); void submit(); } });
+
+    const filter = this.projectTaskFilter || "open";
+    const toolbar = panel.createDiv({ cls: "life-os-toolbar" });
+    const groups = {
+      all: tasks,
+      open: tasks.filter((task) => !task.closed),
+      progress: tasks.filter((task) => task.inProgress),
+      blocked: tasks.filter((task) => !task.closed && task.blocked),
+      done: tasks.filter((task) => task.closed),
+    };
+    for (const [id, label] of [["open", "Open"], ["progress", "In progress"], ["blocked", "Blocked"], ["done", "Done"], ["all", "All"]]) {
+      const button = toolbar.createEl("button", { cls: "life-os-filter", text: `${label} · ${groups[id].length}`, attr: { "aria-pressed": String(filter === id) } });
+      button.type = "button";
+      this.registerDomEvent(button, "click", () => { this.projectTaskFilter = id; this.render(); });
+    }
+    const visible = groups[filter] || groups.open;
+    if (!this.taskSnapshot) { panel.createDiv({ cls: "life-os-live-empty", text: "Loading tasks..." }); return; }
+    if (!visible.length) { panel.createDiv({ cls: "life-os-live-empty", text: "No tasks in this view." }); return; }
+    const bySprint = new Map();
+    for (const task of visible) {
+      const key = task.sprints?.[0] || "";
+      if (!bySprint.has(key)) bySprint.set(key, []);
+      bySprint.get(key).push(task);
+    }
+    const sprintTitles = new Map(this.data.sprints().map((sprint) => [slugify(this.getFileTitle(sprint)), this.getFileTitle(sprint)]));
+    for (const [key, items] of [...bySprint.entries()].sort(([a], [b]) => (a ? 0 : 1) - (b ? 0 : 1) || a.localeCompare(b))) {
+      const group = panel.createDiv({ cls: "life-os-task-group" });
+      group.createEl("h4", { text: key ? sprintTitles.get(key) || `Sprint ${key}` : "Backlog" });
+      this.renderTaskList(group, items, { context: true, statusControl: true, dueControl: true });
+    }
+  }
+
+  meetingDraft(key) {
+    const store = this.plugin?.settings ? (this.plugin.settings.meetingDrafts ||= {}) : (this.localDrafts ||= {});
+    if (!store[key]) {
+      store[key] = { title: "", date: this.today(), time: "", kind: "meeting", attendees: [], others: "", agenda: "", notes: "", decisions: [""], actions: [{ text: "", owner: "", due: "" }] };
+    }
+    return store[key];
+  }
+
+  saveDrafts() {
+    if (this.plugin?.settings) void this.plugin.saveSettings?.();
+  }
+
+  renderProjectMeetings(panel, { file, title, slug, meetings }) {
+    const toolbar = panel.createDiv({ cls: "life-os-toolbar" });
+    this.addSmallButton(toolbar, this.composerOpen ? "Hide composer" : "New meeting minutes", () => { this.composerOpen = !this.composerOpen; this.render(); }, { icon: this.composerOpen ? "x" : "plus", primary: !this.composerOpen });
+    if (this.composerOpen) this.renderMeetingComposer(panel, { key: file.path, project: title, projectSlug: slug });
+    if (!meetings.length) {
+      panel.createDiv({ cls: "life-os-live-empty", text: "No meeting minutes linked to this project yet." });
+      return;
+    }
+    const timeline = panel.createDiv({ cls: "life-os-timeline" });
+    for (const meeting of meetings) this.renderMeetingCard(timeline, meeting);
+  }
+
+  renderMeetingComposer(parent, { key, project = "", projectSlug = "" }) {
+    const draft = this.meetingDraft(key);
+    const box = parent.createEl("section", { cls: "life-os-composer" });
+    box.createEl("h3", { text: "Meeting minutes" });
+    const input = (wrap, label, prop, type = "text", placeholder = "") => {
+      const field = wrap.createEl("label", { cls: "life-os-field" });
+      field.createSpan({ cls: "life-os-field-label", text: label });
+      const element = field.createEl("input", { cls: "life-os-input", attr: { type, placeholder, "aria-label": label } });
+      element.value = draft[prop] || "";
+      this.registerDomEvent(element, type === "date" || type === "time" ? "change" : "input", () => { draft[prop] = element.value; });
+      return element;
+    };
+    const top = box.createDiv({ cls: "life-os-form-row" });
+    const titleInput = input(top, "Title", "title", "text", "Weekly sync");
+    titleInput.addClass("is-grow");
+    input(top, "Date", "date", "date");
+    input(top, "Time", "time", "time");
+    const kindField = top.createEl("label", { cls: "life-os-field" });
+    kindField.createSpan({ cls: "life-os-field-label", text: "Kind" });
+    this.addSelect(kindField, "Meeting kind", MEETING_KINDS, draft.kind, (value) => { draft.kind = value; });
+    let projectChoice = project;
+    if (!project) {
+      const projectField = top.createEl("label", { cls: "life-os-field" });
+      projectField.createSpan({ cls: "life-os-field-label", text: "Project" });
+      projectChoice = draft.project || "";
+      this.addSelect(projectField, "Meeting project", projectOptions(this.data), projectChoice, (value) => { draft.project = value; projectChoice = value; });
+    }
+
+    const attendees = box.createDiv({ cls: "life-os-people-row" });
+    attendees.createSpan({ cls: "life-os-field-label", text: "Attendees" });
+    for (const person of this.data.people()) {
+      const name = this.getFileTitle(person);
+      const selected = draft.attendees.includes(name);
+      const chip = attendees.createEl("button", { cls: "life-os-chip is-person is-toggle", text: name, attr: { "aria-pressed": String(selected) } });
+      chip.type = "button";
+      this.registerDomEvent(chip, "click", () => {
+        draft.attendees = selected ? draft.attendees.filter((item) => item !== name) : [...draft.attendees, name];
+        this.render();
+      });
+    }
+    const others = attendees.createEl("input", { cls: "life-os-input", attr: { type: "text", placeholder: "Others, comma separated", "aria-label": "Other attendees" } });
+    others.value = draft.others || "";
+    this.registerDomEvent(others, "input", () => { draft.others = others.value; });
+
+    const areas = box.createDiv({ cls: "life-os-composer-grid" });
+    for (const [prop, label, placeholder] of [["agenda", "Agenda", "One item per line"], ["notes", "Notes", "What was said, one point per line"]]) {
+      const field = areas.createEl("label", { cls: "life-os-field is-wide" });
+      field.createSpan({ cls: "life-os-field-label", text: label });
+      const area = field.createEl("textarea", { cls: "life-os-textarea", attr: { rows: "4", placeholder, "aria-label": label } });
+      area.value = draft[prop] || "";
+      this.registerDomEvent(area, "input", () => { draft[prop] = area.value; });
+    }
+
+    const decisions = box.createDiv({ cls: "life-os-composer-list" });
+    decisions.createEl("h4", { text: "Decisions" });
+    draft.decisions.forEach((value, index) => {
+      const row = decisions.createDiv({ cls: "life-os-form-row" });
+      const element = row.createEl("input", { cls: "life-os-input is-grow", attr: { type: "text", placeholder: "We decided to...", "aria-label": `Decision ${index + 1}` } });
+      element.value = value;
+      this.registerDomEvent(element, "input", () => { draft.decisions[index] = element.value; });
+      this.addSmallButton(row, "", () => { draft.decisions.splice(index, 1); if (!draft.decisions.length) draft.decisions.push(""); this.render(); }, { icon: "trash-2", title: `Remove decision ${index + 1}` });
+    });
+    this.addSmallButton(decisions, "Decision", () => { draft.decisions.push(""); this.render(); }, { icon: "plus" });
+
+    const actions = box.createDiv({ cls: "life-os-composer-list" });
+    actions.createEl("h4", { text: "Action items" });
+    const owners = personOptions(this.data, "Owner");
+    draft.actions.forEach((action, index) => {
+      const row = actions.createDiv({ cls: "life-os-form-row" });
+      const element = row.createEl("input", { cls: "life-os-input is-grow", attr: { type: "text", placeholder: "Who does what", "aria-label": `Action item ${index + 1}` } });
+      element.value = action.text;
+      this.registerDomEvent(element, "input", () => { action.text = element.value; });
+      this.addSelect(row, `Owner of action item ${index + 1}`, owners, action.owner, (value) => { action.owner = value; });
+      const due = row.createEl("input", { cls: "life-os-input", attr: { type: "date", "aria-label": `Due date of action item ${index + 1}` } });
+      due.value = action.due || "";
+      this.registerDomEvent(due, "change", () => { action.due = due.value; });
+      this.addSmallButton(row, "", () => { draft.actions.splice(index, 1); if (!draft.actions.length) draft.actions.push({ text: "", owner: "", due: "" }); this.render(); }, { icon: "trash-2", title: `Remove action item ${index + 1}` });
+    });
+    this.addSmallButton(actions, "Action item", () => { draft.actions.push({ text: "", owner: "", due: "" }); this.render(); }, { icon: "plus" });
+
+    const footer = box.createDiv({ cls: "life-os-form-actions" });
+    footer.createSpan({ cls: "life-os-form-hint", text: `Saves to ${this.data.folders().meetings}/${draft.date || "date"} ${draft.title || "title"}.md. Action items become tasks${project || projectChoice ? ` tagged #project/${projectSlug || slugify(projectChoice)}` : ""}.` });
+    this.addSmallButton(footer, "Discard draft", () => { this.discardMeetingDraft(key); this.render(); }, { icon: "x" });
+    this.addSmallButton(footer, "Save minutes", () => this.saveMeetingDraft(key, { project: project || projectChoice }), { icon: "save", primary: true });
+  }
+
+  discardMeetingDraft(key) {
+    const store = this.plugin?.settings ? this.plugin.settings.meetingDrafts || {} : this.localDrafts || {};
+    delete store[key];
+    this.saveDrafts();
+  }
+
+  async saveMeetingDraft(key, { project = "" } = {}) {
+    const draft = this.meetingDraft(key);
+    if (!draft.title.trim()) { new Notice("Give the meeting a title."); return false; }
+    if (!isoDate(draft.date)) { new Notice("Pick a meeting date."); return false; }
+    const attendees = [...draft.attendees, ...String(draft.others || "").split(",").map((item) => item.trim()).filter(Boolean)];
+    const content = buildMeetingNote({
+      title: draft.title.trim(), kind: draft.kind, date: draft.date, time: draft.time,
+      project, projectSlug: slugify(project), attendees, agenda: draft.agenda, notes: draft.notes,
+      decisions: draft.decisions, actions: draft.actions.filter((action) => action.text.trim()), today: this.today(),
+    });
+    let created = null;
+    const ok = await this.runWrite(async () => {
+      created = await this.writer.createNote(this.data.folders().meetings, `${draft.date} ${draft.title.trim()}`, content);
+    }, "Meeting minutes saved.");
+    if (ok) {
+      this.discardMeetingDraft(key);
+      this.composerOpen = false;
+      if (created?.path) (this.expandedMeetings ||= new Set()).add(created.path);
+      this.render();
+    }
+    return ok;
+  }
+
+  renderMeetingCard(parent, meeting) {
+    const data = this.getFrontmatter(meeting);
+    const expanded = (this.expandedMeetings ||= new Set()).has(meeting.path);
+    const actions = this.allTasks().filter((task) => task.path === meeting.path);
+    const card = parent.createDiv({ cls: `life-os-meeting-card${expanded ? " is-open" : ""}` });
+    const head = card.createEl("button", { cls: "life-os-meeting-head", attr: { "aria-expanded": String(expanded) } });
+    head.type = "button";
+    head.createSpan({ cls: "life-os-meeting-date", text: isoDate(data.date) || "No date" });
+    head.createEl("strong", { text: this.getFileTitle(meeting).replace(/^\d{4}-\d{2}-\d{2}\s+/, "") });
+    head.createSpan({ cls: "life-os-chip", text: String(data.kind || "meeting") });
+    head.createSpan({ cls: "life-os-record-metrics", text: `${actions.filter((task) => !task.closed).length} open actions` });
+    this.registerDomEvent(head, "click", () => {
+      if (expanded) this.expandedMeetings.delete(meeting.path);
+      else this.expandedMeetings.add(meeting.path);
+      this.render();
+    });
+    if (!expanded) return;
+    const body = card.createDiv({ cls: "life-os-meeting-body" });
+    const attendees = linkList(data.attendees);
+    if (attendees.length) {
+      const row = body.createDiv({ cls: "life-os-people-row" });
+      row.createSpan({ cls: "life-os-field-label", text: "Attendees" });
+      for (const name of attendees) this.addChip(row, name, "is-person");
+    }
+    const decisions = this.taskSnapshot?.sections?.[meeting.path]?.decisions || [];
+    const decisionBox = body.createDiv({ cls: "life-os-composer-list" });
+    decisionBox.createEl("h4", { text: "Decisions" });
+    if (!decisions.length) decisionBox.createEl("p", { text: "No decisions recorded." });
+    for (const decision of decisions) {
+      const row = decisionBox.createDiv({ cls: "life-os-decision-row" });
+      row.createSpan({ text: decision });
+      this.addSmallButton(row, "ADR", () => this.openForm("adr", { title: decision.replace(/\[\[|\]\]/g, "").slice(0, 80), project: linkTarget(data.project), context: `From [[${this.getFileTitle(meeting)}]].`, decision }), { icon: "milestone", title: "Promote to a decision record" });
+    }
+    const actionBox = body.createDiv({ cls: "life-os-composer-list" });
+    actionBox.createEl("h4", { text: "Action items" });
+    if (!actions.length) actionBox.createEl("p", { text: "No action items." });
+    else this.renderTaskList(actionBox, actions, { context: true });
+    const note = body.createDiv({ cls: "life-os-form-row" });
+    const area = note.createEl("textarea", { cls: "life-os-textarea is-grow", attr: { rows: "2", placeholder: "Add a note to these minutes", "aria-label": `Add a note to ${this.getFileTitle(meeting)}` } });
+    const drafts = (this.noteDrafts ||= {});
+    area.value = drafts[meeting.path] || "";
+    this.registerDomEvent(area, "input", () => { drafts[meeting.path] = area.value; });
+    this.addSmallButton(note, "Append", async () => {
+      const lines = String(area.value || "").split("\n").map((line) => line.trim()).filter(Boolean).map((line) => (line.startsWith("- ") ? line : `- ${line}`));
+      if (!lines.length) return;
+      const ok = await this.runWrite(() => this.writer.appendUnderHeading(meeting.path, "## Notes", lines.join("\n")), "Note added to the minutes.");
+      if (ok) { delete drafts[meeting.path]; this.render(); }
+    }, { icon: "plus", primary: true });
+    this.addSmallButton(note, "Open", () => this.openPath(meeting.path), { icon: "file-text" });
+  }
+
+  renderProjectDocs(panel, { file, docs }) {
+    const toolbar = panel.createDiv({ cls: "life-os-toolbar" });
+    const title = this.getFileTitle(file);
+    this.addSmallButton(toolbar, "New ADR", () => this.openForm("adr", { project: title }), { icon: "milestone", primary: true });
+    this.addSmallButton(toolbar, "New tech note", () => this.openForm("tech-note", { project: title }), { icon: "file-code-2" });
+    this.addSmallButton(toolbar, "New postmortem", () => this.openForm("postmortem", { project: title }), { icon: "siren" });
+    if (!docs.length) { panel.createDiv({ cls: "life-os-live-empty", text: "No decision records, tech notes, or postmortems for this project." }); return; }
+    this.renderDocTable(panel, docs);
+  }
+
+  renderProjectClips(panel, { file, clips }) {
+    if (clips.length) this.renderClipList(panel, clips);
+    else panel.createDiv({ cls: "life-os-live-empty", text: "No clippings assigned to this project." });
+    const unassigned = this.inboxClips().filter((clip) => !linkTarget(this.getFrontmatter(clip).project));
+    if (!unassigned.length) return;
+    const assign = panel.createDiv({ cls: "life-os-form-row" });
+    assign.createSpan({ cls: "life-os-field-label", text: "Assign from Inbox" });
+    this.addSelect(assign, "Assign a clip to this project", [{ value: "", label: "Choose a clip" }, ...unassigned.map((clip) => ({ value: clip.path, label: this.getFileTitle(clip) }))], "", (value) => {
+      if (!value) return;
+      return this.runWrite(() => this.writer.setFrontmatter(value, { project: wikiLink(this.getFileTitle(file)) }), "Clip assigned.");
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Sprint board
+
+  renderSprintScreen(parent) {
+    const sprints = this.data.sprints().sort((a, b) => {
+      const rank = (file) => ({ active: 0, planned: 1 })[String(this.getFrontmatter(file).status || "").toLowerCase()] ?? 2;
+      return rank(a) - rank(b) || String(this.getFrontmatter(b).start || "").localeCompare(String(this.getFrontmatter(a).start || ""));
+    });
+    const section = parent.createEl("section", { cls: "life-os-sprint-live" });
+    const sprint = sprints.find((file) => file.path === this.activeSprintPath) || sprints[0];
+    const toolbar = section.createDiv({ cls: "life-os-toolbar" });
+    if (sprints.length) {
+      this.addSelect(toolbar, "Sprint", sprints.map((file) => ({ value: file.path, label: `${this.getFileTitle(file)} · ${this.getFrontmatter(file).status || "planned"}` })), sprint.path, (value) => { this.activeSprintPath = value; this.render(); });
+    }
+    this.addSmallButton(toolbar, "New sprint", () => this.openForm("sprint"), { icon: "plus", primary: !sprints.length });
+    if (!sprint) {
+      this.renderLiveHeading(section, "Sprint board", "Tasks tagged #sprint/<slug> appear here in three columns.", "No sprints");
+      section.createDiv({ cls: "life-os-live-empty", text: "No sprints yet. Create one, then tag tasks with its sprint tag." });
+      return;
+    }
+    const data = this.getFrontmatter(sprint);
+    const slug = slugify(this.getFileTitle(sprint));
+    const tasks = this.tasksForSprint(sprint);
+    const progress = this.projectProgress(tasks);
+    const left = daysBetween(this.today(), isoDate(data.end));
+    this.renderLiveHeading(section, this.getFileTitle(sprint), `${data.goal ? `Goal: ${data.goal}. ` : ""}${isoDate(data.start) || "?"} to ${isoDate(data.end) || "?"}${left === null ? "" : left >= 0 ? ` · ${left} days left` : ` · ended ${-left} days ago`}. Tag: #sprint/${slug}`, `${progress.done} of ${progress.total} done`);
+    this.addMeter(section, progress.ratio, "Sprint progress");
+    const status = String(data.status || "planned").toLowerCase();
+    const controls = section.createDiv({ cls: "life-os-form-actions" });
+    if (status === "planned") this.addSmallButton(controls, "Start sprint", () => this.runWrite(() => this.writer.setFrontmatter(sprint.path, { status: "active" }), "Sprint started."), { icon: "play", primary: true });
+    if (status === "active") this.addSmallButton(controls, "Close sprint", () => this.runWrite(() => this.writer.setFrontmatter(sprint.path, { status: "closed" }), `Sprint closed with ${progress.open} open tasks. Move them by changing their #sprint tag.`), { icon: "flag" });
+    const project = this.data.fileByTitle(linkTarget(data.project), this.data.projects());
+    if (project) this.addSmallButton(controls, linkTarget(data.project), () => this.openProject(project.path), { icon: "folder-kanban" });
+    this.addSmallButton(controls, "Open note", () => this.openPath(sprint.path), { icon: "file-text" });
+
+    const add = section.createDiv({ cls: "life-os-form-row" });
+    const text = add.createEl("input", { cls: "life-os-input is-grow", attr: { type: "text", placeholder: project ? `Add a task to this sprint in ${this.getFileTitle(project)}` : "Add a task to this sprint", "aria-label": "New sprint task" } });
+    const submit = async () => {
+      const line = buildTaskLine({ text: text.value, project: project ? slugify(this.getFileTitle(project)) : "", sprint: slug, created: this.today() });
+      if (!line) return;
+      const target = project ? project.path : "08 Tasks/Tasks.md";
+      const heading = project ? this.settingsSnapshot().taskHeading || "## Tasks" : "## Inbox";
+      const ok = await this.runWrite(() => this.writer.appendUnderHeading(target, heading, line, project ? ["## Tasks", "## Inline tasks"] : []), "Task added to the sprint.");
+      if (ok) text.value = "";
+    };
+    this.addSmallButton(add, "Add", submit, { icon: "plus", primary: true });
+    this.registerDomEvent(text, "keydown", (event) => { if (event.key === "Enter") { event.preventDefault?.(); void submit(); } });
+
+    const board = section.createDiv({ cls: "life-os-board" });
+    for (const [id, label, items] of [
+      ["todo", "To do", tasks.filter((task) => !task.closed && !task.inProgress)],
+      ["doing", "In progress", tasks.filter((task) => task.inProgress)],
+      ["done", "Done", tasks.filter((task) => task.closed)],
+    ]) {
+      const column = board.createDiv({ cls: `life-os-board-column is-${id}` });
+      const heading = column.createDiv({ cls: "life-os-board-heading" });
+      heading.createEl("h3", { text: label });
+      this.addChip(heading, String(items.length));
+      if (!items.length) column.createDiv({ cls: "life-os-live-empty", text: id === "doing" ? "Start a task to move it here." : "Empty" });
+      for (const task of items) {
+        const card = column.createDiv({ cls: `life-os-board-card${task.blocked && !task.closed ? " is-blocked" : ""}` });
+        const open = card.createEl("button", { cls: "life-os-task-open" });
+        open.type = "button";
+        open.createEl("strong", { text: task.display });
+        open.createSpan({ text: this.getTaskContext(task) });
+        this.registerDomEvent(open, "click", () => void this.openPath(task.path, task.line));
+        const meta = card.createDiv({ cls: "life-os-task-meta" });
+        if (task.blocked && !task.closed) meta.createSpan({ cls: "life-os-task-badge is-blocked", text: "Blocked" });
+        if (task.high && !task.closed) meta.createSpan({ cls: "life-os-task-priority", text: "High" });
+        const moves = id === "todo" ? [["/", "Start", "play"], ["x", "Done", "check"]] : id === "doing" ? [[" ", "Back", "undo-2"], ["x", "Done", "check"]] : [[" ", "Reopen", "rotate-ccw"]];
+        for (const [symbol, text, icon] of moves) {
+          this.addSmallButton(meta, text, () => this.runWrite(() => this.writer.setTaskStatus(task, symbol), `${text}: ${task.display}`), { icon, primary: symbol === "x" });
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Meetings
+
+  renderMeetingsScreen(parent) {
+    const section = parent.createEl("section", { cls: "life-os-meetings-live" });
+    const meetings = this.data.meetings().sort((a, b) => String(this.getFrontmatter(b).date || "").localeCompare(String(this.getFrontmatter(a).date || "")));
+    const openActions = this.allTasks().filter((task) => !task.closed && task.path.startsWith(`${this.data.folders().meetings}/`));
+    this.renderLiveHeading(section, "Meeting minutes", "Write minutes here; decisions and action items stay linked to their project.", `${meetings.length} meetings · ${openActions.length} open actions`);
+    const toolbar = section.createDiv({ cls: "life-os-toolbar" });
+    this.addSmallButton(toolbar, this.composerOpen ? "Hide composer" : "New meeting minutes", () => { this.composerOpen = !this.composerOpen; this.render(); }, { icon: this.composerOpen ? "x" : "plus", primary: !this.composerOpen });
+    if (this.composerOpen) this.renderMeetingComposer(section, { key: "global" });
+    if (openActions.length) {
+      const box = section.createDiv({ cls: "life-os-panel-card" });
+      box.createEl("h3", { text: "Open action items" });
+      this.renderTaskList(box, openActions.slice(0, this.itemLimit * 2), { context: true, dueControl: true });
+    }
+    if (!meetings.length) {
+      section.createDiv({ cls: "life-os-live-empty", text: "No meeting notes yet." });
+      return;
+    }
+    const today = this.today();
+    for (const [label, items] of [["Upcoming", meetings.filter((file) => isoDate(this.getFrontmatter(file).date) > today).reverse()], ["Today", meetings.filter((file) => isoDate(this.getFrontmatter(file).date) === today)], ["Recent", meetings.filter((file) => { const date = isoDate(this.getFrontmatter(file).date); return !date || date < today; })]]) {
+      if (!items.length) continue;
+      section.createEl("h3", { cls: "life-os-subheading", text: label });
+      const timeline = section.createDiv({ cls: "life-os-timeline" });
+      for (const meeting of items.slice(0, label === "Recent" ? this.itemLimit * 2 : undefined)) this.renderMeetingCard(timeline, meeting);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Docs: decisions, tech notes, postmortems
+
+  renderDocsScreen(parent) {
+    const section = parent.createEl("section", { cls: "life-os-docs-live" });
+    const docs = this.data.docs();
+    const type = this.docType || "all";
+    const status = this.docStatus || "all";
+    const project = this.docProject || "all";
+    this.renderLiveHeading(section, "Decisions and docs", "Architecture decision records, tech notes, and postmortems. Status changes write to the note's properties.", `${docs.length} docs`);
+    const toolbar = section.createDiv({ cls: "life-os-toolbar" });
+    this.addSelect(toolbar, "Doc type", [{ value: "all", label: "All types" }, { value: "adr", label: "Decisions (ADR)" }, { value: "tech-note", label: "Tech notes" }, { value: "postmortem", label: "Postmortems" }], type, (value) => { this.docType = value; this.render(); });
+    const statuses = [...new Set(docs.map((file) => String(this.getFrontmatter(file).status || "draft")))].sort();
+    this.addSelect(toolbar, "Doc status", [{ value: "all", label: "All statuses" }, ...statuses], status, (value) => { this.docStatus = value; this.render(); });
+    const projects = [...new Set(docs.map((file) => linkTarget(this.getFrontmatter(file).project)).filter(Boolean))].sort();
+    this.addSelect(toolbar, "Doc project", [{ value: "all", label: "All projects" }, ...projects], project, (value) => { this.docProject = value; this.render(); });
+    this.addSmallButton(toolbar, "New ADR", () => this.openForm("adr"), { icon: "milestone", primary: true });
+    this.addSmallButton(toolbar, "Tech note", () => this.openForm("tech-note"), { icon: "file-code-2" });
+    this.addSmallButton(toolbar, "Postmortem", () => this.openForm("postmortem"), { icon: "siren" });
+    const visible = docs.filter((file) => {
+      const data = this.getFrontmatter(file);
+      return (type === "all" || data.type === type) && (status === "all" || String(data.status || "draft") === status) && (project === "all" || linkTarget(data.project) === project);
+    });
+    if (!visible.length) { section.createDiv({ cls: "life-os-live-empty", text: docs.length ? "No docs match these filters." : "No decision records or tech notes yet." }); }
+    else this.renderDocTable(section, visible);
+    this.addSmallButton(section, "Article board", () => this.openPath("06 Writing/Articles/Article Board.md"), { icon: "newspaper" });
+  }
+
+  renderDocTable(parent, docs) {
+    const table = parent.createDiv({ cls: "life-os-doc-table", attr: { role: "table" } });
+    const header = table.createDiv({ cls: "life-os-doc-row is-header", attr: { role: "row" } });
+    for (const label of ["Doc", "Type", "Status", "Project", "Date"]) header.createSpan({ text: label, attr: { role: "columnheader" } });
+    const sorted = [...docs].sort((a, b) => {
+      const date = (file) => isoDate(this.getFrontmatter(file).date || this.getFrontmatter(file).created || this.getFrontmatter(file).incident_date);
+      return date(b).localeCompare(date(a)) || this.getFileTitle(a).localeCompare(this.getFileTitle(b));
+    });
+    for (const file of sorted) {
+      const data = this.getFrontmatter(file);
+      const row = table.createDiv({ cls: "life-os-doc-row", attr: { role: "row" } });
+      const open = row.createEl("button", { cls: "life-os-doc-title", text: this.getFileTitle(file), attr: { role: "cell" } });
+      open.type = "button";
+      this.registerDomEvent(open, "click", () => void this.openPath(file.path));
+      row.createSpan({ cls: "life-os-chip", text: { adr: "ADR", "tech-note": "Tech note", postmortem: "Postmortem" }[data.type] || String(data.type), attr: { role: "cell" } });
+      const statuses = data.type === "adr" ? ADR_STATUSES : data.type === "postmortem" ? ["draft", "in-review", "published"] : ["draft", "published", "archived"];
+      const current = String(data.status || statuses[0]);
+      this.addSelect(row, `Status of ${this.getFileTitle(file)}`, statuses.includes(current) ? statuses : [current, ...statuses], current, (value) => this.runWrite(() => this.writer.setFrontmatter(file.path, { status: value }), `Status set to ${value}.`), `life-os-select is-${slugify(current)}`);
+      row.createSpan({ text: linkTarget(data.project) || "None", attr: { role: "cell" } });
+      row.createSpan({ text: isoDate(data.date || data.created || data.incident_date) || "", attr: { role: "cell" } });
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Inbox: Obsidian Web Clipper triage
+
+  inboxClips() {
+    return this.data.clippings().filter((file) => {
+      const status = String(this.getFrontmatter(file).status || "inbox").toLowerCase();
+      return status === "inbox" || status === "new" || status === "unread";
+    }).sort((a, b) => String(this.getFrontmatter(b).clipped || "").localeCompare(String(this.getFrontmatter(a).clipped || "")));
+  }
+
+  renderInboxScreen(parent) {
+    const section = parent.createEl("section", { cls: "life-os-inbox-live" });
+    const clips = this.inboxClips();
+    const all = this.data.clippings();
+    this.renderLiveHeading(section, "Clipped inbox", `Pages saved by Obsidian Web Clipper into ${this.data.folders().clippings}. Assign each one to a project, keep it as a tech note, or archive it.`, `${clips.length} waiting · ${all.length - clips.length} triaged`);
+    if (!clips.length) section.createDiv({ cls: "life-os-live-empty", text: "Inbox zero. New clips with status: inbox appear here." });
+    else this.renderClipList(section, clips);
+    this.renderClipperSetup(parent);
+  }
+
+  renderClipList(parent, clips) {
+    const list = parent.createDiv({ cls: "life-os-clip-list" });
+    const projects = projectOptions(this.data, { blank: "Assign project" });
+    for (const clip of clips) {
+      const data = this.getFrontmatter(clip);
+      const card = list.createDiv({ cls: "life-os-clip-card" });
+      const head = card.createDiv({ cls: "life-os-clip-head" });
+      const open = head.createEl("button", { cls: "life-os-doc-title", text: String(data.title || this.getFileTitle(clip)) });
+      open.type = "button";
+      this.registerDomEvent(open, "click", () => void this.openPath(clip.path));
+      const meta = card.createDiv({ cls: "life-os-clip-meta" });
+      const site = String(data.site || "").trim() || (String(data.source || "").match(/^https?:\/\/([^/]+)/i)?.[1] ?? "");
+      if (site) this.addChip(meta, site);
+      if (isoDate(data.clipped)) meta.createSpan({ text: `Clipped ${isoDate(data.clipped)}` });
+      this.externalLink(meta, data.source, "Source");
+      const tags = (Array.isArray(data.tags) ? data.tags : []).filter((tag) => !["clipping", "example"].includes(String(tag)));
+      for (const tag of tags.slice(0, 4)) this.addChip(meta, `#${tag}`);
+      const actions = card.createDiv({ cls: "life-os-form-actions" });
+      this.addSelect(actions, `Project for ${this.getFileTitle(clip)}`, projects, linkTarget(data.project), (value) => this.runWrite(() => this.writer.setFrontmatter(clip.path, { project: value ? wikiLink(value) : "" }), value ? `Assigned to ${value}.` : "Project cleared."));
+      const status = String(data.status || "inbox").toLowerCase();
+      if (status === "inbox" || status === "new" || status === "unread") {
+        this.addSmallButton(actions, "Read", () => this.runWrite(() => this.writer.setFrontmatter(clip.path, { status: "read" }), "Marked as read."), { icon: "check" });
+        this.addSmallButton(actions, "Archive", () => this.runWrite(() => this.writer.setFrontmatter(clip.path, { status: "archived" }), "Archived."), { icon: "archive" });
+      }
+      this.addSmallButton(actions, "Keep as tech note", () => this.promoteClip(clip), { icon: "file-code-2" });
+    }
+  }
+
+  async promoteClip(clip) {
+    const folder = `${this.data.folders().docs}/Tech Notes`;
+    let target = null;
+    const ok = await this.runWrite(async () => {
+      await this.writer.setFrontmatter(clip.path, { type: "tech-note", status: "draft" });
+      target = await this.writer.moveFile(clip.path, folder);
+    }, "Saved as a tech note.");
+    if (ok && target) void this.openPath(target);
+  }
+
+  renderClipperSetup(parent) {
+    const section = parent.createEl("section", { cls: "life-os-clipper-setup" });
+    const files = (this.app.vault.getFiles?.() || []).filter((file) => file.path.startsWith("Meta/Web Clipper/") && file.path.endsWith(".json"));
+    const folder = this.data.folders().clippings;
+    this.renderLiveHeading(section, "Web Clipper setup", "Install Obsidian Web Clipper in your browser, then import these templates in its settings (Templates, Import). Each one saves into the clippings folder with status: inbox.", this.app.vault.getAbstractFileByPath(folder) ? "Folder ready" : "Folder missing");
+    if (!files.length) {
+      section.createDiv({ cls: "life-os-live-empty", text: "No templates found in Meta/Web Clipper/." });
+      return;
+    }
+    const grid = section.createDiv({ cls: "life-os-clipper-grid" });
+    for (const file of files) {
+      const card = grid.createDiv({ cls: "life-os-panel-card" });
+      card.createEl("strong", { text: (file.basename || file.path.split("/").pop()).replace(/\.json$/, "") });
+      this.addSmallButton(card, "Copy JSON", async () => {
+        try {
+          await globalThis.navigator?.clipboard?.writeText(await this.app.vault.read(file));
+          new Notice("Template copied. Paste it in Web Clipper settings, Templates, Import.");
+        } catch (error) {
+          new Notice("Could not copy the template.");
+        }
+      }, { icon: "copy" });
+    }
+    this.addSmallButton(section, "Web Clipper guide", () => this.openPath("Guide/24 Web Clipper.md"), { icon: "book-open" });
   }
 
   pluginLoaded(id) {
@@ -2645,41 +4304,96 @@ class LifeOSBrainView extends ItemView {
   async onClose() { if (this.renderer) this.removeChild(this.renderer); this.renderer = null; }
 }
 
+class LifeOSSettingTab extends PluginSettingTab {
+  constructor(app, plugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
+
+  display() {
+    const { containerEl } = this;
+    containerEl.empty();
+    containerEl.createEl("h2", { text: "Dev OS" });
+    containerEl.createEl("p", { text: "Preferences for the Dev OS view. Folders and daily questions live in Meta/Compass Config.md." });
+    const settings = this.plugin.settings;
+    const save = async () => {
+      await this.plugin.saveSettings();
+      this.plugin.refreshViews();
+    };
+    new Setting(containerEl)
+      .setName("Show personal modules")
+      .setDesc("Adds Plan and Review (journal, daily questions, habits, retreats) to the rail and Today.")
+      .addToggle((toggle) => toggle.setValue(Boolean(settings.showPersonal)).onChange(async (value) => { settings.showPersonal = value; await save(); }));
+    new Setting(containerEl)
+      .setName("Show sample data")
+      .setDesc("Includes notes tagged example in lists, boards, and counts.")
+      .addToggle((toggle) => toggle.setValue(Boolean(settings.includeSamples)).onChange(async (value) => { settings.includeSamples = value; await save(); }));
+    new Setting(containerEl)
+      .setName("Default project")
+      .setDesc("Preselected in Quick add and Capture. Use the project note's title.")
+      .addText((text) => text.setPlaceholder("Billing API").setValue(settings.defaultProject || "").onChange(async (value) => { settings.defaultProject = value.trim(); await save(); }));
+    new Setting(containerEl)
+      .setName("Project task heading")
+      .setDesc("Tasks added from a project page go under this heading. Missing headings are created at the end of the note.")
+      .addText((text) => text.setPlaceholder("## Tasks").setValue(settings.taskHeading || "## Tasks").onChange(async (value) => {
+        const heading = value.trim();
+        settings.taskHeading = /^#{1,6} \S/.test(heading) ? heading : "## Tasks";
+        await save();
+      }));
+    new Setting(containerEl)
+      .setName("Discard meeting drafts")
+      .setDesc(`${Object.keys(settings.meetingDrafts || {}).length} unsaved meeting minutes drafts are kept in plugin data.`)
+      .addButton((button) => button.setButtonText("Discard").onClick(async () => { settings.meetingDrafts = {}; await save(); this.display(); }));
+  }
+}
+
 module.exports = class LifeOSPlugin extends Plugin {
   async onload() {
+    await this.loadSettings();
+    this.writer = new LifeOSWriter(this.app);
+    this.data = new LifeOSData(this.app, () => ({ ...DEFAULT_SETTINGS, ...this.settings }));
     this.registerView("life-os-brain", (leaf) => new LifeOSBrainView(leaf));
     this.registerView(
       VIEW_TYPE,
       (leaf) => new LifeOSHomeView(leaf, this)
     );
+    if (typeof this.addSettingTab === "function") this.addSettingTab(new LifeOSSettingTab(this.app, this));
 
-    this.addRibbonIcon("compass", "Open Life OS", () => {
+    this.addRibbonIcon("compass", "Open Dev OS", () => {
       void this.activateView();
     });
 
     this.addCommand({
       id: "open-home",
-      name: "Open Life OS home",
+      name: "Open Dev OS home",
       callback: () => this.activateView("home"),
     });
 
     this.addCommand({
       id: "open-capture",
-      name: "Open Life OS capture",
+      name: "Open Dev OS capture",
       callback: () => this.openCapture(),
     });
 
     this.addCommand({
       id: "open-configuration",
-      name: "Open Life OS configuration",
+      name: "Open Dev OS configuration",
       callback: () => this.app.workspace.openLinkText("Meta/Compass Config", "", true),
     });
 
     for (const item of NAV_ITEMS.filter((item) => item.id !== "home")) {
       this.addCommand({
         id: `open-${item.id}`,
-        name: `Open Life OS ${item.label}`,
+        name: `Open Dev OS ${item.label}`,
         callback: () => this.activateView(item.id),
+      });
+    }
+
+    for (const action of CREATE_ACTIONS) {
+      this.addCommand({
+        id: `new-${action.kind}`,
+        name: `New ${action.label.toLowerCase()}`,
+        callback: () => openCreateForm(this, action.kind, {}, (file) => this.afterCreate(file)),
       });
     }
 
@@ -2688,7 +4402,65 @@ module.exports = class LifeOSPlugin extends Plugin {
     });
   }
 
-  async activateView(screen = "home") {
+  async loadSettings() {
+    const stored = typeof this.loadData === "function" ? await this.loadData() : null;
+    this.settings = { ...DEFAULT_SETTINGS, projectTabs: {}, meetingDrafts: {}, ...(stored || {}) };
+  }
+
+  async saveSettings() {
+    if (typeof this.saveData === "function") await this.saveData(this.settings);
+  }
+
+  homeViews() {
+    return this.app.workspace.getLeavesOfType(VIEW_TYPE)
+      .map((leaf) => leaf.view)
+      .filter((view) => view instanceof LifeOSHomeView);
+  }
+
+  refreshViews() {
+    for (const view of this.homeViews()) {
+      view.includeExamples = Boolean(this.settings.includeSamples);
+      void view.refreshLiveData();
+    }
+  }
+
+  async afterCreate(file) {
+    for (const view of this.homeViews()) await view.refreshLiveData();
+    if (file instanceof TFile && String(this.data.frontmatter(file).type) === "project") {
+      await this.activateView("project", { activeProjectPath: file.path });
+    }
+  }
+
+  // Adds one task line to the inbox or a project note. Returns true on success.
+  async addTask({ text, projectPath = "", due = "", high = false }, view = null) {
+    const project = projectPath ? this.app.vault.getAbstractFileByPath(projectPath) : null;
+    const slug = project instanceof TFile ? slugify(project.basename || this.data.title(project)) : "";
+    const line = buildTaskLine({ text, project: slug, due, high, created: moment().format("YYYY-MM-DD") });
+    if (!line) {
+      new Notice("Write the task first.");
+      return false;
+    }
+    try {
+      if (project instanceof TFile) {
+        const heading = this.settings?.taskHeading || "## Tasks";
+        await this.writer.appendUnderHeading(project.path, heading, line, ["## Tasks", "## Inline tasks"]);
+      } else {
+        await this.writer.appendUnderHeading("08 Tasks/Tasks.md", "## Inbox", line);
+      }
+      new Notice(project instanceof TFile ? `Task added to ${this.data.title(project)}.` : "Task added to the inbox.");
+    } catch (error) {
+      new Notice(error?.message || "Dev OS could not add the task.");
+      return false;
+    }
+    const views = view ? [view] : this.homeViews();
+    for (const item of views) {
+      item.forceRender = true;
+      try { await item.refreshLiveData(); } finally { item.forceRender = false; }
+    }
+    return true;
+  }
+
+  async activateView(screen = "home", state = {}) {
     let leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE)[0];
 
     if (!leaf) {
@@ -2700,6 +4472,7 @@ module.exports = class LifeOSPlugin extends Plugin {
     }
 
     if (leaf.view instanceof LifeOSHomeView) {
+      Object.assign(leaf.view, state);
       leaf.view.activeScreen = screen;
       leaf.view.render();
     }
