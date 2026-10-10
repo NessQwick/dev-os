@@ -11,7 +11,7 @@ tags:
   - project
   - example
 ---
-Tag tasks anywhere in the vault with `#project/example-project-compass-vault` and they roll up here.
+Tag tasks anywhere in the vault with `#project/example-project-dev-os-setup` and they roll up here.
 
 ## Outcome
 What "done" looks like:
@@ -20,14 +20,14 @@ What "done" looks like:
 ## Next actions
 ```tasks
 not done
-tags include #project/example-project-compass-vault
+tags include #project/example-project-dev-os-setup
 sort by due
 ```
 
 ## Inline tasks
-- [ ] Fill in Life Theme and Core Values #project/example-project-compass-vault
-- [ ] Set birthdate in Compass Config #project/example-project-compass-vault
-- [ ] Ask Alex how she structures her weekly review #discuss #p/example-person-alex-rivera #project/example-project-compass-vault
+- [ ] Fill in Life Theme and Core Values #project/example-project-dev-os-setup
+- [ ] Set birthdate in Dev OS Config #project/example-project-dev-os-setup
+- [ ] Ask Alex how she structures her weekly review #discuss #p/example-person-alex-rivera #project/example-project-dev-os-setup
 
 ## Notes
 - Built from the Guide folder. Layer one workflow at a time.
@@ -38,7 +38,7 @@ sort by due
 ## Done
 ```tasks
 done
-tags include #project/example-project-compass-vault
+tags include #project/example-project-dev-os-setup
 sort by done reverse
 limit 20
 ```

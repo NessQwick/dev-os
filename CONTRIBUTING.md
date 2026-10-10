@@ -1,4 +1,4 @@
-# Contributing to Compass
+# Contributing to Dev OS
 
 ## How the live vault and the template relate
 
@@ -6,7 +6,7 @@ The maintainer runs a live vault with real notes. This repository holds the buil
 
 ```bash
 python3 scripts/build_template.py --out build --zip
-python3 scripts/verify_template.py build/Compass
+python3 scripts/verify_template.py build/DevOS
 ```
 
 ## Rules

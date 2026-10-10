@@ -1,8 +1,8 @@
-// Compass Daily Questions widget: lines + averages of every dq_* number property.
+// Dev OS Daily Questions widget: lines + averages of every dq_* number property.
 // Usage:
 //   await dv.view("Meta/views/dailyquestions", { days: 30 })              interactive (dropdown + toggles)
 //   await dv.view("Meta/views/dailyquestions", { from: "2026-07-01", to: "2026-09-30" })  fixed range
-const cfg = dv.page("Meta/Compass Config") || {};
+const cfg = dv.page("Meta/Dev OS Config") || {};
 const FOLDER = cfg.daily_folder || "01 Journal/Daily";
 const PREFIX = cfg.dq_prefix || "dq_";
 const DEFAULT_RANGE = (input && input.days) || 30;

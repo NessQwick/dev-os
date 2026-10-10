@@ -4,7 +4,7 @@ These definitions describe the intended application contract. The implementation
 
 ## Canonical sources
 
-Markdown notes and their properties are canonical. Life OS does not maintain a second task or journal database. Existing Compass Config folder and property settings must be resolved consistently across Today, Plan, Review, and Home. A missing configuration is unavailable data, not a zero score or a new set of invented questions.
+Markdown notes and their properties are canonical. Life OS does not maintain a second task or journal database. Existing Dev OS Config folder and property settings must be resolved consistently across Today, Plan, Review, and Home. A missing configuration is unavailable data, not a zero score or a new set of invented questions.
 
 ## Effort and check-in coverage
 

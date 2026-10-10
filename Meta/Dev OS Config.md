@@ -1,5 +1,5 @@
 ---
-birthdate:
+birthdate: 
 life_expectancy: 80
 daily_folder: 01 Journal/Daily
 weekly_folder: 01 Journal/Weekly
@@ -42,9 +42,9 @@ wheel_areas:
   - wheel_fun
   - wheel_meaning
 ---
-# Compass Config
+# Dev OS Config
 
-The single place the system reads its settings from. Every dashboard widget in `Meta/views/` starts with `dv.page("Meta/Compass Config")`, and the daily, retreat, and questions templates read the lists below when a new note is created. Change things here; nothing else needs to move.
+The single place the system reads its settings from. Every dashboard widget in `Meta/views/` starts with `dv.page("Meta/Dev OS Config")`, and the daily, retreat, and questions templates read the lists below when a new note is created. Change things here; nothing else needs to move.
 
 ## Dev OS folders
 | Property | Used by | Default |

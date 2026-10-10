@@ -81,6 +81,17 @@ const DEFAULT_SETTINGS = Object.freeze({
   meetingDrafts: {},
 });
 
+// The config was "Meta/Compass Config.md" before Dev OS 1.1; older vaults still work.
+const CONFIG_PATHS = ["Meta/Dev OS Config.md", "Meta/Compass Config.md"];
+
+function configFile(app) {
+  for (const path of CONFIG_PATHS) {
+    const file = app.vault.getAbstractFileByPath(path);
+    if (file instanceof TFile) return file;
+  }
+  return null;
+}
+
 const TASK_LINE = /^(\s*(?:[-+*]|\d+[.)])\s+\[)([^\]])(\]\s*)(.*)$/u;
 
 function slugify(title) {
@@ -687,8 +698,8 @@ const MODULES = {
       {
         icon: "compass",
         label: "Whole-life review",
-        description: "Open the Compass dashboard and life wheel.",
-        path: "00 Dashboards/Compass Dashboard.md",
+        description: "Open the personal dashboard and life wheel.",
+        path: "00 Dashboards/Personal Dashboard.md",
       },
     ],
   },
@@ -938,7 +949,7 @@ class LifeOSData {
   }
 
   config() {
-    return this.frontmatter(this.app.vault.getAbstractFileByPath("Meta/Compass Config.md"));
+    return this.frontmatter(configFile(this.app));
   }
 
   folders(config = this.config()) {
@@ -1547,7 +1558,7 @@ class LifeOSHomeView extends ItemView {
       this.runCommand("global-search:open", "Search");
     });
     this.addTopbarButton(actions, "settings-2", "Configure", () => {
-      void this.openPath("Meta/Compass Config.md");
+      void this.openPath(configFile(this.app)?.path || CONFIG_PATHS[0]);
     });
     const display = actions.createEl("details", { cls: "life-os-display-options" });
     display.createEl("summary", { text: "View" });
@@ -2242,9 +2253,7 @@ class LifeOSHomeView extends ItemView {
   }
 
   getConfigFrontmatter() {
-    return this.getFrontmatter(
-      this.app.vault.getAbstractFileByPath("Meta/Compass Config.md")
-    );
+    return this.getFrontmatter(configFile(this.app));
   }
 
   getConfiguredFolders(config = this.getConfigFrontmatter()) {
@@ -4314,7 +4323,7 @@ class LifeOSSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     containerEl.createEl("h2", { text: "Dev OS" });
-    containerEl.createEl("p", { text: "Preferences for the Dev OS view. Folders and daily questions live in Meta/Compass Config.md." });
+    containerEl.createEl("p", { text: "Preferences for the Dev OS view. Folders and daily questions live in Meta/Dev OS Config.md." });
     const settings = this.plugin.settings;
     const save = async () => {
       await this.plugin.saveSettings();
@@ -4378,7 +4387,7 @@ module.exports = class LifeOSPlugin extends Plugin {
     this.addCommand({
       id: "open-configuration",
       name: "Open Dev OS configuration",
-      callback: () => this.app.workspace.openLinkText("Meta/Compass Config", "", true),
+      callback: () => this.app.workspace.openLinkText((configFile(this.app)?.path || CONFIG_PATHS[0]).replace(/\.md$/, ""), "", true),
     });
 
     for (const item of NAV_ITEMS.filter((item) => item.id !== "home")) {

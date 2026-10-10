@@ -79,7 +79,7 @@ Choose Brain in the rail. Notes sit in five colored regions inside a rotatable b
 | Brain renderer | The link graph |
 | Settings tab | The preferences listed under Settings |
 
-`styles.css` owns the visual system (accent `--life-os-accent`, container queries for narrow panes). Folders come from `Meta/Compass Config.md` (`projects_folder`, `sprints_folder`, `meetings_folder`, `decisions_folder`, `docs_folder`, `clippings_folder`).
+`styles.css` owns the visual system (accent `--life-os-accent`, container queries for narrow panes). Folders come from `Meta/Dev OS Config.md` (`projects_folder`, `sprints_folder`, `meetings_folder`, `decisions_folder`, `docs_folder`, `clippings_folder`).
 
 Dev OS composes the existing tools rather than replacing them:
 

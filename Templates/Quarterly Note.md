@@ -5,7 +5,7 @@ focus_area:
 tags:
   - quarterly
 ---
-« [[01 Journal/Quarterly/<% moment(tp.file.title, "YYYY-[Q]Q").subtract(1, "quarter").format("YYYY-[Q]Q") %>|Last quarter]] · [[Compass Dashboard]] · [[01 Journal/Quarterly/<% moment(tp.file.title, "YYYY-[Q]Q").add(1, "quarter").format("YYYY-[Q]Q") %>|Next quarter]] »
+« [[01 Journal/Quarterly/<% moment(tp.file.title, "YYYY-[Q]Q").subtract(1, "quarter").format("YYYY-[Q]Q") %>|Last quarter]] · [[Personal Dashboard]] · [[01 Journal/Quarterly/<% moment(tp.file.title, "YYYY-[Q]Q").add(1, "quarter").format("YYYY-[Q]Q") %>|Next quarter]] »
 
 <% moment(tp.file.title, "YYYY-[Q]Q").startOf("quarter").format("MMM D") %> to <% moment(tp.file.title, "YYYY-[Q]Q").endOf("quarter").format("MMM D, YYYY") %> · Retreat: [[02 Retreats/<% tp.file.title %> Personal Retreat]]
 

@@ -53,7 +53,7 @@ Quoted or closely paraphrased from Mike Schmitz, with timestamps.
 - Separate folders per type of document, each with its own template and metadata. These are "task notes" rather than inline tasks.
 - Export markdown at the end, to wherever the piece is published.
 
-## 9. The Compass dashboard (18:36 to 20:46)
+## 9. The Personal dashboard (18:36 to 20:46)
 - Built with DataviewJS. Wheel of life pulled from this quarter's retreat by date and naming convention; combined daily questions widget with toggles and a time-frame dropdown; habits widget with current streak, best streak, longest break, completion %, total, and recent days; life theme; memento mori; quick links to capture and to the planning notes.
 - "Because everything I do is dynamically generated, I don't have to touch a single line of code."
 

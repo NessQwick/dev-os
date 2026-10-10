@@ -1,4 +1,4 @@
-/* Compass callouts and dashboard styling */
+/* Dev OS callouts and dashboard styling */
 
 /* Daily reading callout (Mike's daily note has a custom "Bible reading" callout; "bible" kept as an alias) */
 .callout[data-callout="bible"] {

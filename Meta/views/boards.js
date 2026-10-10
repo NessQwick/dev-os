@@ -1,9 +1,9 @@
-// Compass Boards widget: every Kanban board in the vault with card counts per lane.
+// Dev OS Boards widget: every Kanban board in the vault with card counts per lane.
 // Usage:
 //   await dv.view("Meta/views/boards")                       all boards, all lanes
 //   await dv.view("Meta/views/boards", { compact: true })    one line per board: open cards + the lane that needs attention
 //   await dv.view("Meta/views/boards", { folder: "06 Writing" })
-const cfg = dv.page("Meta/Compass Config") || {};
+const cfg = dv.page("Meta/Dev OS Config") || {};
 const FOLDER = input && input.folder ? input.folder : null;
 const COMPACT = !!(input && input.compact);
 const DONE_LANES = (cfg.board_done_lanes || "Done,Published,Archive").split(",").map(s => s.trim().toLowerCase());

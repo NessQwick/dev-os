@@ -24,5 +24,5 @@ await dv.view("Meta/views/boards", { folder: "06 Writing" });
 
 ## Adding a board
 1. Create a note anywhere, open the command palette, run **Kanban: Create new board** (or add `kanban-plugin: board` to the properties).
-2. Name the lanes. Put finished-state lanes last and call them `Done` or `Published` so the widget counts them as done (edit `board_done_lanes` in [[Compass Config]] to change that list).
+2. Name the lanes. Put finished-state lanes last and call them `Done` or `Published` so the widget counts them as done (edit `board_done_lanes` in [[Dev OS Config]] to change that list).
 3. Optional: in the board's settings set "New note folder" and "Note template" so cards turned into notes use the right template.

@@ -38,7 +38,7 @@ All ten community plugins and the first-party Dev OS plugin are **already instal
 4. Periodic Notes: confirm daily `YYYY-MM-DD` → `01 Journal/Daily`, weekly `gggg-[W]ww` → `01 Journal/Weekly`, quarterly `YYYY-[Q]Q` → `01 Journal/Quarterly`, each with its template. The core Daily Notes plugin is off. Note creation goes through the QuickAdd template commands (hotkeys below), which run Templater on the new note; Periodic Notes and the Calendar are used to navigate. If a note opened from a link is empty or shows `<%` code, press `Alt+E` (Templater: Insert template) and pick the template.
 5. QuickAdd: confirm the twenty choices show and each has the lightning-bolt "command" toggle on. Eight capture into existing notes, four open periodic notes, and eight create Project, Person, creative, book, or study notes from their canonical templates.
 6. Dataview: **Enable JavaScript queries** is on (pre-set).
-7. Open `00 Dashboards/Compass Dashboard.md`. If a widget says "No … found", that is the empty-state message, not an error.
+7. Open `00 Dashboards/Personal Dashboard.md`. If a widget says "No … found", that is the empty-state message, not an error.
 
 ## Hotkeys (pre-seeded in `.obsidian/hotkeys.json`)
 | Keys | Action |

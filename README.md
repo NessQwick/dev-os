@@ -1,5 +1,5 @@
-<p align="center"><img src="Meta/attachments/cover.png" alt="Compass" width="100%"></p>
-<!-- Fallback if the PNG is missing: <p align="center"><img src="Meta/attachments/cover.svg" alt="Compass" width="100%"></p> -->
+<p align="center"><img src="Meta/attachments/cover.png" alt="Dev OS" width="100%"></p>
+<!-- Fallback if the PNG is missing: <p align="center"><img src="Meta/attachments/cover.svg" alt="Dev OS" width="100%"></p> -->
 
 # Dev OS
 
@@ -41,7 +41,7 @@ All writes go through one class in the plugin, happen only on an explicit click,
 ## What is inside
 
 ```
-00 Dashboards/   Setup, Task, Projects, Sprint, Decisions, Boards, Assistant (+ personal: Compass, Habit Canvas, Daily Questions)
+00 Dashboards/   Setup, Task, Projects, Sprint, Decisions, Boards, Assistant (+ personal: Personal Dashboard, Habit Canvas, Daily Questions)
 01 Journal/      Daily notes (Standup, Work log, Journal), Weekly, Quarterly
 02 Retreats/     quarterly personal retreats (personal layer)
 03 Planning/     Life Theme, Core Values, Ideal Week (personal layer)
@@ -54,7 +54,7 @@ All writes go through one class in the plugin, happen only on an explicit click,
 10 Meetings/     meeting minutes: agenda, notes, decisions, action items
 Prompts/         18 prompts for your AI agent, one note per recurring job
 Templates/       Templater templates for every note type
-Meta/            Compass Config.md (folders, questions, habits), Web Clipper/ templates, views/*.js
+Meta/            Dev OS Config.md (folders, questions, habits), Web Clipper/ templates, views/*.js
 Guide/           how the system works, one page per workflow
 wiki/, inbox/    knowledge layer for the claude-obsidian plugin (optional)
 scripts/         template build and verify, reading plan generator
@@ -66,7 +66,7 @@ AGENTS.md        rules and folder map for any AI agent; CLAUDE.md and GEMINI.md 
 .mcp.example.json  how to point an agent at Obsidian's MCP server (Local REST API)
 ```
 
-`Meta/Compass Config.md` is the single config: folders for projects, sprints, meetings, decisions, docs, and clippings, plus the personal layer's questions, habits, and wheel areas.
+`Meta/Dev OS Config.md` is the single config: folders for projects, sprints, meetings, decisions, docs, and clippings, plus the personal layer's questions, habits, and wheel areas.
 
 ## Conventions
 

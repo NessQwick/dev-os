@@ -1,6 +1,6 @@
 "Did I do my best to ..." rated 1 to 10, from Marshall Goldsmith's *Triggers*. Effort, not results: a slow 3-mile run while sick can be a 10; cutting a planned 12-miler to 6 because you did not feel like it can be a 5.
 
-Questions are the `dq_*` number properties in the daily note. Edit the `questions` list in [[Compass Config]]; new daily notes and the end-of-day prompt follow it.
+Questions are the `dq_*` number properties in the daily note. Edit the `questions` list in [[Dev OS Config]]; new daily notes and the end-of-day prompt follow it.
 
 ## Trend
 ```dataviewjs
@@ -9,7 +9,7 @@ await dv.view("Meta/views/dailyquestions", { days: 90 });
 
 ## Days answered
 ```dataviewjs
-const cfg = dv.page("Meta/Compass Config") || {};
+const cfg = dv.page("Meta/Dev OS Config") || {};
 const folder = cfg.daily_folder || "01 Journal/Daily", pre = cfg.dq_prefix || "dq_";
 const pages = dv.pages(`"${folder}"`).where(p => /^\d{4}-\d{2}-\d{2}$/.test(p.file.name)).sort(p => p.file.name, "desc").array();
 const keys = [...new Set(pages.flatMap(p => Object.keys(p.file.frontmatter || {}).filter(k => k.startsWith(pre))))].sort();

@@ -1,8 +1,8 @@
-// Compass Habit Canvas widget.
+// Dev OS Habit Canvas widget.
 // Usage:  await dv.view("Meta/views/habits", { days: 14 })
 // Reads every daily note, finds checkbox properties starting with habit_prefix and
 // renders: last N days grid, current streak, best streak, longest break, completion %, total.
-const cfg = dv.page("Meta/Compass Config") || {};
+const cfg = dv.page("Meta/Dev OS Config") || {};
 const FOLDER = cfg.daily_folder || "01 Journal/Daily";
 const PREFIX = cfg.habit_prefix || "habit_";
 const DAYS = (input && input.days) || 14;

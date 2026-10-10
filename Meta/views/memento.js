@@ -1,9 +1,9 @@
-// Compass Memento Mori widget. Usage: await dv.view("Meta/views/memento")
-// Reads birthdate and life_expectancy from Meta/Compass Config.
-const cfg = dv.page("Meta/Compass Config") || {};
+// Dev OS Memento Mori widget. Usage: await dv.view("Meta/views/memento")
+// Reads birthdate and life_expectancy from Meta/Dev OS Config.
+const cfg = dv.page("Meta/Dev OS Config") || {};
 const root = dv.container.createEl("div", { cls: "lifeos-widget" });
 if (!cfg.birthdate) {
-  root.createEl("p", { text: "Set `birthdate` (YYYY-MM-DD) and `life_expectancy` in Meta/Compass Config to enable the Memento Mori widget." });
+  root.createEl("p", { text: "Set `birthdate` (YYYY-MM-DD) and `life_expectancy` in Meta/Dev OS Config to enable the Memento Mori widget." });
 } else {
   const birth = moment(String(cfg.birthdate).slice(0, 10));
   const years = Number(cfg.life_expectancy) || 80;

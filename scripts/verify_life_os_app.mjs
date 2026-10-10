@@ -373,7 +373,7 @@ try {
     ["06 Writing/Articles/Sample.md", { type: "article", tags: ["example"] }],
     ["07 Library/Task Example.md", { type: "book" }],
     [
-      "Meta/Compass Config.md",
+      "Meta/Dev OS Config.md",
       {
         questions: [{ key: "dq_goals", text: "Did I set clear goals?" }],
         habits: ["habit_journal"],
@@ -716,7 +716,7 @@ try {
   );
   pluginInstances.get("agent-client").settings.autoAllowPermissions = false;
 
-  metadata.set("Meta/Compass Config.md", {
+  metadata.set("Meta/Dev OS Config.md", {
     questions: [{ key: "dq_goals", text: "Did I set clear goals?" }],
     habits: ["habit_journal", "habit_exercise", "habit_reading"],
   });
@@ -760,7 +760,7 @@ try {
       coverage.recorded === 3,
     JSON.stringify(coverage)
   );
-  metadata.set("Meta/Compass Config.md", {
+  metadata.set("Meta/Dev OS Config.md", {
     daily_folder: "/Custom/Daily/",
     weekly_folder: "Custom/Weekly/",
     quarterly_folder: "Custom/Quarterly",
@@ -808,7 +808,7 @@ try {
     view.isDomainRecord(new TFile("Custom/Projects/Project.md")) &&
       !view.isDomainRecord(new TFile("04 Projects/Project.md"))
   );
-  metadata.set("Meta/Compass Config.md", {
+  metadata.set("Meta/Dev OS Config.md", {
     questions: [{ key: "dq_goals", text: "Did I set clear goals?" }],
     habits: ["habit_journal"],
   });

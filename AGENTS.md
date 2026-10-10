@@ -19,15 +19,15 @@ You have judgment, not authority. Analyse, summarise, draft, and recommend freel
 | `10 Meetings/` | meeting minutes (`type: meeting`, `kind`, `date`, `project`, `attendees`; `## Agenda`, `## Notes`, `## Decisions`, `## Action items`) | read; append under an existing heading when asked; never change past decisions |
 | `09 Reading/` | reading plan, chapter, verse, study, and topic notes (Bible is the worked example) | read |
 | `Prompts/` | the prompt library: one note per recurring job | read; follow the note's `## Prompt` section when asked to run it |
-| `Templates/` | Templater templates; property lists come from `Meta/Compass Config.md` | edit only when asked to change the system |
-| `Meta/Compass Config.md`, `Meta/views/*.js`, `Meta/Web Clipper/*.json` | the single config (folders, questions, habits, wheel areas), dashboard widgets, Web Clipper import templates | read; edit `Compass Config.md` only when the person asks to change their folders, questions, habits, areas, or birthdate |
+| `Templates/` | Templater templates; property lists come from `Meta/Dev OS Config.md` | edit only when asked to change the system |
+| `Meta/Dev OS Config.md`, `Meta/views/*.js`, `Meta/Web Clipper/*.json` | the single config (folders, questions, habits, wheel areas), dashboard widgets, Web Clipper import templates | read; edit `Dev OS Config.md` only when the person asks to change their folders, questions, habits, areas, or birthdate |
 | `Guide/` | how the system works and why | read first when unsure |
 | `wiki/`, `inbox/` | knowledge layer (claude-obsidian plugin, optional) | follow `wiki/routing-map.md`; writes go through the plugin's inspect, approve, apply transaction |
 | `scripts/` | maintainer tools (reading plan generator, template build) | read |
 | `.obsidian/` | app and plugin settings | never edit |
 
 ## Conventions
-- Daily questions are `dq_*` number properties (1 to 10, effort not results). Habits are `habit_*` checkbox properties. Wheel of life is `wheel_*` in retreat notes. The lists live in `Meta/Compass Config.md` (`questions`, `habits`, `wheel_areas`); dashboards discover them by prefix. Never rename or remove keys in existing notes.
+- Daily questions are `dq_*` number properties (1 to 10, effort not results). Habits are `habit_*` checkbox properties. Wheel of life is `wheel_*` in retreat notes. The lists live in `Meta/Dev OS Config.md` (`questions`, `habits`, `wheel_areas`); dashboards discover them by prefix. Never rename or remove keys in existing notes.
 - Tasks use the Obsidian Tasks emoji format: `- [ ] text 📅 YYYY-MM-DD` due, `⏳` scheduled, `🔁` recurring, `⏫` high priority, `➕` created, `✅` done; `- [/]` is in progress. Routing tags: `#project/<slug>`, `#sprint/<slug>`, `#p/<slug>` (owner or person), `#blocked`, `#discuss`. Slug = note title lowercased, non-alphanumerics to `-`; Project, Sprint, and Person notes print their tag at the top.
 - Sprints, meetings, ADRs, tech notes, postmortems, and clippings point at their project with `project: "[[Project name]]"`. ADRs are numbered `ADR-NNNN` with `adr_number`; status moves proposed, accepted, then superseded or deprecated. A decision recorded in meeting minutes is history: quote it, do not edit it.
 - Links are `[[wikilinks]]`. Dates are ISO in file names and properties. No em dashes anywhere.

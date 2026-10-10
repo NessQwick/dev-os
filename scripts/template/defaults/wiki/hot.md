@@ -13,7 +13,7 @@ tags:
 
 ## Last Updated
 
-2026-08-26: Compass vault adopted by claude-obsidian. No knowledge operations have completed yet.
+2026-08-26: Vault adopted by claude-obsidian. No knowledge operations have completed yet.
 
 ## Key Recent Facts
 
@@ -22,7 +22,7 @@ tags:
 
 ## Recent Changes
 
-- Created the wiki foundation next to the Compass folders.
+- Created the wiki foundation next to the Dev OS folders.
 
 ## Active Threads
 

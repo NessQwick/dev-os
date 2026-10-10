@@ -12,7 +12,7 @@
 
 ## How it is built here
 - `Templates/Personal Retreat.md`, auto-applied to any note created in `02 Retreats/` (Templater folder template).
-- File name convention **`YYYY-QN Personal Retreat`**. The Compass dashboard finds the current quarter's retreat by that name and date and draws the wheel from the `wheel_*` number properties. Fallback: most recent retreat.
+- File name convention **`YYYY-QN Personal Retreat`**. The Personal dashboard finds the current quarter's retreat by that name and date and draws the wheel from the `wheel_*` number properties. Fallback: most recent retreat.
 - The template links the previous retreat and the same quarter last year, so you can put them side by side.
 - Sections 2 and 3 render live: daily questions for the quarter, habits, wins list, and the radar chart of your own `wheel_*` values.
 - Section 5's intentions are embedded into the quarterly note and from there into every weekly note. Write them once.
