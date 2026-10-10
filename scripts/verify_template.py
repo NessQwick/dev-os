@@ -129,7 +129,14 @@ def main():
         if not rel.endswith(".md"): continue
         for m in re.finditer(r'"new-note-template":"([^"]+)"', t): check("kanban template in %s" % rel, exists(m.group(1)), m.group(1))
     wv = load(".obsidian/webviewer.json") or {}
-    if wv.get("markdownPath"): check("webviewer markdownPath exists", exists(wv["markdownPath"]))
+    check("webviewer saves to the clippings folder", wv.get("markdownPath") == "07 Library/Clippings" and exists(wv["markdownPath"]))
+    clipper = [rel for rel in files if rel.startswith("Meta/Web Clipper/") and rel.endswith(".json")]
+    check("Web Clipper templates shipped", len(clipper) >= 1, str(len(clipper)))
+    for rel in clipper:
+        t = load(rel) or {}
+        props = {p.get("name"): p.get("value") for p in t.get("properties", []) if isinstance(p, dict)}
+        check("Web Clipper template valid: %s" % rel, all(k in t for k in ("name", "behavior", "noteContentFormat", "properties", "noteNameFormat", "path"))
+              and t.get("path") == "07 Library/Clippings" and props.get("type") == "clipping" and props.get("status") == "inbox")
     # content asserts
     for rel in files:
         if rel.endswith(".md") and any(rel.startswith(u) for u in ["01 Journal/", "02 Retreats/", "04 Projects/", "05 People/", "06 Writing/", "07 Library/", "10 Meetings/"]) and not rel.endswith(" Board.md"):

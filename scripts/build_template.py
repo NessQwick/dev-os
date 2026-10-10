@@ -74,7 +74,8 @@ def copy_tree(live, out):
                 name = rel.removeprefix(".obsidian/")
                 settings = None
                 if name == "app.json": settings = {"newFileLocation": "current"}
-                elif name in ("appearance.json", "types.json", "webviewer.json"): settings = {}
+                elif name in ("appearance.json", "types.json"): settings = {}
+                elif name == "webviewer.json": settings = {"markdownPath": "07 Library/Clippings"}
                 elif name == "core-plugins.json":
                     original = json.loads(Path(source).read_text())
                     if not isinstance(original, dict): raise ValueError("Unsupported core plugin settings")

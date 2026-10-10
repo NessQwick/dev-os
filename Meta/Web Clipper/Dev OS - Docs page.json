@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "0.1.0",
+  "name": "Dev OS - Docs page",
+  "behavior": "create",
+  "noteContentFormat": "## Highlights\n{{highlights}}\n\n## Content\n{{content}}",
+  "properties": [
+    {
+      "name": "type",
+      "value": "clipping",
+      "type": "text"
+    },
+    {
+      "name": "title",
+      "value": "{{title}}",
+      "type": "text"
+    },
+    {
+      "name": "source",
+      "value": "{{url}}",
+      "type": "text"
+    },
+    {
+      "name": "site",
+      "value": "{{domain}}",
+      "type": "text"
+    },
+    {
+      "name": "author",
+      "value": "{{author}}",
+      "type": "text"
+    },
+    {
+      "name": "published",
+      "value": "{{published|date:\"YYYY-MM-DD\"}}",
+      "type": "date"
+    },
+    {
+      "name": "clipped",
+      "value": "{{date|date:\"YYYY-MM-DD\"}}",
+      "type": "date"
+    },
+    {
+      "name": "description",
+      "value": "{{description}}",
+      "type": "text"
+    },
+    {
+      "name": "project",
+      "value": "",
+      "type": "text"
+    },
+    {
+      "name": "status",
+      "value": "inbox",
+      "type": "text"
+    },
+    {
+      "name": "tags",
+      "value": "clipping, docs",
+      "type": "multitext"
+    }
+  ],
+  "triggers": [
+    "https://developer.mozilla.org/",
+    "https://docs.",
+    "https://learn.microsoft.com/",
+    "https://kubernetes.io/docs/",
+    "https://docs.python.org/"
+  ],
+  "noteNameFormat": "{{title|safe_name}}",
+  "path": "07 Library/Clippings"
+}
