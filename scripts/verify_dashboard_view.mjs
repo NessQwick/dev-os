@@ -41,7 +41,7 @@ try {
     add('06 Writing/Articles/Article Board.md',{'kanban-plugin':'board'},'## Ideas\n## Drafting');
     add('04 Projects/Sprints/Synthetic project Sprint 1.md',{type:'sprint',project:'[[Synthetic project]]',number:1,start:'2026-09-07',end:'2026-09-18',goal:'Fixture goal',status:'active'});
     add('06 Writing/Releases/Synthetic project 1.0.md',{type:'release',version:'1.0',project:'[[Synthetic project]]',date:'2026-09-30',status:'planned'},'# Synthetic project 1.0\n\n## Release notes\nold');
-    add('04 Projects/Synthetic project.md',{type:'project',status:'active',priority:'high',started:'2026-08-20',due:'2026-10-01',milestones:['2026-09-20 Beta'],stakeholders:['[[Synthetic person]]']},'## Tasks\n- [ ] Review synthetic plan #project/synthetic-project 📅 2026-09-09\n- [ ] Draft outline #project/synthetic-project ⏳ 2026-09-10\n- [/] Build the fixture #project/synthetic-project #sprint/synthetic-project-sprint-1 #release/synthetic-project-1-0 🆔 fix001\n- [ ] Wait on vendor #project/synthetic-project #sprint/synthetic-project-sprint-1 #blocked ⛔ fix001\n- [x] Agree scope #project/synthetic-project #sprint/synthetic-project-sprint-1 #release/synthetic-project-1-0 #fix ✅ 2026-09-08\n- [ ] Review the contract #project/synthetic-project #p/synthetic-person ➕ 2026-09-01');
+    add('04 Projects/Synthetic project.md',{type:'project',status:'active',priority:'high',started:'2026-08-20',due:'2026-10-01',milestones:['2026-09-20 Beta'],stakeholders:['[[Synthetic person]]']},'## Tasks\n- [ ] Review synthetic plan #project/synthetic-project 📅 2026-09-09\n- [ ] Draft outline #project/synthetic-project ⏳ 2026-09-10\n- [/] Build the fixture #project/synthetic-project #sprint/synthetic-project-sprint-1 #release/synthetic-project-1-0 🆔 fix001\n- [ ] Wait on vendor #project/synthetic-project #sprint/synthetic-project-sprint-1 #blocked ⛔ fix001\n- [x] Agree scope #project/synthetic-project #sprint/synthetic-project-sprint-1 #release/synthetic-project-1-0 #fix ✅ 2026-09-08\n- [ ] Review the contract #project/synthetic-project #p/synthetic-person ➕ 2026-09-01\n- [ ] Waiting on nothing #project/synthetic-project ⛔ nope');
     add('10 Meetings/2026-09-08 Synthetic kickoff.md',{type:'meeting',kind:'meeting',date:'2026-09-08',project:'[[Synthetic project]]',attendees:['[[Synthetic person]]']},'# Kickoff\n## Decisions\n- Use the fixture database\n## Action items\n- [ ] Send fixture notes #project/synthetic-project 📅 2026-09-11');
     add('06 Writing/Decisions/ADR-0001 Fixture decision.md',{type:'adr',adr_number:1,status:'proposed',date:'2026-09-08',project:'[[Synthetic project]]'});
     add('07 Library/Clippings/Fixture clip.md',{type:'clipping',status:'inbox',source:'https://example.invalid/clip',site:'example.invalid',clipped:'2026-09-09'});
@@ -66,7 +66,7 @@ try {
   assert.ok(await page.locator('.life-os-task-row').count() <= 3);
   await page.locator('.life-os-task-row').first().click();
   assert.ok(await page.evaluate(()=>window.opened.at(-1)?.options?.eState?.line >= 0));
-  for(const screen of ['home','today','sprint','projects','meetings','docs','inbox','roadmap','waiting','plan','review','focus','people','library','ai']){
+  for(const screen of ['home','today','sprint','projects','meetings','docs','inbox','roadmap','waiting','config','plan','review','focus','people','library','ai']){
     await page.evaluate((s)=>{window.view.activeScreen=s;window.view.render();},screen);
     assert.ok(await page.locator('.life-os-shell').innerText());
     await page.screenshot({path:`/tmp/life-os-${screen}-candidate.png`,fullPage:true});
@@ -85,7 +85,7 @@ try {
       assert.ok((await page.locator('.life-os-standup-column.is-alert').innerText()).includes('Wait on vendor'));
     }
     if(screen==='projects'){
-      assert.ok((await page.locator('.life-os-project-card .life-os-record-metrics').first().textContent()).includes('6 open · 1 done'),await page.locator('.life-os-project-card .life-os-record-metrics').first().textContent());
+      assert.ok((await page.locator('.life-os-project-card .life-os-record-metrics').first().textContent()).includes('7 open · 1 done'),await page.locator('.life-os-project-card .life-os-record-metrics').first().textContent());
       await page.locator('.life-os-project-card-open').first().click();
       assert.equal(await page.locator('.life-os-project-page').count(),1);
       assert.equal(await page.locator('.life-os-nav-button[aria-current="page"]').innerText(),'Projects');
@@ -124,6 +124,18 @@ try {
       await page.getByRole('button',{name:'Read'}).click();
       await page.waitForFunction(()=>window.writes.some(w=>w[0]==='frontmatter'&&w[1].includes('Clippings')));
       assert.equal(await page.locator('.life-os-clip-card').count(),0);
+    }
+    if(screen==='config'){
+      assert.equal(await page.getByRole('button',{name:'Save configuration'}).isDisabled(),true);
+      await page.getByLabel('Meetings folder',{exact:true}).fill('Work/Meetings');
+      await page.getByLabel('Meetings folder',{exact:true}).press('Tab');
+      await page.waitForFunction(()=>document.querySelector('.life-os-config-changes')?.innerText.includes('Folder Meetings'));
+      await page.getByRole('button',{name:'Run check'}).click();
+      await page.waitForSelector('.life-os-health-item');
+      assert.ok((await page.locator('.life-os-health-list').first().innerText()).length>0);
+      await page.screenshot({path:'/tmp/life-os-config.png',fullPage:true});
+      await page.getByRole('button',{name:'Save configuration'}).click();
+      await page.waitForFunction(()=>window.writes.some(w=>w[0]==='frontmatter'&&w[1]==='Meta/Dev OS Config.md'));
     }
     if(screen==='roadmap'){
       assert.ok(await page.locator('.life-os-roadmap-bar').count()>=1);
@@ -213,10 +225,10 @@ try {
   await page.getByRole('button',{name:'Home',exact:true}).click();
   for(const width of [900,620,390]){
     await page.setViewportSize({width,height:900});
-    for (const screen of ['home','today','sprint','projects','meetings','docs','inbox','roadmap','waiting','plan','review','focus','people','library','ai','project']) {
+    for (const screen of ['home','today','sprint','projects','meetings','docs','inbox','roadmap','waiting','config','plan','review','focus','people','library','ai','project']) {
       await page.evaluate(s=>{window.view.activeScreen=s;window.view.activeProjectPath='04 Projects/Synthetic project.md';window.view.render();},screen);
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`${screen} document overflow at ${width}`);
-      if(width===390&&['project','sprint','today','roadmap'].includes(screen))await page.screenshot({path:`/tmp/life-os-${screen}-390.png`,fullPage:true});
+      if(width===390&&['project','sprint','today','roadmap','config'].includes(screen))await page.screenshot({path:`/tmp/life-os-${screen}-390.png`,fullPage:true});
     }
   }
   await page.setViewportSize({width:1440,height:1000});
@@ -253,5 +265,5 @@ try {
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.screenshot({path:'/tmp/life-os-home-light-candidate.png'});
   await page.evaluate(()=>window.view.onClose());
-  console.log('Dashboard browser checks passed: fifteen modules, project page tasks and minutes composer, sprint moves, inbox triage, roadmap bars and markers, waiting groups, task editor, release notes, Home spacing, preview/full Brain navigation, workload groups, project counts, discussion links, board previews, Library filters and remote-cover rejection, AI branches, per-module controls, narrow widths and light-theme smoke check. Synthetic fixture only.');
+  console.log('Dashboard browser checks passed: sixteen modules, Configure save and health check, project page tasks and minutes composer, sprint moves, inbox triage, roadmap bars and markers, waiting groups, task editor, release notes, Home spacing, preview/full Brain navigation, workload groups, project counts, discussion links, board previews, Library filters and remote-cover rejection, AI branches, per-module controls, narrow widths and light-theme smoke check. Synthetic fixture only.');
 }finally{await browser.close();}

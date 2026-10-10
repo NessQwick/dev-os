@@ -20,6 +20,7 @@ Dev OS opens automatically after Obsidian loads the vault. Use `Ctrl/Cmd+Shift+L
 | Docs | ADRs, tech notes, postmortems, releases with type, status, and project filters; release notes | `06 Writing/`, `06 Writing/Releases/` | doc `status`, new notes, a release note's `## Release notes` section |
 | Inbox | Web Clipper triage and template setup | `07 Library/Clippings/`, `Meta/Web Clipper/` | clip `project`, `status`, one move to Tech Notes |
 | Waiting | Delegated tasks by person (age from `➕`), tasks waiting on open tasks (`⛔`), `#blocked` | task index, `05 People/` | task lines |
+| Configure | Config form with change preview; vault health check | `Meta/Dev OS Config.md`, Templater, QuickAdd, Web Clipper templates (read only), all typed notes and tasks | config note properties only |
 | Tasks | Every open task grouped by urgency, with status and due date controls | task index | task lines |
 | People, Library, Brain, AI | Person notes and discussion queue; books and clips; link graph; AI readiness | as before | task lines (People) |
 | Plan, Review | Personal layer: horizons, calendar, effort and habit charts, life areas | periodic notes | nothing |
@@ -78,6 +79,50 @@ The Waiting screen collects tasks owned by someone else.
 - **Owners:** set **Your person note** in Settings so tasks tagged with you are not counted as delegated.
 - **Grouping:** tasks are grouped by person, oldest first, with days since `➕`. **Copy follow-up** puts a short check-in message for that person on the clipboard.
 - **Other lists:** below the groups come tasks waiting on open dependencies (with what they wait on) and everything tagged `#blocked`.
+
+## Configure
+
+**Configure** (rail, or the gear in the topbar) is a form over the properties of `Meta/Dev OS Config.md`.
+
+**Folders.** Projects, sprints, meetings, decisions, releases, docs, clippings, and daily notes, plus weekly, quarterly, and retreats when personal modules are on.
+- Each folder has an exists or missing chip and a reset to its default.
+- A warning appears when the Templater folder templates, the QuickAdd new-note choices, or the Web Clipper template paths still point elsewhere. These are read only: change them in those plugins.
+- Changing a folder never moves notes.
+
+**Personal layer** (when personal modules are on):
+- Daily questions as an editable list: text, order, add, remove, and the engineering preset.
+- Habits and wheel areas.
+- Birthdate and life expectancy.
+
+A key such as `dq_deep_work` is created from the label once and then fixed, because daily and retreat notes store values under it. Removing an entry leaves old notes untouched.
+
+**Boards.** The lanes that count as finished.
+
+Nothing is written until **Save configuration**. The bar lists every change, validation errors block saving, and **Reset** discards the draft. Saving goes through `processFrontMatter`, so Obsidian may reformat the property block; the body of the note stays as it is.
+
+## Vault health check
+
+**Run check** on the Configure screen reads the vault and writes nothing. It reports:
+- **Errors:**
+  - configured folders that do not exist
+  - `project` links (sprints, meetings, ADRs, releases, tech notes, postmortems, clippings) to a missing project
+  - duplicate `🆔` ids and dependency cycles
+  - duplicate ADR numbers
+- **Warnings:**
+  - plugin paths that disagree with the config
+  - `#project/`, `#sprint/`, `#release/` tags with no matching note
+  - `⛔` ids nobody has
+  - several active sprints in one project, or an active sprint past its end date
+  - a `current_sprint` that does not exist
+  - an ADR `supersedes` link to a missing note
+  - a released release with open tasks
+- **Notes:**
+  - `#p/` tags without a person note
+  - a `current_sprint` that is closed
+  - unknown clip statuses
+  - sample notes left next to your own
+
+Each item opens the note, at the task line where there is one.
 
 ## Write policy
 
@@ -140,4 +185,4 @@ Run `node scripts/verify_life_os_app.mjs .` for static contracts and a mock runt
 
 `PLAYWRIGHT_MODULE=<path to playwright> node scripts/verify_dashboard_view.mjs` exercises the same flows in Chromium with a synthetic vault at 1440, 900, 620, and 390 px. Neither replaces checking the view inside Obsidian after a reload; see [[23 Native Acceptance]].
 
-The application version is 1.1.0.
+The application version is 1.2.0.

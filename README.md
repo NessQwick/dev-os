@@ -37,6 +37,7 @@ Notes tagged `example` are seed data; the Setup checklist (`00 Dashboards/Setup.
 | Inbox | Triage Web Clipper clips: assign a project, mark read, archive, keep as a tech note | clip properties, one file move |
 | Waiting | Delegated tasks grouped by person with age and a copyable follow-up, tasks waiting on other tasks (`⛔`), and `#blocked` work | task lines |
 | Tasks, People, Library, Brain, AI | Every open task, people with discussion items, books and clips, the link graph, AI readiness | task lines |
+| Configure | Folders (with existence checks and warnings when Templater, QuickAdd, or Web Clipper point elsewhere), daily questions, habits, wheel areas, birthdate, done lanes; preview of changes, then one save. Vault health check: missing folders, broken project links, tags without notes, dependency problems, sprint state, leftover samples | `Meta/Dev OS Config.md` properties (the health check writes nothing) |
 
 Every task row has an editor (pencil): text, due and scheduled dates, sprint, owner, release, priority, blocked, and a Waits on dependency, written in Tasks format without touching the rest of the line.
 

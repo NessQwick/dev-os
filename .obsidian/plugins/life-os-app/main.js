@@ -609,6 +609,244 @@ function buildFollowUpText(person, tasks) {
   return [`Hi ${person}, a quick check on these:`, ...lines, "Anything blocking you?"].join("\n");
 }
 
+// ---------------------------------------------------------------------------
+// Configure screen: a draft of the config note's properties, built and
+// validated without Obsidian so it can be tested.
+
+const CONFIG_FOLDER_FIELDS = [
+  { key: "projects_folder", folder: "projects", label: "Projects" },
+  { key: "sprints_folder", folder: "sprints", label: "Sprints" },
+  { key: "meetings_folder", folder: "meetings", label: "Meetings" },
+  { key: "decisions_folder", folder: "decisions", label: "Decisions (ADRs)" },
+  { key: "releases_folder", folder: "releases", label: "Releases" },
+  { key: "docs_folder", folder: "docs", label: "Docs (tech notes, postmortems)" },
+  { key: "clippings_folder", folder: "clippings", label: "Web clippings" },
+  { key: "daily_folder", folder: "daily", label: "Daily notes" },
+  { key: "weekly_folder", folder: "weekly", label: "Weekly notes", personal: true },
+  { key: "quarterly_folder", folder: "quarterly", label: "Quarterly notes", personal: true },
+  { key: "retreat_folder", folder: "retreats", label: "Retreats", personal: true },
+];
+
+const ENGINEERING_QUESTIONS = [
+  { key: "dq_deep_work", text: "Did I do my best to protect deep work?" },
+  { key: "dq_unblock", text: "Did I do my best to unblock others?" },
+  { key: "dq_ship", text: "Did I do my best to ship something small?" },
+  { key: "dq_learn", text: "Did I do my best to learn something?" },
+  { key: "dq_communicate", text: "Did I do my best to communicate clearly?" },
+  { key: "dq_rest", text: "Did I do my best to rest and recover?" },
+];
+
+function readConfigDraft(frontmatter = {}) {
+  const folders = {};
+  for (const field of CONFIG_FOLDER_FIELDS) folders[field.key] = normalizeFolder(frontmatter[field.key], DEFAULT_FOLDERS[field.folder]);
+  const keyList = (value) => (Array.isArray(value) ? value : []).map((item) => String(item?.key || item || "").trim()).filter(Boolean);
+  return {
+    folders,
+    questions: (Array.isArray(frontmatter.questions) ? frontmatter.questions : [])
+      .map((item) => ({ key: String(item?.key || item || "").trim(), text: String(item?.text || "").trim(), locked: true }))
+      .filter((item) => item.key),
+    habits: keyList(frontmatter.habits).map((key) => ({ key, locked: true })),
+    wheel: keyList(frontmatter.wheel_areas).map((key) => ({ key, locked: true })),
+    birthdate: isoDate(frontmatter.birthdate),
+    lifeExpectancy: frontmatter.life_expectancy === undefined || frontmatter.life_expectancy === null || frontmatter.life_expectancy === "" ? "" : String(frontmatter.life_expectancy),
+    doneLanes: String(frontmatter.board_done_lanes || "Done,Published,Archive").split(",").map((lane) => lane.trim()).filter(Boolean),
+  };
+}
+
+// New keys only: "Protect deep work" becomes dq_protect_deep_work, unique
+// against keys already in use. Existing keys are never regenerated.
+function configKeyFor(prefix, label, taken = []) {
+  const base = `${prefix}${slugify(label).replace(/-/g, "_") || "item"}`.slice(0, 40);
+  const used = new Set(taken);
+  let key = base;
+  for (let index = 2; used.has(key); index += 1) key = `${base}_${index}`;
+  return key;
+}
+
+function validateConfigDraft(draft) {
+  const errors = [];
+  for (const field of CONFIG_FOLDER_FIELDS) {
+    const value = String(draft.folders[field.key] || "").trim();
+    if (!value) errors.push(`${field.label}: folder is empty.`);
+    else if (/(^|\/)\.\.(\/|$)/.test(value) || /^[/\\]/.test(value) || /^[A-Za-z]:/.test(value)) errors.push(`${field.label}: use a path inside the vault.`);
+  }
+  draft.questions.forEach((item, index) => { if (!item.text.trim()) errors.push(`Question ${index + 1} has no text.`); });
+  const keys = [...draft.questions, ...draft.habits, ...draft.wheel].map((item) => item.key);
+  const duplicates = keys.filter((key, index) => keys.indexOf(key) !== index);
+  if (duplicates.length) errors.push(`Duplicate keys: ${[...new Set(duplicates)].join(", ")}.`);
+  if (draft.birthdate && !/^\d{4}-\d{2}-\d{2}$/.test(draft.birthdate)) errors.push("Birthdate must be a date.");
+  if (draft.lifeExpectancy !== "" && !(Number.isInteger(Number(draft.lifeExpectancy)) && Number(draft.lifeExpectancy) >= 1 && Number(draft.lifeExpectancy) <= 120)) {
+    errors.push("Life expectancy must be a whole number from 1 to 120.");
+  }
+  if (!draft.doneLanes.length) errors.push("Keep at least one done lane.");
+  return errors;
+}
+
+function configPatch(draft) {
+  const patch = {};
+  for (const field of CONFIG_FOLDER_FIELDS) patch[field.key] = normalizeFolder(draft.folders[field.key], DEFAULT_FOLDERS[field.folder]);
+  patch.questions = draft.questions.map((item) => ({ key: item.key, text: item.text.trim() }));
+  patch.habits = draft.habits.map((item) => item.key);
+  patch.wheel_areas = draft.wheel.map((item) => item.key);
+  patch.birthdate = draft.birthdate || "";
+  patch.life_expectancy = draft.lifeExpectancy === "" ? "" : Number(draft.lifeExpectancy);
+  patch.board_done_lanes = draft.doneLanes.join(",");
+  return patch;
+}
+
+function diffConfig(before, after) {
+  const changes = [];
+  for (const field of CONFIG_FOLDER_FIELDS) {
+    if (before.folders[field.key] !== after.folders[field.key]) changes.push(`Folder ${field.label}: ${before.folders[field.key]} to ${after.folders[field.key]}`);
+  }
+  const listDiff = (label, left, right, describe) => {
+    const leftKeys = left.map((item) => item.key);
+    const rightKeys = right.map((item) => item.key);
+    for (const item of right) if (!leftKeys.includes(item.key)) changes.push(`${label} added: ${describe(item)}`);
+    for (const item of left) if (!rightKeys.includes(item.key)) changes.push(`${label} removed: ${describe(item)}`);
+    for (const item of right) {
+      const old = left.find((other) => other.key === item.key);
+      if (old && old.text !== undefined && old.text !== item.text) changes.push(`${label} reworded: ${item.key}`);
+    }
+    const common = rightKeys.filter((key) => leftKeys.includes(key));
+    if (common.join() !== leftKeys.filter((key) => rightKeys.includes(key)).join()) changes.push(`${label} order changed`);
+  };
+  listDiff("Question", before.questions, after.questions, (item) => item.text || item.key);
+  listDiff("Habit", before.habits, after.habits, (item) => item.key);
+  listDiff("Wheel area", before.wheel, after.wheel, (item) => item.key);
+  if (before.birthdate !== after.birthdate) changes.push(`Birthdate: ${before.birthdate || "empty"} to ${after.birthdate || "empty"}`);
+  if (String(before.lifeExpectancy) !== String(after.lifeExpectancy)) changes.push(`Life expectancy: ${before.lifeExpectancy || "empty"} to ${after.lifeExpectancy || "empty"}`);
+  if (before.doneLanes.join(",") !== after.doneLanes.join(",")) changes.push(`Done lanes: ${after.doneLanes.join(", ")}`);
+  return changes;
+}
+
+function cloneConfigDraft(draft) {
+  return JSON.parse(JSON.stringify(draft));
+}
+
+// ---------------------------------------------------------------------------
+// Vault health check. Input is plain data gathered by the view; output is a
+// list of { severity: error|warn|info, code, message, path, line }.
+
+function runHealthCheck({ today = "", folders = [], pathWarnings = [], notes = [], tasks = [], people = [] }) {
+  const issues = [];
+  const add = (severity, code, message, path = "", line = 0) => issues.push({ severity, code, message, path, line });
+  for (const folder of folders) if (!folder.exists) add("error", "folder-missing", `${folder.label} folder "${folder.path}" does not exist.`);
+  for (const warning of pathWarnings) add("warn", "plugin-path", warning.message, warning.path || "");
+
+  const byType = (type) => notes.filter((note) => note.type === type);
+  const real = (list) => list.filter((note) => !note.example);
+  const projectTitles = new Set(byType("project").map((note) => note.title));
+  const slugsOf = (type) => new Set(byType(type).map((note) => slugify(note.title)));
+  const projectSlugs = slugsOf("project");
+  const sprintSlugs = slugsOf("sprint");
+  const releaseSlugs = slugsOf("release");
+  const personSlugs = new Set([...people, ...slugsOf("person")]);
+  const titles = new Set(notes.map((note) => note.title));
+
+  for (const note of notes) {
+    if (["sprint", "meeting", "adr", "release", "tech-note", "postmortem", "clipping"].includes(note.type) && note.project && !projectTitles.has(note.project)) {
+      add("error", "project-link", `${note.title}: project "${note.project}" has no project note.`, note.path);
+    }
+  }
+
+  const seenTag = new Set();
+  for (const task of tasks) {
+    const report = (kind, slug, severity, known) => {
+      if (known.has(slug)) return;
+      const key = `${kind}:${slug}:${task.path}`;
+      if (seenTag.has(key)) return;
+      seenTag.add(key);
+      add(severity, `tag-${kind}`, `#${kind === "person" ? "p" : kind}/${slug} has no matching ${kind} note (${task.display}).`, task.path, task.line);
+    };
+    for (const slug of task.projects || []) report("project", slug, "warn", projectSlugs);
+    for (const slug of task.sprints || []) report("sprint", slug, "warn", sprintSlugs);
+    for (const slug of task.releases || []) report("release", slug, "warn", releaseSlugs);
+    for (const slug of task.owners || []) report("person", slug, "info", personSlugs);
+  }
+
+  const ids = new Map();
+  for (const task of tasks) {
+    if (!task.id) continue;
+    if (ids.has(task.id)) add("error", "dep-duplicate-id", `🆔 ${task.id} is used twice (${ids.get(task.id).display}; ${task.display}).`, task.path, task.line);
+    else ids.set(task.id, task);
+  }
+  for (const task of tasks) {
+    for (const id of task.dependsOn || []) {
+      if (!ids.has(id)) add("warn", "dep-dangling", `${task.display} waits on ⛔ ${id}, but no task has 🆔 ${id}.`, task.path, task.line);
+    }
+  }
+  const state = new Map();
+  const reported = new Set();
+  const visit = (id, stack) => {
+    state.set(id, "open");
+    stack.push(id);
+    for (const next of ids.get(id)?.dependsOn || []) {
+      if (!ids.has(next)) continue;
+      if (state.get(next) === "open") {
+        const cycle = stack.slice(stack.indexOf(next));
+        const key = [...cycle].sort().join(",");
+        if (!reported.has(key)) {
+          reported.add(key);
+          const first = ids.get(next);
+          add("error", "dep-cycle", `Dependency cycle: ${[...cycle, next].map((item) => ids.get(item).display).join(" → ")}.`, first.path, first.line);
+        }
+      } else if (!state.has(next)) visit(next, stack);
+    }
+    stack.pop();
+    state.set(id, "done");
+  };
+  for (const id of ids.keys()) if (!state.has(id)) visit(id, []);
+
+  const sprints = byType("sprint");
+  const activeByProject = new Map();
+  for (const sprint of sprints.filter((note) => note.status === "active")) {
+    const key = sprint.project || "(no project)";
+    if (!activeByProject.has(key)) activeByProject.set(key, []);
+    activeByProject.get(key).push(sprint);
+    if (sprint.end && today && sprint.end < today) add("warn", "sprint-expired", `${sprint.title} is active but ended on ${sprint.end}.`, sprint.path);
+  }
+  for (const [project, list] of activeByProject) {
+    if (list.length > 1) add("warn", "sprint-multiple-active", `${project} has ${list.length} active sprints: ${list.map((note) => note.title).join(", ")}.`, list[0].path);
+  }
+  for (const project of byType("project")) {
+    if (!project.currentSprint) continue;
+    const sprint = sprints.find((note) => note.title === project.currentSprint);
+    if (!sprint) add("warn", "current-sprint", `${project.title}: current_sprint "${project.currentSprint}" does not exist.`, project.path);
+    else if (sprint.status === "closed") add("info", "current-sprint", `${project.title}: current_sprint "${project.currentSprint}" is closed.`, project.path);
+  }
+
+  const adrNumbers = new Map();
+  for (const adr of byType("adr")) {
+    if (adr.supersedes && !titles.has(adr.supersedes)) add("warn", "adr-supersedes", `${adr.title}: supersedes "${adr.supersedes}", which does not exist.`, adr.path);
+    if (adr.adrNumber !== "" && adr.adrNumber !== undefined && adr.adrNumber !== null) {
+      const number = String(adr.adrNumber);
+      if (adrNumbers.has(number)) add("error", "adr-number-duplicate", `ADR number ${number} is used by ${adrNumbers.get(number)} and ${adr.title}.`, adr.path);
+      else adrNumbers.set(number, adr.title);
+    }
+  }
+
+  for (const release of byType("release").filter((note) => note.status === "released")) {
+    const open = tasks.filter((task) => !task.closed && (task.releases || []).includes(slugify(release.title)));
+    if (open.length) add("warn", "release-open-tasks", `${release.title} is released but ${open.length} tagged ${open.length === 1 ? "task is" : "tasks are"} still open.`, release.path);
+  }
+  for (const clip of byType("clipping")) {
+    if (clip.status && !["inbox", "new", "unread", "read", "archived"].includes(clip.status)) add("info", "clip-status", `${clip.title}: unknown clip status "${clip.status}".`, clip.path);
+  }
+  for (const type of ["project", "sprint", "meeting", "adr", "release", "clipping"]) {
+    const all = byType(type);
+    const samples = all.filter((note) => note.example);
+    if (samples.length && real(all).length) add("info", "samples-left", `${samples.length} sample ${type} ${samples.length === 1 ? "note is" : "notes are"} still in the vault next to your own.`, samples[0].path);
+  }
+  const rank = { error: 0, warn: 1, info: 2 };
+  return issues.sort((left, right) => rank[left.severity] - rank[right.severity] || left.code.localeCompare(right.code));
+}
+
+function configPrefix(frontmatter, key, fallback) {
+  const value = String(frontmatter?.[key] || "").trim();
+  return /^[a-z][a-z0-9]*_$/.test(value) ? value : fallback;
+}
+
 const CAPTURE_ACTIONS = [
   {
     icon: "notebook-pen",
@@ -724,6 +962,7 @@ const NAV_ITEMS = [
   { id: "library", icon: "library", label: "Library" },
   { id: "brain", icon: "brain", label: "Brain" },
   { id: "ai", icon: "sparkles", label: "AI" },
+  { id: "config", icon: "settings-2", label: "Configure" },
   { id: "plan", icon: "calendar-range", label: "Plan", personal: true },
   { id: "review", icon: "line-chart", label: "Review", personal: true },
 ];
@@ -785,6 +1024,12 @@ const MODULES = {
     eyebrow: "Across projects",
     title: "Roadmap",
     description: "When each project runs, where its sprints fall, and which milestones and releases are coming.",
+    actions: [],
+  },
+  config: {
+    eyebrow: "System",
+    title: "Configure",
+    description: "Folders, daily questions, habits, and boards, saved to the config note. Below: a read-only health check of the vault.",
     actions: [],
   },
   waiting: {
@@ -1799,9 +2044,7 @@ class LifeOSHomeView extends ItemView {
     this.addTopbarButton(actions, "search", "Search", () => {
       this.runCommand("global-search:open", "Search");
     });
-    this.addTopbarButton(actions, "settings-2", "Configure", () => {
-      void this.openPath(configFile(this.app)?.path || CONFIG_PATHS[0]);
-    });
+    this.addTopbarButton(actions, "settings-2", "Configure", () => this.go("config"));
     const display = actions.createEl("details", { cls: "life-os-display-options" });
     display.createEl("summary", { text: "View" });
     const options = display.createDiv();
@@ -2109,6 +2352,7 @@ class LifeOSHomeView extends ItemView {
       inbox: () => this.renderInboxScreen(parent),
       roadmap: () => this.renderRoadmapScreen(parent),
       waiting: () => this.renderWaitingScreen(parent),
+      config: () => this.renderConfigScreen(parent),
     };
     if (screens[this.activeScreen]) {
       screens[this.activeScreen]();
@@ -4579,6 +4823,331 @@ class LifeOSHomeView extends ItemView {
       if (model.open.length) {
         body.createEl("h4", { text: "Still open" });
         this.renderTaskList(body, model.open, { context: true });
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Configure: a form over the config note's properties
+
+  configDraftState() {
+    const file = configFile(this.app);
+    if (!this.configDraft || this.configDraft.path !== (file?.path || "")) {
+      const base = readConfigDraft(this.getFrontmatter(file));
+      this.configDraft = { path: file?.path || "", base, draft: cloneConfigDraft(base) };
+    }
+    return this.configDraft;
+  }
+
+  vaultFolders() {
+    const loaded = this.app.vault.getAllLoadedFiles?.();
+    if (Array.isArray(loaded)) return loaded.filter((item) => Array.isArray(item.children) && item.path && item.path !== "/").map((item) => item.path).sort();
+    const set = new Set();
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      const parts = file.path.split("/").slice(0, -1);
+      for (let index = 1; index <= parts.length; index += 1) set.add(parts.slice(0, index).join("/"));
+    }
+    return [...set].sort();
+  }
+
+  folderExists(path) {
+    if (!path) return false;
+    const item = this.app.vault.getAbstractFileByPath(path);
+    if (item) return !(item instanceof TFile);
+    return this.app.vault.getMarkdownFiles().some((file) => file.path.startsWith(`${path}/`));
+  }
+
+  // Read-only comparison with the folders other plugins were told about.
+  configPathWarnings(folders) {
+    const warnings = [];
+    const expected = {
+      "Templates/Project.md": folders.projects_folder,
+      "Templates/Sprint.md": folders.sprints_folder,
+      "Templates/Meeting.md": folders.meetings_folder,
+      "Templates/ADR.md": folders.decisions_folder,
+      "Templates/Release.md": folders.releases_folder,
+      "Templates/Tech Note.md": `${folders.docs_folder}/Tech Notes`,
+      "Templates/Postmortem.md": `${folders.docs_folder}/Postmortems`,
+      "Templates/Daily Note.md": folders.daily_folder,
+    };
+    const templater = this.pluginSettings("templater-obsidian").folder_templates;
+    if (Array.isArray(templater)) {
+      for (const [template, folder] of Object.entries(expected)) {
+        const entry = templater.find((item) => item.template === template);
+        if (entry && normalizeFolder(entry.folder, entry.folder) !== folder) {
+          warnings.push({ message: `Templater folder template for ${template} points at "${entry.folder}", config says "${folder}". Change it in Settings, Templater, Folder templates.` });
+        }
+      }
+    }
+    const quickAdd = this.pluginSettings("quickadd").choices;
+    const choices = {
+      "lifeos-new-project": folders.projects_folder, "lifeos-new-sprint": folders.sprints_folder, "lifeos-new-meeting": folders.meetings_folder,
+      "lifeos-new-adr": folders.decisions_folder, "lifeos-new-release": folders.releases_folder,
+      "lifeos-new-tech-note": `${folders.docs_folder}/Tech Notes`, "lifeos-new-postmortem": `${folders.docs_folder}/Postmortems`,
+    };
+    if (Array.isArray(quickAdd)) {
+      for (const [id, folder] of Object.entries(choices)) {
+        const choice = quickAdd.find((item) => item.id === id);
+        const target = choice?.folder?.folders?.[0];
+        if (target && normalizeFolder(target, target) !== folder) warnings.push({ message: `QuickAdd "${choice.name}" creates notes in "${target}", config says "${folder}". Change it in Settings, QuickAdd.` });
+      }
+    }
+    for (const [path, clipperPath] of Object.entries(this.clipperPaths || {})) {
+      if (clipperPath && normalizeFolder(clipperPath, clipperPath) !== folders.clippings_folder) {
+        warnings.push({ path, message: `Web Clipper template ${path.split("/").pop()} saves to "${clipperPath}", config says "${folders.clippings_folder}". Edit its path in Web Clipper and in this file.` });
+      }
+    }
+    return warnings;
+  }
+
+  async loadClipperPaths() {
+    const files = (this.app.vault.getFiles?.() || []).filter((file) => file.path.startsWith("Meta/Web Clipper/") && file.path.endsWith(".json"));
+    const paths = {};
+    for (const file of files) {
+      try {
+        paths[file.path] = JSON.parse(await this.app.vault.read(file)).path || "";
+      } catch (error) {
+        paths[file.path] = "";
+      }
+    }
+    this.clipperPaths = paths;
+  }
+
+  renderConfigScreen(parent) {
+    const file = configFile(this.app);
+    const section = parent.createEl("section", { cls: "life-os-config-live" });
+    if (!file) {
+      this.renderLiveHeading(section, "Configuration", `No config note found at ${CONFIG_PATHS[0]}.`, "Missing");
+      this.addSmallButton(section, "Create config note", () => this.runWrite(() => this.writer.createNote("Meta", "Dev OS Config", `${frontmatterBlock(configPatch(readConfigDraft({})))}\n# Dev OS Config\n\nEdit these in Dev OS, Configure, or by hand here.\n`), "Config note created."), { icon: "plus", primary: true });
+      this.renderHealthSection(parent);
+      return;
+    }
+    if (!this.clipperPaths) void this.loadClipperPaths().then(() => this.activeScreen === "config" && this.render());
+    const state = this.configDraftState();
+    const draft = state.draft;
+    const personal = this.showPersonal();
+    const changes = diffConfig(state.base, draft);
+    const errors = validateConfigDraft(draft);
+    this.renderLiveHeading(section, "Configuration", `Edits ${file.path}. Values are saved to the note's properties; its text stays as it is.`, changes.length ? `${changes.length} unsaved ${changes.length === 1 ? "change" : "changes"}` : "Saved");
+
+    // Folders
+    const folderCard = section.createEl("section", { cls: "life-os-panel-card life-os-config-card" });
+    folderCard.createEl("h3", { text: "Folders" });
+    folderCard.createEl("p", { text: "Where Dev OS reads and creates notes. Changing a folder does not move existing notes." });
+    const listId = "life-os-config-folders";
+    const datalist = folderCard.createEl("datalist", { attr: { id: listId } });
+    for (const folder of this.vaultFolders()) datalist.createEl("option", { attr: { value: folder } });
+    const grid = folderCard.createDiv({ cls: "life-os-config-grid" });
+    for (const field of CONFIG_FOLDER_FIELDS.filter((item) => personal || !item.personal)) {
+      const row = grid.createEl("label", { cls: "life-os-field" });
+      row.createSpan({ cls: "life-os-field-label", text: field.label });
+      const line = row.createDiv({ cls: "life-os-form-row" });
+      const input = line.createEl("input", { cls: "life-os-input is-grow", attr: { type: "text", list: listId, "aria-label": `${field.label} folder` } });
+      input.value = draft.folders[field.key];
+      this.registerDomEvent(input, "change", () => { draft.folders[field.key] = input.value.trim(); this.render(); });
+      const exists = this.folderExists(normalizeFolder(draft.folders[field.key], ""));
+      this.addChip(line, exists ? "Exists" : "Missing", exists ? "is-accepted" : "is-alert");
+      if (draft.folders[field.key] !== DEFAULT_FOLDERS[field.folder]) {
+        this.addSmallButton(line, "", () => { draft.folders[field.key] = DEFAULT_FOLDERS[field.folder]; this.render(); }, { icon: "rotate-ccw", title: `Reset ${field.label} to ${DEFAULT_FOLDERS[field.folder]}` });
+      }
+    }
+    const warnings = this.configPathWarnings(draft.folders);
+    if (warnings.length) {
+      const box = folderCard.createDiv({ cls: "life-os-config-warnings" });
+      box.createEl("strong", { text: "Other plugins still point elsewhere" });
+      for (const warning of warnings) box.createEl("p", { text: warning.message });
+    }
+
+    if (personal) {
+      this.renderConfigList(section, {
+        title: "Daily questions",
+        hint: "Rated 1 to 10 every evening. A key is fixed once it exists, so old daily notes keep their scores; removing a question keeps its values in old notes.",
+        items: draft.questions, prefix: configPrefix(this.getConfigFrontmatter(), "dq_prefix", "dq_"), withText: true,
+        extra: (actions) => this.addSmallButton(actions, "Use engineering preset", () => this.confirmPreset(draft), { icon: "wand" }),
+      }, draft);
+      this.renderConfigList(section, {
+        title: "Habits",
+        hint: draft.habits.length > 5 ? "More than 5 habits: Setup recommends 3 to 5." : "Checkbox properties in each daily note.",
+        items: draft.habits, prefix: configPrefix(this.getConfigFrontmatter(), "habit_prefix", "habit_"), withText: false,
+      }, draft);
+      this.renderConfigList(section, {
+        title: "Wheel of life areas",
+        hint: "Scored 1 to 10 in each quarterly retreat.",
+        items: draft.wheel, prefix: configPrefix(this.getConfigFrontmatter(), "wheel_prefix", "wheel_"), withText: false,
+      }, draft);
+      const personalCard = section.createEl("section", { cls: "life-os-panel-card life-os-config-card" });
+      personalCard.createEl("h3", { text: "Personal" });
+      const row = personalCard.createDiv({ cls: "life-os-form-row" });
+      const birth = row.createEl("label", { cls: "life-os-field" });
+      birth.createSpan({ cls: "life-os-field-label", text: "Birthdate" });
+      const birthInput = birth.createEl("input", { cls: "life-os-input", attr: { type: "date", "aria-label": "Birthdate" } });
+      birthInput.value = draft.birthdate;
+      this.registerDomEvent(birthInput, "change", () => { draft.birthdate = birthInput.value; this.render(); });
+      const life = row.createEl("label", { cls: "life-os-field" });
+      life.createSpan({ cls: "life-os-field-label", text: "Life expectancy (years)" });
+      const lifeInput = life.createEl("input", { cls: "life-os-input", attr: { type: "number", min: "1", max: "120", "aria-label": "Life expectancy" } });
+      lifeInput.value = draft.lifeExpectancy;
+      this.registerDomEvent(lifeInput, "change", () => { draft.lifeExpectancy = lifeInput.value.trim(); this.render(); });
+    } else {
+      section.createEl("p", { cls: "life-os-form-hint", text: "Daily questions, habits, wheel areas, and birthdate appear here when personal modules are on (View menu or Settings)." });
+    }
+
+    const boards = section.createEl("section", { cls: "life-os-panel-card life-os-config-card" });
+    boards.createEl("h3", { text: "Boards" });
+    boards.createEl("p", { text: "Kanban lanes that count as finished on the Boards dashboard." });
+    const chips = boards.createDiv({ cls: "life-os-people-row" });
+    draft.doneLanes.forEach((lane, index) => {
+      const chip = chips.createSpan({ cls: "life-os-chip is-person" });
+      chip.createSpan({ text: lane });
+      const remove = chip.createEl("button", { cls: "life-os-chip-remove", text: "×", attr: { "aria-label": `Remove lane ${lane}` } });
+      remove.type = "button";
+      this.registerDomEvent(remove, "click", () => { draft.doneLanes.splice(index, 1); this.render(); });
+    });
+    const laneInput = chips.createEl("input", { cls: "life-os-input", attr: { type: "text", placeholder: "Add a lane name", "aria-label": "New done lane" } });
+    this.registerDomEvent(laneInput, "keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault?.();
+      const lane = laneInput.value.trim();
+      if (lane && !draft.doneLanes.includes(lane)) draft.doneLanes.push(lane);
+      this.render();
+    });
+
+    const bar = section.createDiv({ cls: "life-os-config-save" });
+    if (errors.length) {
+      const box = bar.createDiv({ cls: "life-os-form-error" });
+      for (const error of errors) box.createEl("p", { text: error });
+    }
+    const list = bar.createDiv({ cls: "life-os-config-changes" });
+    if (!changes.length) list.createEl("p", { text: "No changes." });
+    else {
+      list.createEl("strong", { text: "Changes to save" });
+      const ul = list.createEl("ul");
+      for (const change of changes) ul.createEl("li", { text: change });
+    }
+    const actions = bar.createDiv({ cls: "life-os-form-actions" });
+    actions.createSpan({ cls: "life-os-form-hint", text: "Obsidian rewrites the property block when saving; values stay the same." });
+    this.addSmallButton(actions, "Open note", () => this.openPath(file.path), { icon: "file-text" });
+    const reset = this.addSmallButton(actions, "Reset", () => { this.configDraft = null; this.render(); }, { icon: "undo-2" });
+    reset.disabled = !changes.length;
+    const save = this.addSmallButton(actions, "Save configuration", () => this.saveConfig(), { icon: "save", primary: true });
+    save.disabled = !changes.length || errors.length > 0;
+
+    this.renderHealthSection(parent);
+  }
+
+  renderConfigList(parent, { title, hint, items, prefix, withText, extra }, draft) {
+    const card = parent.createEl("section", { cls: "life-os-panel-card life-os-config-card" });
+    card.createEl("h3", { text: title });
+    card.createEl("p", { text: hint });
+    const list = card.createDiv({ cls: "life-os-config-list" });
+    items.forEach((item, index) => {
+      const row = list.createDiv({ cls: "life-os-config-item" });
+      if (withText) {
+        const input = row.createEl("input", { cls: "life-os-input is-grow", attr: { type: "text", "aria-label": `${title} ${index + 1}` } });
+        input.value = item.text;
+        this.registerDomEvent(input, "change", () => { item.text = input.value; this.render(); });
+      } else {
+        row.createSpan({ cls: "life-os-config-label", text: this.formatPropertyLabel(item.key) });
+      }
+      row.createEl("code", { cls: "life-os-config-key", text: item.key, attr: { title: item.locked ? "Fixed: notes already use this key" : "New key, created on save" } });
+      this.addSmallButton(row, "", () => { if (index > 0) { items.splice(index - 1, 0, items.splice(index, 1)[0]); this.render(); } }, { icon: "arrow-up", title: `Move ${item.key} up` });
+      this.addSmallButton(row, "", () => { if (index < items.length - 1) { items.splice(index + 1, 0, items.splice(index, 1)[0]); this.render(); } }, { icon: "arrow-down", title: `Move ${item.key} down` });
+      this.addSmallButton(row, "", () => { items.splice(index, 1); this.render(); }, { icon: "trash-2", title: `Remove ${item.key}` });
+    });
+    const add = card.createDiv({ cls: "life-os-form-row" });
+    const input = add.createEl("input", { cls: "life-os-input is-grow", attr: { type: "text", placeholder: withText ? "Did I do my best to ...?" : "Name, for example Exercise", "aria-label": `New ${title.toLowerCase()}` } });
+    const submit = () => {
+      const label = input.value.trim();
+      if (!label) return;
+      const taken = [...draft.questions, ...draft.habits, ...draft.wheel].map((entry) => entry.key);
+      const key = configKeyFor(prefix, withText ? label.replace(/^did i do my best to\s*/i, "").replace(/\?$/, "") : label, taken);
+      items.push(withText ? { key, text: label, locked: false } : { key, locked: false });
+      this.render();
+    };
+    this.addSmallButton(add, "Add", submit, { icon: "plus" });
+    this.registerDomEvent(input, "keydown", (event) => { if (event.key === "Enter") { event.preventDefault?.(); submit(); } });
+    if (extra) extra(add);
+  }
+
+  confirmPreset(draft) {
+    const modal = new LifeOSFormModal(this.app, {
+      title: "Use the engineering questions",
+      description: `Replaces the ${draft.questions.length} current questions with ${ENGINEERING_QUESTIONS.length} engineering ones in this draft. Nothing is saved until you press Save configuration; old daily notes keep their scores.`,
+      fields: [{ key: "confirm", label: "Replace the question list", type: "checkbox", value: false }],
+      submitLabel: "Replace",
+      onSubmit: async (values) => {
+        if (!values.confirm) throw new Error("Tick the box to replace the list.");
+        draft.questions = ENGINEERING_QUESTIONS.map((item) => ({ ...item, locked: false }));
+        this.render();
+        return true;
+      },
+    });
+    modal.open();
+    return modal;
+  }
+
+  async saveConfig() {
+    const state = this.configDraftState();
+    const errors = validateConfigDraft(state.draft);
+    if (errors.length) { new Notice(errors[0]); return false; }
+    const ok = await this.runWrite(() => this.writer.setFrontmatter(state.path, configPatch(state.draft)), "Configuration saved.");
+    if (ok) { this.configDraft = null; this.render(); }
+    return ok;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Vault health check (read only)
+
+  healthInput() {
+    const folders = this.getConfiguredFolders();
+    const config = readConfigDraft(this.getConfigFrontmatter());
+    const folderList = CONFIG_FOLDER_FIELDS.filter((field) => this.showPersonal() || !field.personal)
+      .map((field) => ({ label: field.label, path: folders[field.folder], exists: this.folderExists(folders[field.folder]) }));
+    const types = new Set(["project", "sprint", "meeting", "adr", "release", "tech-note", "postmortem", "clipping", "person"]);
+    const notes = this.app.vault.getMarkdownFiles()
+      .filter((file) => !/^(Templates|scripts|build)\//.test(file.path))
+      .map((file) => ({ file, data: this.getFrontmatter(file) }))
+      .filter(({ data }) => types.has(data.type))
+      .map(({ file, data }) => ({
+        path: file.path, title: this.getFileTitle(file), type: data.type, status: String(data.status || "").toLowerCase(),
+        project: linkTarget(data.project), currentSprint: linkTarget(data.current_sprint), supersedes: linkTarget(data.supersedes),
+        adrNumber: data.adr_number, end: isoDate(data.end), example: this.isExample(data),
+      }));
+    return {
+      today: this.today(),
+      folders: folderList,
+      pathWarnings: this.configPathWarnings(config.folders),
+      notes,
+      tasks: this.allTasks(),
+      people: notes.filter((note) => note.type === "person").map((note) => slugify(note.title)),
+    };
+  }
+
+  renderHealthSection(parent) {
+    const section = parent.createEl("section", { cls: "life-os-health-live" });
+    const report = this.healthReport;
+    const counts = report ? ["error", "warn", "info"].map((severity) => report.filter((issue) => issue.severity === severity).length) : null;
+    this.renderLiveHeading(section, "Vault health", "Read-only check for missing folders, broken project links, task tags without notes, dependency problems, sprint state, and leftover samples. Nothing is changed.",
+      counts ? `${counts[0]} errors, ${counts[1]} warnings, ${counts[2]} notes` : "Not run");
+    const actions = section.createDiv({ cls: "life-os-form-actions" });
+    this.addSmallButton(actions, report ? "Run again" : "Run check", async () => {
+      if (!this.clipperPaths) await this.loadClipperPaths();
+      if (!this.taskSnapshot) await this.refreshLiveData();
+      this.healthReport = runHealthCheck(this.healthInput());
+      this.render();
+    }, { icon: "stethoscope", primary: !report });
+    if (!report) return;
+    if (!report.length) { section.createDiv({ cls: "life-os-live-empty", text: "No problems found." }); return; }
+    for (const [severity, label] of [["error", "Errors"], ["warn", "Warnings"], ["info", "Notes"]]) {
+      const items = report.filter((issue) => issue.severity === severity);
+      if (!items.length) continue;
+      section.createEl("h3", { cls: "life-os-subheading", text: `${label} · ${items.length}` });
+      const list = section.createDiv({ cls: "life-os-health-list" });
+      for (const issue of items) {
+        const row = list.createDiv({ cls: `life-os-health-item is-${severity}` });
+        row.createSpan({ cls: "life-os-health-code", text: issue.code });
+        row.createSpan({ cls: "life-os-health-message", text: issue.message });
+        if (issue.path && issue.path.endsWith(".md")) this.addSmallButton(row, "Open", () => this.openPath(issue.path, issue.line || null), { icon: "arrow-up-right" });
       }
     }
   }

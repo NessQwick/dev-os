@@ -5,7 +5,7 @@ This separates reproducible development evidence from native acceptance. A local
 ## Identify the candidate
 
 - Template version: 1.1.0 candidate
-- Dev OS plugin (`life-os-app`) version: 1.1.0
+- Dev OS plugin (`life-os-app`) version: 1.2.0
 - Archive SHA256: use the exact candidate's external `.sha256` sidecar; not embedded here to avoid self-referential hashes
 - Operating system and Obsidian version: not recorded
 - Test date and reviewer: not recorded
@@ -37,6 +37,10 @@ Provider authentication, an actual AI request, external calendar integration, an
 ## Evidence rules
 
 Bind screenshots and results to the exact candidate checksum. Label synthetic fixtures visibly. Record failures and skipped checks. A passing static, mock-runtime, or browser test does not mark this record complete.
+
+## Development checks, 2026-10-10 (Dev OS 1.2.0)
+
+Dev OS application 1.2.0 passed 112 static and mock-runtime checks, adding config draft reading, key generation, patch and diff, validation, the Configure save flow, and the vault health check (folders, links, tags, ids, cycles, sprint state). The browser fixture passed sixteen modules including a Configure save and a health check run. Native check still required: how Obsidian formats the config property block after a save from Configure.
 
 ## Development checks, 2026-10-10 (Dev OS 1.1.0)
 
