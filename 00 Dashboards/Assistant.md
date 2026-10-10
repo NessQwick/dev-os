@@ -10,7 +10,7 @@ The buttons below prepare a prompt with automatic sending disabled. Review it in
 - Approving a context selection is not approval to edit, install, spend, or publish.
 - A configured agent or local API key is not proof of authentication, a working connection, or a successfully tested workflow.
 
-The first-party Life OS dashboard does not make provider calls. These controls hand off to Agent Client; its settings, external clients, and the chosen agent determine actual behavior.
+The first-party Dev OS dashboard does not make provider calls. These controls hand off to Agent Client; its settings, external clients, and the chosen agent determine actual behavior.
 
 ## Daily
 ```agent
@@ -31,6 +31,14 @@ autoSend: false
 type: button
 text: "What matters today"
 prompt: "Read Prompts/14 What Matters Today.md with vault_read and follow its Prompt section for the note I have open (or the current period if none applies)."
+viewType: embed
+autoSend: false
+```
+
+```agent
+type: button
+text: "Draft my standup"
+prompt: "Read Prompts/18 Standup Draft.md with vault_read and follow its Prompt section for the note I have open (or the current period if none applies)."
 viewType: embed
 autoSend: false
 ```
@@ -95,11 +103,19 @@ viewType: embed
 autoSend: false
 ```
 
-## Writing and research
 ```agent
 type: button
-text: "Work on this piece"
-prompt: "Read Prompts/10 Writing Pipeline.md with vault_read and follow its Prompt section for the note I have open (or the current period if none applies)."
+text: "Review this sprint"
+prompt: "Read Prompts/17 Sprint Review.md with vault_read and follow its Prompt section for the note I have open (or the current period if none applies)."
+viewType: embed
+autoSend: false
+```
+
+## Docs and research
+```agent
+type: button
+text: "Work on this doc"
+prompt: "Read Prompts/10 Docs and ADR Drafting.md with vault_read and follow its Prompt section for the note I have open (or the current period if none applies)."
 viewType: embed
 autoSend: false
 ```

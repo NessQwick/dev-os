@@ -11,6 +11,13 @@ tags:
 ---
 # <% tp.file.title %>
 
+```agent
+type: button
+text: "Work on this decision"
+prompt: "Read Prompts/10 Docs and ADR Drafting.md with vault_read and follow its Prompt section for the note I have open (or the current period if none applies)."
+viewType: right-pane
+```
+
 ## Context
 What is the issue that motivates this decision?
 

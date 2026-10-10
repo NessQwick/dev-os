@@ -1,14 +1,14 @@
-Video: 18:36 to 20:46. Everything is DataviewJS reading properties; nothing on the page is typed by hand.
+Everything is DataviewJS reading properties; nothing on the page is typed by hand.
 
 ## Widgets and where they read from
-| Widget (video) | View | Reads |
+| Widget | View | Reads |
 | --- | --- | --- |
-| Wheel of life from this quarter's retreat (19:18) | `Meta/views/wheel.js` | `wheel_*` numbers in `02 Retreats/YYYY-QN Personal Retreat.md`, found by today's date |
-| Combined daily questions, toggles, time-frame dropdown (19:39) | `Meta/views/dailyquestions.js` | every `dq_*` number in the daily notes |
-| Habits: current streak, best streak, longest break, completion %, total, recent days (20:01) | `Meta/views/habits.js` | every `habit_*` checkbox in the daily notes |
-| Life theme (20:19) | embed | `03 Planning/Life Theme.md#Theme` |
-| Memento mori (20:21) | `Meta/views/memento.js` | `birthdate`, `life_expectancy` in `Meta/Compass Config.md` |
-| Quick links to capture and to the planning notes (20:23) | `Meta/views/quicklinks.js` | QuickAdd command ids, today's date |
+| Wheel of life from this quarter's retreat | `Meta/views/wheel.js` | `wheel_*` numbers in `02 Retreats/YYYY-QN Personal Retreat.md`, found by today's date |
+| Combined daily questions, toggles, time-frame dropdown | `Meta/views/dailyquestions.js` | every `dq_*` number in the daily notes |
+| Habits: current streak, best streak, longest break, completion %, total, recent days | `Meta/views/habits.js` | every `habit_*` checkbox in the daily notes |
+| Life theme | embed | `03 Planning/Life Theme.md#Theme` |
+| Memento mori | `Meta/views/memento.js` | `birthdate`, `life_expectancy` in `Meta/Compass Config.md` |
+| Quick links to capture and to the planning notes | `Meta/views/quicklinks.js` | QuickAdd command ids, today's date |
 
 Also: `Projects Dashboard.md` (his projects dashboard, 19:03), `Daily Questions.md` (his journaling dashboards, 18:54), `Habit Canvas.md`, `Task Dashboard.md`.
 

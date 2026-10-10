@@ -1,6 +1,6 @@
 # Workflow 3: Multi-Scale Planning
 
-Video: 7:53 to 9:45. Cal Newport's term: align daily, weekly, and quarterly plans so daily action serves what the retreat decided.
+Cal Newport's term: align daily, weekly, and quarterly plans so daily action serves what the retreat decided.
 
 ## Layers
 | Layer | Note | Template | Reviewed |
@@ -10,10 +10,10 @@ Video: 7:53 to 9:45. Cal Newport's term: align daily, weekly, and quarterly plan
 | Week | `01 Journal/Weekly/gggg-Www.md` | `Templates/Weekly Note.md` | Sunday or Monday, and Friday review |
 | Day | `01 Journal/Daily/YYYY-MM-DD.md` | `Templates/Daily Note.md` | morning and 21:00 |
 
-No annual plan, by design (8:46).
+No annual plan, by design.
 
 ## How the layers connect
-- Periodic Notes creates each layer in its folder from its template (9:16). Templater fills the date math.
+- Periodic Notes creates each layer in its folder from its template. Templater fills the date math.
 - Daily note embeds **this week's intentions** and **this quarter's intentions** are embedded in the weekly note; the quarterly note embeds the **retreat's intentions**. One source of truth, visible at every scale.
 - Every note has a navigation line: previous, parent scale, dashboard, next.
 - `Ideal Week` is checked in the weekly note and rewritten at the retreat.

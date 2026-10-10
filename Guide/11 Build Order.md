@@ -1,4 +1,4 @@
-Mike's warning (22:42): it took him five years; copying it in a weekend is "a fantastic way to bounce off of Obsidian entirely." Pick one workflow, run it for 30 days, then add the next.
+Mike's warning: it took him five years; copying it in a weekend is "a fantastic way to bounce off of Obsidian entirely." Pick one workflow, run it for 30 days, then add the next.
 
 | Days | Layer | Definition of done |
 | --- | --- | --- |

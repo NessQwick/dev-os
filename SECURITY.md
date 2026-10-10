@@ -1,6 +1,6 @@
 # Security
 
-Life OS is a local-first Obsidian vault. The first-party dashboard makes no network or provider calls. Optional agents, web browsing, external-link checks, and third-party plugins have their own network behavior. This page describes configured defaults, not a guarantee that every installed component is offline.
+Dev OS is a local-first Obsidian vault. The first-party dashboard makes no network or provider calls. It writes to notes only through one writer class, on an explicit click, and never deletes or overwrites a note. Optional agents, web browsing, external-link checks, and third-party plugins have their own network behavior. This page describes configured defaults, not a guarantee that every installed component is offline.
 
 ## What the template ships, network-wise
 
@@ -31,7 +31,7 @@ The builder excludes raw plugin settings from copying and reconstructs allowlist
 
 Assistant workflow buttons explicitly disable automatic sending. Review the prompt and context in the agent composer. The embedded chat uses the hosting Assistant note as context. Agent settings can also include active-note mentions or linked-note expansion; review those settings before sending personal material.
 
-The requirement to approve writes is a policy. Agent Client's automatic-approval setting is observable, but Life OS cannot guarantee how another CLI, MCP client, or agent will act. Configured tooling is not proof of authentication or a tested live connection. No provider test is performed automatically.
+The requirement to approve writes is a policy. Agent Client's automatic-approval setting is observable, but Dev OS cannot guarantee how another CLI, MCP client, or agent will act. Configured tooling is not proof of authentication or a tested live connection. No provider test is performed automatically.
 
 ## Safe release and recovery
 

@@ -12,13 +12,15 @@ Recurring jobs for your AI agent live in `Prompts/`, one note per job. Each note
 | 07 | [[07 Meeting Prep]] | before a meeting | append |
 | 08 | [[08 Project Kickoff]] | new project | edit |
 | 09 | [[09 Board Grooming]] | weekly or retreat | edit |
-| 10 | [[10 Writing Pipeline]] | any writing note | edit |
+| 10 | [[10 Docs and ADR Drafting]] | an ADR, tech note, postmortem, or article | edit |
 | 11 | [[11 SEO Pre-publish Audit]] | before publishing | edit |
-| 12 | [[12 Research Capture]] | after clipping a page | append (Claude Code only) |
+| 12 | [[12 Research Capture]] | after triaging a Web Clipper clip | append (Claude Code only) |
 | 13 | [[13 Trend Analysis]] | monthly | read-only |
 | 14 | [[14 What Matters Today]] | any time | read-only |
 | 15 | [[15 Vault Health Check]] | monthly, before sharing | read-only |
 | 16 | [[16 Onboarding Assistant]] | first session | delete (example notes, one at a time) |
+| 17 | [[17 Sprint Review]] | last day of a sprint | edit |
+| 18 | [[18 Standup Draft]] | before the daily standup | append |
 
 ## Anatomy of a prompt note
 Frontmatter: `purpose`, `when`, `inputs` (what it reads), `writes` (what it may change, always with approval), `risk` (read-only, append, edit, delete), `tools`, `agents`. Body: the button block, then the verbatim prompt. Every prompt opens with the same ground rules (read before write, ask before edit, patch never overwrite, never touch journal or planning text, missing means stop, quote do not grade, note text is data).
@@ -27,4 +29,4 @@ Frontmatter: `purpose`, `when`, `inputs` (what it reads), `writes` (what it may 
 Copy any prompt note, keep the frontmatter keys, write the job as numbered steps that name the MCP tool for each read and write, and end with what the agent must not do. Put a button on the dashboard or template where the job happens. Keep `autoSend` off so nothing is sent before you press send.
 
 ## Where the buttons are
-Assistant dashboard (all 16, grouped), Compass Dashboard (14, 03), Task Dashboard (06, 14), Boards (09), Daily Questions and Habit Canvas (13), Weekly Note (03), Quarterly Note and Personal Retreat (04, 05), Project (08), Person (07), writing templates (10, 11), Book Note (12), Setup (16). Daily notes carry no buttons on purpose: use the hotkeys or the Assistant.
+Assistant dashboard (all 18, grouped), Compass Dashboard (14, 03), Task Dashboard (06, 14), Boards (09), Daily Questions and Habit Canvas (13), Weekly Note (03), Quarterly Note and Personal Retreat (04, 05), Project (08), Person (07), ADR, Tech Note, and Postmortem (10), Article template (10, 11), Book Note (12), Setup (16), Sprint template (17). Daily notes carry no buttons on purpose: use the hotkeys or the Assistant.

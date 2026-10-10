@@ -1,10 +1,11 @@
-Projects are notes in `04 Projects/` with a `status`, `area`, `quarter`, and `due` property. Tasks belong to a project via `#project/<slug>`.
+Projects are notes in `04 Projects/` with `status`, `priority`, `repo`, `due`, and `current_sprint` properties. Tasks belong to a project via `#project/<slug>`. The Dev OS view (Projects, then a project page) edits the same data; this page is the plain Markdown view.
 
 ## Active
 ```dataviewjs
 const cfg = dv.page("Meta/Compass Config") || {};
 const folder = cfg.projects_folder || "04 Projects";
-const projects = dv.pages(`"${folder}"`).where(p => p.type === "project" && p.status !== "done").sort(p => p.due ?? "9999", "asc");
+const rank = { high: 0, normal: 1, low: 2 };
+const projects = dv.pages(`"${folder}"`).where(p => p.type === "project" && p.status !== "done").sort(p => `${rank[p.priority] ?? 1}${p.due ?? "9999"}`, "asc");
 const slug = n => n.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 const allTasks = dv.pages().where(p => !p.file.path.startsWith("wiki/")).file.tasks;
 const rows = projects.map(p => {
@@ -13,9 +14,10 @@ const rows = projects.map(p => {
   const open = mine.where(t => !t.completed).length;
   const done = mine.where(t => t.completed).length;
   const pct = open + done ? Math.round(100 * done / (open + done)) : 0;
-  return [p.file.link, p.status, p.area ?? "", p.quarter ?? "", p.due ?? "", open, `${pct}%`];
+  const blocked = mine.where(t => !t.completed && (t.tags || []).includes("#blocked")).length;
+  return [p.file.link, p.status, p.priority ?? "", p.current_sprint ?? "", p.due ?? "", open, blocked, `${pct}%`];
 });
-dv.table(["Project", "Status", "Area", "Quarter", "Due", "Open tasks", "Progress"], rows);
+dv.table(["Project", "Status", "Priority", "Sprint", "Due", "Open tasks", "Blocked", "Progress"], rows);
 ```
 
 ## By quarter

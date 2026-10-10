@@ -1,55 +1,63 @@
 <p align="center"><img src="Meta/attachments/cover.png" alt="Compass" width="100%"></p>
 <!-- Fallback if the PNG is missing: <p align="center"><img src="Meta/attachments/cover.svg" alt="Compass" width="100%"></p> -->
 
-# Life OS
+# Dev OS
 
-*Run your whole life out of Obsidian: one honest question set a night, everything else follows.*
+*An Obsidian workspace for developers and IT project managers: projects, sprints, meeting minutes, decisions, and everything you clip from the web, in plain Markdown.*
 
-Compass is a complete Obsidian vault template of the system Mike Schmitz describes in "How I Run My Whole Life Out of Obsidian": journaling with daily questions, quarterly personal retreats, multi-scale planning, habit tracking, daily reading, task management, writing boards, and a DataviewJS dashboard that ties it together. The first-party Life OS application now sits above those workflows, with an AI assistant that reads `AGENTS.md` and runs a library of approval-aware prompts. Everything remains plain Markdown and properties. Ten community plugins and the first-party Life OS plugin ship inside the folder with their licenses.
+Dev OS is an Obsidian vault plus a first-party plugin that turns it into an interactive dashboard. You add tasks, move sprint cards, write meeting minutes, change project and decision status, and triage web clippings without leaving the Dev OS view. Every click writes ordinary Markdown and properties, so the notes stay readable, searchable, and usable by the Tasks, Dataview, and Kanban plugins and by any AI agent that follows `AGENTS.md`.
 
-**Status: development candidate, not a newly accepted public release.** The existing 1.0.2 archives predate the Life OS application. The next template candidate is 1.1.0, subject to packaging and native acceptance. Requires Obsidian 1.13.1 or newer. Core dashboard mobile compatibility needs native testing; Agent Client and the local API bridge are desktop-only.
+It grew out of Compass, a life-planning template. The personal layer (journal, daily questions, habits, quarterly retreats, reading plan) is still there, hidden by default; turn it on in **Settings, Dev OS, Show personal modules**.
 
-## Watch the demo
-
-[![Watch the Compass (Life OS) demo by Daniel Agrici](https://i.ytimg.com/vi/0mUx4z6M5AU/hqdefault.jpg)](https://www.youtube.com/watch?v=0mUx4z6M5AU)
-
-**[Watch demo here](https://www.youtube.com/watch?v=0mUx4z6M5AU)**: a walkthrough of Compass by Daniel Agrici.
-
-## Watch the idea
-
-[![How I Run My Whole Life Out of Obsidian](https://img.youtube.com/vi/-h7ZAuuNDLE/maxresdefault.jpg)](https://www.youtube.com/watch?v=-h7ZAuuNDLE)
-
-Video by Mike Schmitz, Practical PKM (published 2026-06-26). Compass is an independent implementation of what the video describes. It is not affiliated with, endorsed by, or derived from Practical PKM, the LifeHQ vault, or the Obsidian Starter Vault, and contains none of their files or text. See `CREDITS.md`.
+**Status: development candidate.** Requires Obsidian 1.13.1 or newer. Core dashboard mobile compatibility needs native testing; Agent Client and the local API bridge are desktop-only.
 
 ## Quick start
 
-1. Download the zip from Releases, or clone this repository. The repository root is the vault.
+1. Clone this repository or download the zip. The repository root is the vault.
 2. Open the folder in Obsidian (Open folder as vault).
-3. When Obsidian asks about Restricted mode, click **Turn off**. Then run the command **Reload app without saving** so the ten community plugins and Life OS light up. Life OS opens automatically after reload.
-4. Open `00 Dashboards/Setup.md`. It checks itself and tells you what is left.
-5. Tonight: Ctrl/Cmd+Shift+D opens today's note, Ctrl/Cmd+Shift+Q asks the questions. Answer 1 to 10, write one line under `## Journal`. Stop there. Everything else waits 30 days.
+3. When Obsidian asks about Restricted mode, click **Turn off**, then run **Reload app without saving** so the community plugins and Dev OS load. Dev OS opens automatically (Ctrl/Cmd+Shift+L).
+4. Open **View, Show sample data** in the Dev OS topbar to see the example project, sprint, meeting, ADR, and clipping. Hide them again once your own notes exist.
+5. Create your first project (**Projects, New project**), open it, and add tasks and meeting minutes from the project page.
+6. Install Obsidian Web Clipper in your browser and import the templates from `Meta/Web Clipper/` (`Guide/24 Web Clipper.md`).
 
-Notes tagged `example` are seed data so the dashboards render on first open; the Setup checklist reminds you to delete them.
+Notes tagged `example` are seed data; the Setup checklist (`00 Dashboards/Setup.md`) reminds you to delete them.
+
+## What the Dev OS view does
+
+| Screen | What you do there | What it writes |
+| --- | --- | --- |
+| Home | See what needs attention, the active sprint, today's meetings, the clip inbox; quick-add a task | task lines |
+| Today | Standup drafted from tasks (done since last working day, due or in progress, `#blocked`); copy it or write it to the daily note | `## Standup` in the daily note, task lines |
+| Projects | Change status and priority on each card, see progress and overdue counts | project properties |
+| Project page | Edit status, priority, target date, repo, stakeholders; tabs for Tasks (add with due, scheduled, sprint, owner, priority, blocked), Meetings (minutes composer and timeline), Docs, Clips | project properties, task lines under `## Tasks`, new meeting notes, `## Notes` in a meeting |
+| Sprint | Board with To do, In progress, Done; start, finish, reopen; start or close the sprint | task status (`[ ]`, `[/]`, `[x]`), sprint status |
+| Meetings | Minutes composer, upcoming and recent meetings, open action items | new meeting notes, task lines |
+| Docs | ADRs, tech notes, postmortems with filters; status from a dropdown; auto-numbered new ADRs | doc properties, new notes |
+| Inbox | Triage Web Clipper clips: assign a project, mark read, archive, keep as a tech note | clip properties, one file move |
+| Tasks, People, Library, Brain, AI | Every open task, people with discussion items, books and clips, the link graph, AI readiness | task lines |
+
+All writes go through one class in the plugin, happen only on an explicit click, never overwrite an existing note, and refuse to change a task line that changed since it was read. The plugin makes no network requests. Details: `Guide/21 Life OS Application.md`.
 
 ## What is inside
 
 ```
-00 Dashboards/   Setup, Compass Dashboard, Habit Canvas, Daily Questions, Task, Projects, Boards, Assistant
-01 Journal/      Daily, Weekly, Quarterly periodic notes
-02 Retreats/     YYYY-QN Personal Retreat notes (wheel of life in their properties)
-03 Planning/     Life Theme, Core Values (+ roles), Ideal Week
-04 Projects/     project notes (#project/<slug> tasks) and the Projects Board
-05 People/       people notes (#p/<slug> tasks, #discuss roll-ups)
-06 Writing/      Newsletters, YouTube Scripts, Articles, Course Content, each with a Kanban board
-07 Library/      Book Notes (quotes with block ids for embedding)
-08 Tasks/        Tasks.md, the master list you capture to and never read
-09 Reading/      Reading Plan, Chapters, Verses, Study Notes, Topics (Bible is the worked example)
-Prompts/         16 prompts for your AI agent, one note per recurring job
-Templates/       Templater templates; property lists come from Meta/Compass Config.md
-Meta/            Compass Config.md (the single config), views/*.js (dashboard widgets), version.md
-Guide/           principles, plugins, one page per workflow, build order, agents, MCP, prompt library
-wiki/, inbox/    knowledge layer for the claude-obsidian plugin (optional; plain Markdown without it)
-scripts/         reading plan generator, Bible splitter, template build and verify
+00 Dashboards/   Setup, Task, Projects, Sprint, Decisions, Boards, Assistant (+ personal: Compass, Habit Canvas, Daily Questions)
+01 Journal/      Daily notes (Standup, Work log, Journal), Weekly, Quarterly
+02 Retreats/     quarterly personal retreats (personal layer)
+03 Planning/     Life Theme, Core Values, Ideal Week (personal layer)
+04 Projects/     project notes (#project/<slug> tasks), Sprints/ (#sprint/<slug>), Projects Board
+05 People/       teammates and stakeholders (#p/<slug> tasks, #discuss roll-ups)
+06 Writing/      Decisions (ADRs), Tech Notes, Postmortems, Articles (with a Kanban board)
+07 Library/      Clippings (Web Clipper inbox), Book Notes
+08 Tasks/        Tasks.md, the master inbox
+09 Reading/      reading plan module (personal layer, optional)
+10 Meetings/     meeting minutes: agenda, notes, decisions, action items
+Prompts/         18 prompts for your AI agent, one note per recurring job
+Templates/       Templater templates for every note type
+Meta/            Compass Config.md (folders, questions, habits), Web Clipper/ templates, views/*.js
+Guide/           how the system works, one page per workflow
+wiki/, inbox/    knowledge layer for the claude-obsidian plugin (optional)
+scripts/         template build and verify, reading plan generator
   .github/         CI workflow (verify) and issue templates
 CHANGELOG.md, CONTRIBUTING.md, SECURITY.md, CODE_OF_CONDUCT.md, CREDITS.md, LICENSE, LICENSE-GUIDE.md, THIRD_PARTY_NOTICES.md
 .claude-obsidian.json  marker for the claude-obsidian knowledge layer
@@ -58,27 +66,30 @@ AGENTS.md        rules and folder map for any AI agent; CLAUDE.md and GEMINI.md 
 .mcp.example.json  how to point an agent at Obsidian's MCP server (Local REST API)
 ```
 
-`Meta/Compass Config.md` is the single config: questions, habits, wheel areas, folders, prefixes, birthdate. Dashboards discover `dq_*`, `habit_*`, and `wheel_*` properties by prefix, so changing the lists there changes the whole vault.
+`Meta/Compass Config.md` is the single config: folders for projects, sprints, meetings, decisions, docs, and clippings, plus the personal layer's questions, habits, and wheel areas.
 
-## The seven workflows
+## Conventions
 
-| # | Workflow | Where it lives | Guide |
-| --- | --- | --- | --- |
-| 1 | Journaling with Daily Questions | `01 Journal/Daily`, `Templates/Daily Note.md`, `Templates/Daily Questions Prompt.md`, questions in `Meta/Compass Config.md` | `Guide/03 Workflow - Journaling and Daily Questions.md` |
-| 2 | Quarterly personal retreat | `02 Retreats`, `Templates/Personal Retreat.md` | `Guide/04 Workflow - Personal Retreat.md` |
-| 3 | Multi-scale planning | `01 Journal/{Daily,Weekly,Quarterly}`, `03 Planning` | `Guide/05 Workflow - Multi-Scale Planning.md` |
-| 4 | Habit tracking | `habit_*` properties in the daily note, `00 Dashboards/Habit Canvas.md` | `Guide/06 Workflow - Habit Tracking.md` |
-| 5 | Daily reading (Bible as the worked example) | `09 Reading` | `Guide/07 Workflow - Daily Reading.md` |
-| 6 | Task management | `08 Tasks/Tasks.md`, `04 Projects`, `05 People`, `00 Dashboards/Task Dashboard.md` | `Guide/08 Workflow - Task Management.md` |
-| 7 | Writing | `06 Writing/*` with Kanban boards | `Guide/09 Workflow - Writing.md` |
+- Tasks use the Obsidian Tasks emoji format: `📅` due, `⏳` scheduled, `⏫` high, `➕` created, `✅` done. `- [/]` is in progress.
+- Routing tags: `#project/<slug>` (project), `#sprint/<slug>` (sprint), `#p/<slug>` (owner or person), `#blocked`, `#discuss`. The slug is the note title lowercased, with non-alphanumerics replaced by `-`.
+- Notes link to their project with a `project: "[[Project name]]"` property (sprints, meetings, ADRs, tech notes, postmortems, clippings).
+- An accepted ADR is never rewritten. A new ADR supersedes it.
 
-Layered on top: the Compass dashboard (`Guide/10`), Kanban boards (`Guide/13`), AI in the vault (`Guide/14`, `Guide/20`), the claude-obsidian knowledge layer (`Guide/15`), research and publishing with Web viewer, SEO, and Vault Lens (`Guide/16`, `Guide/17`), and the Obsidian MCP bridge (`Guide/19`). Start with `Guide/00 Start Here.md`.
+## Workflows
 
-The layering rule: pick one workflow, probably the daily journaling, get it working for 30 days, then layer the next one. `Setup.md` enforces that order.
+| Workflow | Where it lives | Guide |
+| --- | --- | --- |
+| Tasks, projects, and sprints | `08 Tasks`, `04 Projects`, `04 Projects/Sprints`, Task and Sprint dashboards | `Guide/08 Workflow - Task Management.md` |
+| Meetings and standups | `10 Meetings`, the daily note's Standup section | `Guide/08 Workflow - Task Management.md` |
+| Decisions and docs | `06 Writing/Decisions`, `Tech Notes`, `Postmortems`, `Articles` | `Guide/09 Workflow - Writing.md` |
+| Web clipping and research | `07 Library/Clippings`, `wiki/` | `Guide/24 Web Clipper.md`, `Guide/15 claude-obsidian.md` |
+| Personal layer (optional) | journal, daily questions, habits, retreats, reading | `Guide/03` to `Guide/07` |
+
+Start with `Guide/00 Start Here.md`.
 
 ## Plugins included
 
-All ten community plugins are bundled under `.obsidian/plugins/`, each with a recorded version and license, and are listed as enabled. Byte-for-byte upstream provenance is a separate release check. The first-party `life-os-app` plugin is installed alongside them. Details and the first-open checklist are in `Guide/02 Plugins.md`.
+All ten community plugins are bundled under `.obsidian/plugins/`, each with a recorded version and license, and are listed as enabled. Byte-for-byte upstream provenance is a separate release check. The first-party `life-os-app` plugin (Dev OS) is installed alongside them. Details and the first-open checklist are in `Guide/02 Plugins.md`.
 
 | Plugin | Id | Version | License |
 | --- | --- | --- | --- |
@@ -93,14 +104,14 @@ All ten community plugins are bundled under `.obsidian/plugins/`, each with a re
 | Agent Client | `agent-client` | 0.12.1 | Apache-2.0 |
 | SEO | `seo` | 0.5.6 | MIT |
 
-The first-party Life OS application (`life-os-app`) is separately versioned and licensed under MIT. It is the native navigation, capture, and live-dashboard layer. See `Guide/21 Life OS Application.md`.
+The first-party Dev OS application (`life-os-app`) is separately versioned and licensed under MIT. It is the interactive dashboard and the only first-party code that writes to notes. See `Guide/21 Life OS Application.md`.
 
 Upstream repositories and release tags are in `THIRD_PARTY_NOTICES.md`. Obsidian itself is not included.
 
 ## AI agents in the vault
 
 - `AGENTS.md` is the canonical instruction file for any agent: folder map, property conventions, safety rules (read before write, ask before edit, never rewrite journal or planning text). `CLAUDE.md` and `GEMINI.md` point to it.
-- `Prompts/` holds 16 recurring jobs, one note per job (morning start, end of day coaching, weekly review, retreat prep and facilitation, task triage, meeting prep, project kickoff, board grooming, writing pipeline, SEO audit, research capture, trend analysis, what matters today, vault health check, onboarding). Each note carries its own `risk` level and a button; see `Guide/20 Prompt Library.md`.
+- `Prompts/` holds 18 recurring jobs, one note per job (standup draft, sprint review, meeting prep, project kickoff, task triage, docs and ADR drafting, research capture, board grooming, what matters today, vault health check, onboarding, and the personal-layer reviews). Each note carries its own `risk` level and a button; see `Guide/20 Prompt Library.md`.
 - Agent Client (`agent-client`) runs a local agent (Claude Code, Codex, Gemini CLI, and others) over the Agent Client Protocol and puts the chat in the sidebar or inside a note. Every edit is shown as a diff and needs approval; auto-allow ships off. See `Guide/14 Agent Client and Claude Code.md`.
 - The Obsidian MCP bridge: Local REST API 5.x serves an MCP server at `http://127.0.0.1:27123/mcp` (16 tools: open notes, run commands, search, read, patch). `.mcp.example.json` shows the client config; `.claude/settings.json` pre-approves the read-only tools for Claude Code. See `Guide/19 Obsidian MCP Bridge.md`.
 - No keys ship. Local REST API generates a per-install key on first load; each member registers the server in their own agent (for Claude Code, `claude mcp add --scope user ...`) with that key kept outside the vault. `.mcp.json`, agent sessions, and exported chats are excluded by `.gitignore` and by the build.
@@ -123,7 +134,7 @@ There is no transactional in-place upgrader. Back up the complete vault, extract
 
 ## Credits and license
 
-Workflows follow Mike Schmitz's public video (Practical PKM). Daily questions: Marshall Goldsmith and Mark Reiter, *Triggers* (2015). Multi-scale planning: Cal Newport. Full credits in `CREDITS.md`.
+The original personal workflows follow Mike Schmitz's public talk "How I Run My Whole Life Out of Obsidian" (Practical PKM); Dev OS is an independent implementation and is not affiliated with Practical PKM. Daily questions: Marshall Goldsmith and Mark Reiter, *Triggers* (2015). Multi-scale planning: Cal Newport. Full credits in `CREDITS.md`.
 
 Code, templates, dashboards, scripts, and configuration are MIT (`LICENSE`). The prose in `Guide/` is CC BY 4.0 (`LICENSE-GUIDE.md`). Third-party plugin binaries under `.obsidian/plugins/` keep their own licenses; see `THIRD_PARTY_NOTICES.md`. Community rules: `CODE_OF_CONDUCT.md`.
 

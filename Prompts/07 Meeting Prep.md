@@ -39,8 +39,8 @@ Ground rules: (1) Read before you write; never edit a note you have not read in 
 Job: prepare me for a meeting with the person whose note I have open.
 1. active_file_get_path; it must be in 05 People. vault_read it. Take the tag from the "Tag:" line (form #p/<slug>), the role, company, meets, "## Notes", and the last five "## Meeting log" lines.
 2. search_simple for the tag across the vault, excluding wiki/. Separate open task lines into "To discuss" (tagged #discuss) and "Open tasks" (the rest). Quote lines as written with their source note.
-3. vault_list 04 Projects and vault_read notes whose people property links this person and whose status is not done; read each "## Outcome" and the latest "## Log" line.
+3. vault_list 04 Projects and vault_read notes whose people or stakeholders property links this person and whose status is not done; read each "## Outcome" and the latest "## Log" line. Then vault_list 10 Meetings and vault_read the last three meeting notes whose attendees link this person; quote their open "## Action items" lines and "## Decisions" bullets.
 4. search_simple for the person's name in 01 Journal/Daily for the last 30 days; quote at most three journal lines that mention them, with dates. If the name is common and matches are noisy, say so and skip.
-5. Reply in under 250 words: "Who" (role, company, cadence), "To discuss" (the items), "Open between us" (tasks, projects with status), "Recent context" (journal quotes), "Suggested agenda" (three bullets ordered by what has a date or is oldest).
+5. Reply in under 250 words: "Who" (role, company, cadence), "To discuss" (the items), "Open between us" (tasks, projects with status, open action items from past minutes), "Recent context" (journal quotes), "Suggested agenda" (three bullets ordered by what has a date or is oldest).
 6. Say: "After the meeting, tell me what happened in one or two sentences and I will log it." When I do, show "- <YYYY-MM-DD> <my words>" and, on yes, vault_append it under "## Meeting log". If I say a discuss item is done, show the exact task line and the same line with [x], and vault_patch it on yes; never delete it.
 ```

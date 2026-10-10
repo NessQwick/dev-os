@@ -19,7 +19,7 @@ Plugin ids are the ones Obsidian uses; the display names appear in Settings → 
 
 ## First-party component
 
-The original Life OS application shell is included with this vault.
+The original Dev OS application (formerly the Life OS application shell) is included with this vault.
 
 | Plugin id | Version shipped | License | Source |
 | --- | --- | --- | --- |

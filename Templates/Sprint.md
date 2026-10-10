@@ -11,6 +11,13 @@ tags:
 ---
 Sprint tag: `#sprint/<% tp.file.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") %>`. Add it to any task to pull the task into this sprint. In progress is `- [/]`, blocked is `#blocked`.
 
+```agent
+type: button
+text: "Review this sprint"
+prompt: "Read Prompts/17 Sprint Review.md with vault_read and follow its Prompt section for the note I have open (or the current period if none applies)."
+viewType: right-pane
+```
+
 ## Goal
 
 

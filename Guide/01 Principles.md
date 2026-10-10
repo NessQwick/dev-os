@@ -3,7 +3,7 @@ Quoted or closely paraphrased from Mike Schmitz, with timestamps.
 ## 1. Connections are the point (0:00 to 2:40)
 - "PKM isn't just about storing information, it's about connecting it." Apps that never integrate leave every area organized but none of it talking.
 - This is **not** "make Obsidian do everything". He still says that is the wrong approach. The difference: cramming everything in for the sake of it, versus running the things that *benefit from being connected* in the same place.
-- The chain he describes (1:29): journal entry → linked to the habits being built → feeding the quarterly retreat that judges whether they create change → shaping the projects committed to → producing the writing published → which pulls from the journal entries you started with. "The connections doing the heavy lifting."
+- The chain he describes: journal entry → linked to the habits being built → feeding the quarterly retreat that judges whether they create change → shaping the projects committed to → producing the writing published → which pulls from the journal entries you started with. "The connections doing the heavy lifting."
 - **PKM stack / jobs to be done**: hire each app for a specific job. Until you are clear on the jobs, no app gives you clarity. For most of his life-management jobs the right tool happens to be Obsidian; there are trade-offs, and it works because he is clear on what he wants.
 
 ## 2. Journal to craft the future (2:40 to 5:52)
@@ -48,13 +48,13 @@ Quoted or closely paraphrased from Mike Schmitz, with timestamps.
 - Obsidian is where tasks **live**, not where the day is **executed**. The dashboard is "a recommendation engine"; he picks tasks and **time blocks** them. "The computer is the brain, but the notebook is the list."
 
 ## 8. Writing: just keep writing (16:42 to 18:36)
-- Newsletters, YouTube scripts, course content, book notes, articles: every piece starts and ends in Obsidian.
+- Decisions, tech notes, postmortems, book notes, articles: every piece starts and ends in Obsidian.
 - Not because the editor is magical, but because **source material and draft share the vault**: link the book note, embed the quote, keep writing. The friction between "I had an idea" and "it's in a published piece" kills most writing; same-vault writing fixes most of it.
-- Kanban boards per writing type, separate folders per type, QuickAdd captures to the board backlog, cards move left to right until published. Each type has its own template and metadata. These are "task notes" rather than inline tasks.
-- Export markdown at the end: scripts to the editor in Notion, newsletter through Kit, articles to Ghost.
+- Separate folders per type of document, each with its own template and metadata. These are "task notes" rather than inline tasks.
+- Export markdown at the end, to wherever the piece is published.
 
 ## 9. The Compass dashboard (18:36 to 20:46)
-- Built with DataviewJS (with Claude's help, per his earlier video). Wheel of life pulled from this quarter's retreat by date and naming convention; combined daily questions widget with toggles and a time-frame dropdown; habits widget with current streak, best streak, longest break, completion %, total, and recent days; life theme; memento mori; quick links to capture and to the planning notes.
+- Built with DataviewJS. Wheel of life pulled from this quarter's retreat by date and naming convention; combined daily questions widget with toggles and a time-frame dropdown; habits widget with current streak, best streak, longest break, completion %, total, and recent days; life theme; memento mori; quick links to capture and to the planning notes.
 - "Because everything I do is dynamically generated, I don't have to touch a single line of code."
 
 ## 10. Reduce the seams (22:07 to 23:17)
