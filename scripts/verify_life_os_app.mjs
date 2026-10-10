@@ -85,10 +85,7 @@ const quickAddById = new Map(
 const recordChoiceContracts = [
   ["lifeos-new-project", "Templates/Project.md", "04 Projects"],
   ["lifeos-new-person", "Templates/Person.md", "05 People"],
-  ["lifeos-new-newsletter", "Templates/Newsletter.md", "06 Writing/Newsletters"],
-  ["lifeos-new-video", "Templates/YouTube Script.md", "06 Writing/YouTube Scripts"],
   ["lifeos-new-article", "Templates/Article.md", "06 Writing/Articles"],
-  ["lifeos-new-course-lesson", "Templates/Course Lesson.md", "06 Writing/Course Content"],
   ["lifeos-new-book", "Templates/Book Note.md", "07 Library/Book Notes"],
   ["lifeos-new-study-note", "Templates/Study Note.md", "09 Reading/Study Notes"],
 ];

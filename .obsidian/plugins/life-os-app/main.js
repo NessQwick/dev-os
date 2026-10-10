@@ -98,18 +98,6 @@ const CAPTURE_MENU_ACTIONS = [
     command: "quickadd:choice:lifeos-project-idea",
   },
   {
-    icon: "mail",
-    label: "Newsletter idea",
-    description: "Add an idea to the newsletter backlog.",
-    command: "quickadd:choice:lifeos-newsletter-idea",
-  },
-  {
-    icon: "video",
-    label: "Video idea",
-    description: "Add an idea to the video backlog.",
-    command: "quickadd:choice:lifeos-video-idea",
-  },
-  {
     icon: "newspaper",
     label: "Article idea",
     description: "Add an idea to the article backlog.",
@@ -128,28 +116,10 @@ const CAPTURE_MENU_ACTIONS = [
     command: "quickadd:choice:lifeos-new-person",
   },
   {
-    icon: "file-plus-2",
-    label: "New newsletter",
-    description: "Create a newsletter draft from its template.",
-    command: "quickadd:choice:lifeos-new-newsletter",
-  },
-  {
-    icon: "file-video-2",
-    label: "New video script",
-    description: "Create a video script from its template.",
-    command: "quickadd:choice:lifeos-new-video",
-  },
-  {
     icon: "file-pen-line",
     label: "New article",
     description: "Create an article draft from its template.",
     command: "quickadd:choice:lifeos-new-article",
-  },
-  {
-    icon: "graduation-cap",
-    label: "New course lesson",
-    description: "Create a course lesson from its template.",
-    command: "quickadd:choice:lifeos-new-course-lesson",
   },
   {
     icon: "book-plus",
@@ -189,33 +159,6 @@ const PERIOD_ACTIONS = [
     label: "Retreat",
     description: "Open the current personal retreat.",
     command: "quickadd:choice:lifeos-retreat",
-  },
-];
-
-const DESTINATIONS = [
-  {
-    icon: "layout-dashboard",
-    label: "Compass",
-    description: "Direction, habits, questions, and life wheel.",
-    path: "00 Dashboards/Compass Dashboard.md",
-  },
-  {
-    icon: "list-checks",
-    label: "Tasks",
-    description: "See the full task system.",
-    path: "00 Dashboards/Task Dashboard.md",
-  },
-  {
-    icon: "folder-kanban",
-    label: "Projects",
-    description: "Review active projects and ideas.",
-    path: "00 Dashboards/Projects Dashboard.md",
-  },
-  {
-    icon: "columns-3",
-    label: "Boards",
-    description: "Open writing and project boards.",
-    path: "00 Dashboards/Boards.md",
   },
 ];
 
@@ -406,7 +349,7 @@ const MODULES = {
     eyebrow: "Ideas into finished work",
     title: "Create",
     description:
-      "Move ideas into newsletters, videos, articles, and course material without losing sources.",
+      "Move ideas into articles and docs without losing sources.",
     actions: [
       {
         icon: "columns-3",
@@ -416,13 +359,8 @@ const MODULES = {
       },
       ...CAPTURE_MENU_ACTIONS.filter((action) =>
         [
-          "quickadd:choice:lifeos-newsletter-idea",
-          "quickadd:choice:lifeos-video-idea",
           "quickadd:choice:lifeos-article-idea",
-          "quickadd:choice:lifeos-new-newsletter",
-          "quickadd:choice:lifeos-new-video",
           "quickadd:choice:lifeos-new-article",
-          "quickadd:choice:lifeos-new-course-lesson",
         ].includes(action.command)
       ),
     ],
@@ -516,8 +454,8 @@ class LifeOSCaptureModal extends Modal {
 
     const groups = [
       { title: "Quick capture", actions: CAPTURE_MENU_ACTIONS.slice(0, 4) },
-      { title: "Ideas", actions: CAPTURE_MENU_ACTIONS.slice(4, 8) },
-      { title: "Create notes", actions: CAPTURE_MENU_ACTIONS.slice(8) },
+      { title: "Ideas", actions: CAPTURE_MENU_ACTIONS.slice(4, 6) },
+      { title: "Create notes", actions: CAPTURE_MENU_ACTIONS.slice(6) },
     ];
     for (const group of groups) {
       const section = root.createDiv({ cls: "life-os-capture-section" });
@@ -1411,10 +1349,7 @@ class LifeOSHomeView extends ItemView {
 
   renderPipelineLive(parent) {
     const pipelines = [
-      { type: "newsletter", label: "Newsletters", icon: "mail", path: "06 Writing/Newsletters/Newsletter Board.md" },
-      { type: "youtube-script", label: "Videos", icon: "video", path: "06 Writing/YouTube Scripts/YouTube Board.md" },
       { type: "article", label: "Articles", icon: "newspaper", path: "06 Writing/Articles/Article Board.md" },
-      { type: "course-lesson", label: "Courses", icon: "graduation-cap", path: "06 Writing/Course Content/Course Board.md" },
     ];
     const files = this.app.vault.getMarkdownFiles();
     const section = parent.createEl("section", { cls: "life-os-pipeline-live" });
@@ -2118,7 +2053,7 @@ class LifeOSHomeView extends ItemView {
       { icon: "users", value: typeCount(["person"]), label: "People" },
       {
         icon: "pen-tool",
-        value: typeCount(["newsletter", "youtube-script", "article", "course-lesson"]),
+        value: typeCount(["article"]),
         label: "Creative notes",
       },
       {

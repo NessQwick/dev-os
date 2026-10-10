@@ -28,20 +28,8 @@
       "template": "Templates/Person.md"
     },
     {
-      "folder": "06 Writing/Newsletters",
-      "template": "Templates/Newsletter.md"
-    },
-    {
-      "folder": "06 Writing/YouTube Scripts",
-      "template": "Templates/YouTube Script.md"
-    },
-    {
       "folder": "06 Writing/Articles",
       "template": "Templates/Article.md"
-    },
-    {
-      "folder": "06 Writing/Course Content",
-      "template": "Templates/Course Lesson.md"
     },
     {
       "folder": "07 Library/Book Notes",

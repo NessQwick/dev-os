@@ -31,10 +31,7 @@ USER_CONTENT = ["01 Journal/", "02 Retreats/", "04 Projects/", "05 People/", "06
 KEEP_IN_USER_FOLDERS = re.compile(r".* Board\.md$")
 BOARD_DEFAULTS = {
     "04 Projects/Projects Board.md": "Projects Board",
-    "06 Writing/Newsletters/Newsletter Board.md": "Newsletter Board",
-    "06 Writing/YouTube Scripts/YouTube Board.md": "YouTube Board",
     "06 Writing/Articles/Article Board.md": "Article Board",
-    "06 Writing/Course Content/Course Board.md": "Course Board",
 }
 READING_PATHS = ["09 Reading", "Guide/07 Workflow - Daily Reading.md", "scripts/generate_reading_plan.py", "scripts/split_bible.py", "Templates/Study Note.md"]
 
@@ -226,13 +223,6 @@ def json_surgery(out):
     save(os.path.join(out, ".obsidian/workspace.json"), workspace)
 
 def text_surgery(out, without_reading):
-    p = os.path.join(out, "Guide/Source - Video Analysis.md")
-    if os.path.exists(p):
-        s = open(p, encoding="utf-8").read()
-        i = s.find("\n## Transcript")
-        if i != -1:
-            s = s[:i] + "\n## Transcript\nNot included in the distributed template. Watch the video at the source URL above.\n"
-            open(p, "w", encoding="utf-8").write(s)
     if without_reading:
         for rel in READING_PATHS:
             p = os.path.join(out, rel)
