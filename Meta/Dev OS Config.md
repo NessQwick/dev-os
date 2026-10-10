@@ -45,6 +45,8 @@ wheel_areas:
 ---
 # Dev OS Config
 
+Edit these in the Dev OS view (Configure in the rail): folders, questions, habits, wheel areas, birthdate, and done lanes, with a preview before saving and a vault health check. Editing by hand here works too.
+
 The single place the system reads its settings from. Every dashboard widget in `Meta/views/` starts with `dv.page("Meta/Dev OS Config")`, and the daily, retreat, and questions templates read the lists below when a new note is created. Change things here; nothing else needs to move.
 
 ## Dev OS folders

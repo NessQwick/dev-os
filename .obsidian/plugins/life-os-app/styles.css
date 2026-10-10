@@ -1867,3 +1867,36 @@
   .life-os-waiting-grid { grid-template-columns: 1fr; }
   .life-os-roadmap-row { grid-template-columns: 110px minmax(420px, 1fr); }
 }
+
+/* Dev OS 1.2: Configure screen and vault health check. */
+.life-os-config-live, .life-os-health-live { margin: 0 0 34px; padding: 20px; border: 1px solid var(--life-os-line); border-radius: 18px; background: var(--life-os-raised); }
+.life-os-config-live { display: grid; gap: 14px; }
+.life-os-config-live > .life-os-live-heading { margin-bottom: 0; }
+.life-os-config-card h3 { margin: 0 0 4px; font-size: 0.9rem; }
+.life-os-config-folders { display: none; }
+.life-os-config-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; margin-top: 10px; }
+.life-os-config-grid .life-os-form-row { margin: 0; align-items: center; flex-wrap: nowrap; }
+.life-os-config-warnings { margin-top: 12px; padding: 12px; border: 1px solid color-mix(in srgb, var(--life-os-accent) 45%, var(--life-os-line)); border-radius: 10px; background: color-mix(in srgb, var(--life-os-accent) 6%, transparent); }
+.life-os-config-warnings strong { font-size: 0.78rem; }
+.life-os-config-warnings p { margin: 6px 0 0; color: var(--text-muted); font-size: 0.74rem; }
+.life-os-config-list { display: grid; gap: 6px; margin: 10px 0; }
+.life-os-config-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--life-os-line); border-radius: 10px; background: var(--background-primary); }
+.life-os-config-label { flex: 1 1 auto; font-size: 0.8rem; }
+.life-os-config-key { padding: 2px 6px; border-radius: 6px; background: var(--background-secondary); color: var(--text-faint); font-size: 0.68rem; white-space: nowrap; }
+.life-os-config-save { position: sticky; bottom: 0; z-index: 4; display: grid; gap: 8px; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--life-os-accent) 35%, var(--life-os-line)); border-radius: 14px; background: var(--background-primary); box-shadow: 0 -8px 24px #0004; }
+.life-os-config-changes p, .life-os-config-changes li { margin: 2px 0; color: var(--text-muted); font-size: 0.76rem; }
+.life-os-config-changes ul { margin: 6px 0 0; padding-left: 18px; }
+.life-os-home .life-os-small-button:disabled { opacity: 0.45; cursor: default; }
+.life-os-health-list { display: grid; gap: 6px; }
+.life-os-health-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--life-os-line); border-left-width: 3px; border-radius: 10px; background: var(--background-primary); }
+.life-os-health-item.is-error { border-left-color: var(--color-red); }
+.life-os-health-item.is-warn { border-left-color: var(--life-os-accent); }
+.life-os-health-item.is-info { border-left-color: var(--text-faint); }
+.life-os-health-code { color: var(--text-faint); font-family: var(--font-monospace, monospace); font-size: 0.66rem; white-space: nowrap; }
+.life-os-health-message { font-size: 0.78rem; overflow-wrap: anywhere; }
+@container (max-width: 700px) {
+  .life-os-config-grid { grid-template-columns: 1fr; }
+  .life-os-config-save { position: static; box-shadow: none; }
+  .life-os-health-item { grid-template-columns: minmax(0, 1fr) auto; }
+  .life-os-health-code { grid-column: 1 / -1; }
+}

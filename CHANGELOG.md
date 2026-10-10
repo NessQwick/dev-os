@@ -4,6 +4,25 @@ Format: Added, Changed, Templates (manual merge notes), Plugins, Breaking. Semve
 
 ## Unreleased
 
+### Dev OS: application 1.2.0 candidate
+Added
+- **Configure screen** (rail and topbar gear) that edits `Meta/Dev OS Config.md` properties:
+  - folders, with existence chips and read-only warnings when Templater, QuickAdd, or Web Clipper paths disagree
+  - daily questions with stable keys, reorder, and the engineering preset
+  - habits, wheel areas, birthdate, life expectancy, and done lanes
+  - a change preview, validation, and one Save
+- **Vault health check** on the same screen, read only. It finds:
+  - missing folders and broken `project` links
+  - task tags without notes
+  - dangling, duplicate, and cyclic dependencies
+  - sprint state problems (several active sprints, expired sprints, a bad `current_sprint`)
+  - ADR numbering and `supersedes` problems
+  - released releases with open work, and leftover samples
+- Command `life-os-app:open-config`.
+
+Changed
+- The topbar Configure button opens the Configure screen. The **Open note** button and the `open-configuration` command still open the note.
+
 ### Dev OS: application 1.1.0 candidate
 Added
 - **Task editor:** a pencil on every task row and sprint card. It edits text, due, scheduled, sprint, owner, release, high priority, blocked, and Waits on. It rewrites only those parts and keeps other tags, recurrence, and dates.

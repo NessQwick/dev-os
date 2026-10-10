@@ -526,6 +526,7 @@ try {
       "inbox",
       "roadmap",
       "waiting",
+      "config",
       "plan",
       "focus",
       "review",
@@ -555,6 +556,7 @@ try {
     "inbox",
     "roadmap",
     "waiting",
+    "config",
     "plan",
     "focus",
     "review",
@@ -571,6 +573,7 @@ try {
     inbox: "life-os-inbox-live",
     roadmap: "life-os-roadmap-live",
     waiting: "life-os-waiting-live",
+    config: "life-os-config-live",
     plan: "life-os-plan-live",
     focus: "life-os-collection-live",
     review: "life-os-review-live",
@@ -1039,6 +1042,75 @@ try {
     metadata.get(sprintPath).status === "closed" && metadata.get(projectPath).current_sprint === "[[Billing Sprint 2]]", after.join(" | "));
   const staleBatch = await view.writer.updateTaskLines([{ path: projectPath, line: 2, raw: "- [ ] not this" }], (line) => line + " x");
   check("batch task writes skip changed lines", staleBatch.written === 0 && staleBatch.stale === 1);
+
+  // Configure: draft, keys, patch, diff, validation, and the save flow.
+  const draftFrom = sandbox.readConfigDraft({ sprints_folder: "/Work/Sprints/", questions: [{ key: "dq_goals", text: "Goals?" }, "dq_plain"], habits: ["habit_read"], board_done_lanes: "Done, Shipped", life_expectancy: 80 });
+  check("config draft reads folders, questions, habits, and lanes",
+    draftFrom.folders.sprints_folder === "Work/Sprints" && draftFrom.folders.projects_folder === "04 Projects" &&
+    JSON.stringify(draftFrom.questions.map((item) => item.key)) === JSON.stringify(["dq_goals", "dq_plain"]) &&
+    draftFrom.habits[0].key === "habit_read" && JSON.stringify(draftFrom.doneLanes) === JSON.stringify(["Done", "Shipped"]) && draftFrom.lifeExpectancy === "80");
+  check("new config keys are prefixed, slugged, and unique", sandbox.configKeyFor("dq_", "Protect deep work", ["dq_protect_deep_work"]) === "dq_protect_deep_work_2" && sandbox.configKeyFor("habit_", "Run!", []) === "habit_run");
+  const edited = sandbox.cloneConfigDraft(draftFrom);
+  edited.folders.meetings_folder = "Work/Meetings";
+  edited.questions.push({ key: "dq_ship", text: "Did I ship?", locked: false });
+  const patch = sandbox.configPatch(edited);
+  check("config patch writes question objects, keys, and joined lanes",
+    patch.meetings_folder === "Work/Meetings" && JSON.stringify(patch.questions[2]) === JSON.stringify({ key: "dq_ship", text: "Did I ship?" }) &&
+    JSON.stringify(patch.habits) === JSON.stringify(["habit_read"]) && patch.board_done_lanes === "Done,Shipped" && patch.life_expectancy === 80);
+  const diff = sandbox.diffConfig(draftFrom, edited);
+  check("config diff lists folder and question changes", diff.some((line) => line.startsWith("Folder Meetings")) && diff.includes("Question added: Did I ship?"), diff.join(" | "));
+  edited.questions[0].text = " ";
+  check("config validation blocks empty questions", sandbox.validateConfigDraft(edited).some((error) => error.includes("Question 1")));
+
+  const configPath = "Meta/Dev OS Config.md";
+  metadata.set(configPath, { questions: [{ key: "dq_goals", text: "Did I set clear goals?" }], habits: ["habit_journal"], sprints_folder: "04 Projects/Sprints" });
+  view.configDraft = null;
+  view.activeScreen = "config";
+  plugin.settings.showPersonal = true;
+  view.render();
+  check("Configure renders folders and the question editor", treeHasClass(view.contentEl, "life-os-config-grid") && treeHasClass(view.contentEl, "life-os-config-item") && treeHasText(view.contentEl, "No changes."));
+  const state = view.configDraftState();
+  state.draft.folders.sprints_folder = "Work/Sprints";
+  state.draft.questions.push({ key: "dq_unblock", text: "Did I unblock someone?", locked: false });
+  view.render();
+  check("Configure previews unsaved changes", treeHasText(view.contentEl, "Question added: Did I unblock someone?"));
+  findParentWithHandler(view.contentEl, "Save configuration")?.handlers.click();
+  await settle();
+  const savedConfig = metadata.get(configPath);
+  check("Save configuration writes the config properties",
+    savedConfig.sprints_folder === "Work/Sprints" && savedConfig.questions.length === 2 && savedConfig.questions[0].key === "dq_goals" && savedConfig.questions[1].key === "dq_unblock" && sandbox.diffConfig(view.configDraftState().base, view.configDraftState().draft).length === 0,
+    JSON.stringify(savedConfig));
+  plugin.settings.showPersonal = false;
+  metadata.set(configPath, { questions: [{ key: "dq_goals", text: "Did I set clear goals?" }], habits: ["habit_journal"] });
+
+  // Health check on plain data.
+  const health = sandbox.runHealthCheck({
+    today: "2026-09-09",
+    folders: [{ label: "Meetings", path: "10 Meetings", exists: false }],
+    notes: [
+      { path: "p/A.md", title: "A", type: "project", currentSprint: "Gone" },
+      { path: "s/A Sprint 1.md", title: "A Sprint 1", type: "sprint", status: "active", project: "A", end: "2026-09-01" },
+      { path: "s/A Sprint 2.md", title: "A Sprint 2", type: "sprint", status: "active", project: "A", end: "2026-09-30" },
+      { path: "m/M.md", title: "M", type: "meeting", project: "Nope" },
+      { path: "d/ADR-1.md", title: "ADR-1", type: "adr", adrNumber: 1 },
+      { path: "d/ADR-1b.md", title: "ADR-1b", type: "adr", adrNumber: 1, supersedes: "Missing ADR" },
+    ],
+    tasks: [
+      { path: "p/A.md", line: 2, display: "x", projects: ["a"], sprints: ["ghost"], id: "t1", dependsOn: ["t2"] },
+      { path: "p/A.md", line: 3, display: "y", projects: ["a"], id: "t2", dependsOn: ["t1"] },
+      { path: "p/A.md", line: 4, display: "z", projects: ["a"], id: "t2", dependsOn: ["none"] },
+    ],
+  });
+  const codes = health.map((issue) => issue.code);
+  check("health check finds folders, links, tags, ids, cycles, and sprint state",
+    ["folder-missing", "project-link", "tag-sprint", "dep-duplicate-id", "dep-dangling", "dep-cycle", "sprint-multiple-active", "sprint-expired", "current-sprint", "adr-number-duplicate", "adr-supersedes"].every((code) => codes.includes(code)) &&
+    health[0].severity === "error", codes.join(","));
+  view.activeScreen = "config";
+  view.render();
+  findParentWithHandler(view.contentEl, "Run check")?.handlers.click();
+  await settle();
+  view.render();
+  check("health check renders a summary", Array.isArray(view.healthReport) && treeHasClass(view.contentEl, "life-os-health-live") && !treeHasText(view.contentEl, "Not run"));
 
   if (process.env.LIFE_OS_PREVIEW) {
     // Generated visual-test artifact uses synthetic fixtures only.
