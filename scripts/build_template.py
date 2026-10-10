@@ -26,7 +26,7 @@ DROP_GLOBS = [
     "Untitled*", "*/Untitled*", "*.canvas", ".DS_Store", "*/.DS_Store", "Thumbs.db", "*/Thumbs.db",
     "__pycache__", "*/__pycache__", "*.pyc", "*.png.bak", "*.html", "*.log",
 ]
-USER_CONTENT = ["01 Journal/", "02 Retreats/", "04 Projects/", "05 People/", "06 Writing/", "07 Library/",
+USER_CONTENT = ["01 Journal/", "02 Retreats/", "04 Projects/", "05 People/", "06 Writing/", "07 Library/", "10 Meetings/",
                 "09 Reading/Chapters/", "09 Reading/Verses/", "09 Reading/Study Notes/", "09 Reading/Topics/"]
 KEEP_IN_USER_FOLDERS = re.compile(r".* Board\.md$")
 BOARD_DEFAULTS = {

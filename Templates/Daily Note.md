@@ -35,6 +35,15 @@ sort by due
 short mode
 ```
 
+## Standup
+The Dev OS Today screen drafts this from your tasks (Write to daily note). Edit freely.
+- Yesterday:
+- Today:
+- Blockers:
+
+## Work log
+- 
+
 ## Journal
 
 

@@ -132,7 +132,7 @@ def main():
     if wv.get("markdownPath"): check("webviewer markdownPath exists", exists(wv["markdownPath"]))
     # content asserts
     for rel in files:
-        if rel.endswith(".md") and any(rel.startswith(u) for u in ["01 Journal/", "02 Retreats/", "04 Projects/", "05 People/", "06 Writing/", "07 Library/"]) and not rel.endswith(" Board.md"):
+        if rel.endswith(".md") and any(rel.startswith(u) for u in ["01 Journal/", "02 Retreats/", "04 Projects/", "05 People/", "06 Writing/", "07 Library/", "10 Meetings/"]) and not rel.endswith(" Board.md"):
             t = texts.get(rel, ""); fm = re.match(r"^---\n(.*?)\n---", t, re.S)
             check("user-folder note tagged example: %s" % rel, bool(fm) and re.search(r"^\s*-\s*example\s*$", fm.group(1), re.M) is not None)
     cfg = texts.get("Meta/Compass Config.md", ""); check("config birthdate empty", re.search(r"^birthdate:\s*$", cfg, re.M) is not None)

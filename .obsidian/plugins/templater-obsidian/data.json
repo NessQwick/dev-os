@@ -38,6 +38,26 @@
     {
       "folder": "09 Reading/Study Notes",
       "template": "Templates/Study Note.md"
+    },
+    {
+      "folder": "04 Projects/Sprints",
+      "template": "Templates/Sprint.md"
+    },
+    {
+      "folder": "10 Meetings",
+      "template": "Templates/Meeting.md"
+    },
+    {
+      "folder": "06 Writing/Decisions",
+      "template": "Templates/ADR.md"
+    },
+    {
+      "folder": "06 Writing/Tech Notes",
+      "template": "Templates/Tech Note.md"
+    },
+    {
+      "folder": "06 Writing/Postmortems",
+      "template": "Templates/Postmortem.md"
     }
   ],
   "enabled_templates_hotkeys": [

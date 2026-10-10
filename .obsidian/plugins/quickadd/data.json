@@ -451,6 +451,156 @@
       "setFileExistsBehavior": true
     },
     {
+      "id": "lifeos-new-sprint",
+      "name": "🏃 New sprint",
+      "type": "Template",
+      "command": true,
+      "templatePath": "Templates/Sprint.md",
+      "folder": {
+        "enabled": true,
+        "folders": [
+          "04 Projects/Sprints"
+        ],
+        "chooseWhenCreatingNote": false,
+        "createInSameFolderAsActiveFile": false,
+        "chooseFromSubfolders": false
+      },
+      "fileNameFormat": {
+        "enabled": true,
+        "format": "{{VALUE:title|label:Sprint name (Project Sprint N)|trim}}"
+      },
+      "appendLink": false,
+      "openFile": true,
+      "openFileInNewTab": {
+        "enabled": false,
+        "direction": "vertical",
+        "focus": true
+      },
+      "openFileInMode": "default",
+      "fileExistsMode": "Nothing",
+      "setFileExistsBehavior": true
+    },
+    {
+      "id": "lifeos-new-meeting",
+      "name": "🗣️ New meeting minutes",
+      "type": "Template",
+      "command": true,
+      "templatePath": "Templates/Meeting.md",
+      "folder": {
+        "enabled": true,
+        "folders": [
+          "10 Meetings"
+        ],
+        "chooseWhenCreatingNote": false,
+        "createInSameFolderAsActiveFile": false,
+        "chooseFromSubfolders": false
+      },
+      "fileNameFormat": {
+        "enabled": true,
+        "format": "{{VALUE:title|label:Meeting title (YYYY-MM-DD Topic)|trim}}"
+      },
+      "appendLink": false,
+      "openFile": true,
+      "openFileInNewTab": {
+        "enabled": false,
+        "direction": "vertical",
+        "focus": true
+      },
+      "openFileInMode": "default",
+      "fileExistsMode": "Nothing",
+      "setFileExistsBehavior": true
+    },
+    {
+      "id": "lifeos-new-adr",
+      "name": "🧭 New decision record (ADR)",
+      "type": "Template",
+      "command": true,
+      "templatePath": "Templates/ADR.md",
+      "folder": {
+        "enabled": true,
+        "folders": [
+          "06 Writing/Decisions"
+        ],
+        "chooseWhenCreatingNote": false,
+        "createInSameFolderAsActiveFile": false,
+        "chooseFromSubfolders": false
+      },
+      "fileNameFormat": {
+        "enabled": true,
+        "format": "{{VALUE:title|label:Decision title (ADR-0001 Title)|trim}}"
+      },
+      "appendLink": false,
+      "openFile": true,
+      "openFileInNewTab": {
+        "enabled": false,
+        "direction": "vertical",
+        "focus": true
+      },
+      "openFileInMode": "default",
+      "fileExistsMode": "Nothing",
+      "setFileExistsBehavior": true
+    },
+    {
+      "id": "lifeos-new-tech-note",
+      "name": "🛠️ New tech note",
+      "type": "Template",
+      "command": true,
+      "templatePath": "Templates/Tech Note.md",
+      "folder": {
+        "enabled": true,
+        "folders": [
+          "06 Writing/Tech Notes"
+        ],
+        "chooseWhenCreatingNote": false,
+        "createInSameFolderAsActiveFile": false,
+        "chooseFromSubfolders": false
+      },
+      "fileNameFormat": {
+        "enabled": true,
+        "format": "{{VALUE:title|label:Tech note title|trim}}"
+      },
+      "appendLink": false,
+      "openFile": true,
+      "openFileInNewTab": {
+        "enabled": false,
+        "direction": "vertical",
+        "focus": true
+      },
+      "openFileInMode": "default",
+      "fileExistsMode": "Nothing",
+      "setFileExistsBehavior": true
+    },
+    {
+      "id": "lifeos-new-postmortem",
+      "name": "🚨 New postmortem",
+      "type": "Template",
+      "command": true,
+      "templatePath": "Templates/Postmortem.md",
+      "folder": {
+        "enabled": true,
+        "folders": [
+          "06 Writing/Postmortems"
+        ],
+        "chooseWhenCreatingNote": false,
+        "createInSameFolderAsActiveFile": false,
+        "chooseFromSubfolders": false
+      },
+      "fileNameFormat": {
+        "enabled": true,
+        "format": "{{VALUE:title|label:Incident title|trim}}"
+      },
+      "appendLink": false,
+      "openFile": true,
+      "openFileInNewTab": {
+        "enabled": false,
+        "direction": "vertical",
+        "focus": true
+      },
+      "openFileInMode": "default",
+      "fileExistsMode": "Nothing",
+      "setFileExistsBehavior": true
+    },
+    {
       "id": "lifeos-new-article",
       "name": "📰 New article",
       "type": "Template",
