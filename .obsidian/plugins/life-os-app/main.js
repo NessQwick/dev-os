@@ -24,6 +24,7 @@ const DEFAULT_FOLDERS = Object.freeze({
   decisions: "06 Writing/Decisions",
   docs: "06 Writing",
   clippings: "07 Library/Clippings",
+  releases: "06 Writing/Releases",
 });
 
 const TASK_STATUS_TYPES = Object.freeze({
@@ -76,6 +77,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   compactLayout: false,
   itemLimit: 6,
   defaultProject: "",
+  me: "",
   taskHeading: "## Tasks",
   projectTabs: {},
   meetingDrafts: {},
@@ -450,6 +452,163 @@ Blameless: describe systems and decisions, not people.
 `;
 }
 
+// Task metadata fields in Obsidian Tasks emoji format, in the order they are
+// written back. Values are captured with the emoji so unknown text survives.
+const TASK_FIELDS = [
+  ["recurrence", /\s*🔁[^📅⏳➕✅❌🛫⛔🆔#]*/u],
+  ["start", /\s*🛫\s*\d{4}-\d{2}-\d{2}/u],
+  ["scheduled", /\s*⏳\s*\d{4}-\d{2}-\d{2}/u],
+  ["due", /\s*📅\s*\d{4}-\d{2}-\d{2}/u],
+  ["id", /\s*🆔\s*[\w-]+/u],
+  ["dependsOn", /\s*⛔\s*[\w-]+(?:\s*,\s*[\w-]+)*/u],
+  ["created", /\s*➕\s*\d{4}-\d{2}-\d{2}/u],
+  ["done", /\s*✅\s*\d{4}-\d{2}-\d{2}/u],
+  ["cancelled", /\s*❌\s*\d{4}-\d{2}-\d{2}/u],
+];
+const PRIORITY_MARKS = /\s*[🔺⏫🔼🔽⏬]/gu;
+
+function splitTaskBody(body) {
+  let rest = String(body);
+  const fields = {};
+  for (const [key, pattern] of TASK_FIELDS) {
+    const match = rest.match(pattern);
+    if (match) {
+      fields[key] = match[0].trim();
+      rest = rest.replace(pattern, "");
+    }
+  }
+  const priority = (rest.match(PRIORITY_MARKS) || []).map((mark) => mark.trim())[0] || "";
+  rest = rest.replace(PRIORITY_MARKS, "");
+  // Obsidian tags start with a letter or underscore, so "#123" stays in the text.
+  const tags = [...rest.matchAll(/(?:^|\s)(#[A-Za-z_][^\s#]*)/gu)].map((match) => match[1]);
+  const text = rest.replace(/(?:^|\s)#[A-Za-z_][^\s#]*/gu, " ").replace(/\s+/g, " ").trim();
+  return { text, tags, priority, fields };
+}
+
+// Changes chosen parts of one task line and keeps everything else: other
+// tags, recurrence, created and done dates. Returns null for non-task lines.
+// patch keys: text, due, scheduled, high, blocked, sprint, owner, release,
+// id, dependsOn (array of ids). An empty string clears a value.
+function editTaskLine(line, patch) {
+  const match = String(line).match(TASK_LINE);
+  if (!match) return null;
+  const parts = splitTaskBody(match[4]);
+  let { text, tags, priority } = parts;
+  const fields = { ...parts.fields };
+  if (patch.text !== undefined) {
+    const clean = String(patch.text).replace(/\s+/g, " ").trim();
+    if (clean) text = clean;
+  }
+  const setTag = (prefix, value) => {
+    tags = tags.filter((tag) => !tag.toLowerCase().startsWith(`#${prefix}/`));
+    if (value) tags.push(`#${prefix}/${value}`);
+  };
+  if (patch.sprint !== undefined) setTag("sprint", patch.sprint);
+  if (patch.owner !== undefined) setTag("p", patch.owner);
+  if (patch.release !== undefined) setTag("release", patch.release);
+  if (patch.blocked !== undefined) {
+    tags = tags.filter((tag) => tag.toLowerCase() !== "#blocked");
+    if (patch.blocked) tags.push("#blocked");
+  }
+  if (patch.high !== undefined) priority = patch.high ? "⏫" : priority === "⏫" || priority === "🔺" ? "" : priority;
+  const setDate = (key, emoji) => {
+    if (patch[key] === undefined) return;
+    if (patch[key]) fields[key] = `${emoji} ${patch[key]}`;
+    else delete fields[key];
+  };
+  setDate("due", "📅");
+  setDate("scheduled", "⏳");
+  if (patch.id !== undefined) {
+    if (patch.id) fields.id = `🆔 ${patch.id}`;
+    else delete fields.id;
+  }
+  if (patch.dependsOn !== undefined) {
+    const ids = [...new Set(patch.dependsOn.filter(Boolean))];
+    if (ids.length) fields.dependsOn = `⛔ ${ids.join(",")}`;
+    else delete fields.dependsOn;
+  }
+  const ordered = TASK_FIELDS.map(([key]) => fields[key]).filter(Boolean);
+  const body = [text, ...tags, priority, ...ordered].filter(Boolean).join(" ");
+  return `${match[1]}${match[2]}${match[3]}${body}`;
+}
+
+function newTaskId(existing = new Set()) {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const id = Math.random().toString(36).slice(2, 8);
+    if (!existing.has(id)) return id;
+  }
+  return `t${Date.now().toString(36)}`;
+}
+
+function parseMilestones(value) {
+  const list = Array.isArray(value) ? value : value ? [value] : [];
+  return list
+    .map((item) => {
+      if (item && typeof item === "object") return { date: isoDate(item.date), name: String(item.name || item.title || "").trim(), raw: item };
+      const text = String(item || "").trim();
+      const match = text.match(/^(\d{4}-\d{2}-\d{2})\s*(.*)$/);
+      return match ? { date: match[1], name: match[2].trim() || "Milestone", raw: item } : null;
+    })
+    .filter((item) => item && item.date)
+    .sort((left, right) => left.date.localeCompare(right.date));
+}
+
+const RELEASE_SECTIONS = [
+  ["Security", ["security"]],
+  ["Removed", ["remove", "removed", "deprecate", "deprecated"]],
+  ["Fixed", ["fix", "bug", "bugfix", "hotfix"]],
+  ["Changed", ["change", "changed", "refactor", "perf", "improvement"]],
+  ["Added", []],
+];
+
+// Builds Markdown release notes from task objects (display text, tags in
+// text, doneDate) and decision titles. Sections follow Keep a Changelog.
+function buildReleaseNotes({ version, date = "", done = [], open = [], decisions = [], level = 2 }) {
+  const h = "#".repeat(level);
+  const sub = "#".repeat(level + 1);
+  const sectionOf = (task) => {
+    const tags = (String(task.text || "").match(/#[\w/-]+/g) || []).map((tag) => tag.slice(1).toLowerCase());
+    for (const [name, keys] of RELEASE_SECTIONS) if (keys.some((key) => tags.includes(key))) return name;
+    return "Added";
+  };
+  const lines = [`${h} ${version}${date ? ` (${date})` : ""}`];
+  for (const [name] of RELEASE_SECTIONS) {
+    const items = done.filter((task) => sectionOf(task) === name);
+    if (!items.length) continue;
+    lines.push("", `${sub} ${name}`, ...items.map((task) => `- ${task.display || task.text}`));
+  }
+  if (!done.length) lines.push("", "No completed work is tagged for this release yet.");
+  if (decisions.length) lines.push("", `${sub} Decisions`, ...decisions.map((title) => `- [[${title}]]`));
+  if (open.length) lines.push("", `${sub} Not done`, ...open.map((task) => `- ${task.display || task.text}`));
+  return lines.join("\n");
+}
+
+function buildReleaseNote({ title, version, project = "", date = "", status = "planned" }) {
+  const slug = slugify(title);
+  return `${frontmatterBlock({ type: "release", version, project: project ? wikiLink(project) : "", date, status, tags: ["release"] })}
+# ${title}
+
+Release tag: \`#release/${slug}\`. Add it to tasks that ship in this release. Tag a task \`#fix\`, \`#change\`, \`#security\`, or \`#remove\` to file it under that heading; everything else is Added.
+
+## Scope
+\`\`\`tasks
+tags include #release/${slug}
+group by status.type
+\`\`\`
+
+## Release notes
+Generated by Dev OS (Docs, Releases, Write to note). Edit freely after generating.
+
+## Rollout
+- [ ]
+`;
+}
+
+function buildFollowUpText(person, tasks) {
+  const lines = tasks.map((task) => `- ${task.display || task.text}${task.due ? ` (due ${task.due})` : ""}`);
+  return [`Hi ${person}, a quick check on these:`, ...lines, "Anything blocking you?"].join("\n");
+}
+
 const CAPTURE_ACTIONS = [
   {
     icon: "notebook-pen",
@@ -555,10 +714,12 @@ const NAV_ITEMS = [
   { id: "today", icon: "sun", label: "Today" },
   { id: "sprint", icon: "kanban", label: "Sprint" },
   { id: "projects", icon: "folder-kanban", label: "Projects" },
+  { id: "roadmap", icon: "gantt-chart", label: "Roadmap" },
   { id: "meetings", icon: "messages-square", label: "Meetings" },
   { id: "docs", icon: "milestone", label: "Docs" },
   { id: "inbox", icon: "inbox", label: "Inbox" },
   { id: "focus", icon: "list-checks", label: "Tasks" },
+  { id: "waiting", icon: "hourglass", label: "Waiting" },
   { id: "people", icon: "users", label: "People" },
   { id: "library", icon: "library", label: "Library" },
   { id: "brain", icon: "brain", label: "Brain" },
@@ -618,6 +779,18 @@ const MODULES = {
     eyebrow: "Project",
     title: "Project",
     description: "",
+    actions: [],
+  },
+  roadmap: {
+    eyebrow: "Across projects",
+    title: "Roadmap",
+    description: "When each project runs, where its sprints fall, and which milestones and releases are coming.",
+    actions: [],
+  },
+  waiting: {
+    eyebrow: "Follow-ups",
+    title: "Waiting on",
+    description: "Everything that is in someone else's hands or waits on other work, oldest first.",
     actions: [],
   },
   meetings: {
@@ -821,6 +994,59 @@ class LifeOSWriter {
     return this.updateTaskLine(task, (line) => setTaskDueText(line, due));
   }
 
+  editTask(task, patch) {
+    return this.updateTaskLine(task, (line) => editTaskLine(line, patch));
+  }
+
+  // Rewrites many task lines, one file at a time. Lines that changed since
+  // they were read are skipped and counted, never guessed at.
+  async updateTaskLines(tasks, transform) {
+    const byPath = new Map();
+    for (const task of tasks) {
+      if (!byPath.has(task.path)) byPath.set(task.path, []);
+      byPath.get(task.path).push(task);
+    }
+    let written = 0;
+    let stale = 0;
+    for (const [path, items] of byPath) {
+      const file = this.file(path);
+      await this.app.vault.process(file, (data) => {
+        const newline = data.includes("\r\n") ? "\r\n" : "\n";
+        const lines = data.split(/\r?\n/);
+        for (const task of items) {
+          const index = task.line - 1;
+          const next = index >= 0 && index < lines.length && lines[index] === task.raw ? transform(lines[index], task) : null;
+          if (next === null || next === undefined) { stale += 1; continue; }
+          lines[index] = next;
+          written += 1;
+        }
+        return lines.join(newline);
+      });
+    }
+    return { written, stale };
+  }
+
+  // Replaces the body of one section that Dev OS generates (for example
+  // "## Release notes"). The heading itself and other sections stay.
+  async replaceSection(path, heading, text) {
+    const file = this.file(path);
+    await this.app.vault.process(file, (data) => {
+      const lines = data.split("\n");
+      const start = lines.findIndex((line) => line.trim() === heading.trim());
+      if (start === -1) return insertUnderHeading(data, heading, text);
+      const own = lines[start].match(/^(#{1,6})\s/)?.[1].length || 2;
+      let end = lines.length;
+      for (let index = start + 1; index < lines.length; index += 1) {
+        const level = lines[index].match(/^(#{1,6})\s/)?.[1].length || 0;
+        if (level && level <= own) { end = index; break; }
+      }
+      const after = end < lines.length ? [""] : [];
+      lines.splice(start + 1, end - start - 1, ...String(text).split("\n"), ...after);
+      return lines.join("\n");
+    });
+    return file;
+  }
+
   async appendUnderHeading(path, heading, text, alternatives = []) {
     const file = this.file(path);
     await this.app.vault.process(file, (data) => insertUnderHeading(data, heading, text, alternatives));
@@ -964,6 +1190,7 @@ class LifeOSData {
       decisions: normalizeFolder(config.decisions_folder, DEFAULT_FOLDERS.decisions),
       docs: normalizeFolder(config.docs_folder, DEFAULT_FOLDERS.docs),
       clippings: normalizeFolder(config.clippings_folder, DEFAULT_FOLDERS.clippings),
+      releases: normalizeFolder(config.releases_folder, DEFAULT_FOLDERS.releases),
     };
   }
 
@@ -996,6 +1223,7 @@ class LifeOSData {
   sprints() { return this.typed("sprint", this.folders().sprints); }
   meetings() { return this.typed("meeting", this.folders().meetings); }
   docs() { return this.typed(["adr", "tech-note", "postmortem"], this.folders().docs); }
+  releases() { return this.typed("release", this.folders().releases); }
   clippings() { return this.typed("clipping", this.folders().clippings); }
 
   linksTo(value, file) {
@@ -1109,6 +1337,19 @@ function openCreateForm(plugin, kind, preset = {}, done = () => {}) {
         return finish(await writer.createNote(folders.decisions, `${formatAdrNumber(number)} ${values.title}`, content), "Decision record");
       },
     },
+    release: {
+      title: "New release",
+      description: "Tag tasks with the release tag shown in the new note; Docs, Releases generates the notes.",
+      fields: [
+        { key: "project", label: "Project", type: "select", options: projects, value: preset.project || "" },
+        { key: "version", label: "Version", required: true, placeholder: "1.4.0", value: preset.version || "" },
+        { key: "date", label: "Target date", type: "date", value: preset.date || "" },
+      ],
+      submit: async (values) => {
+        const title = safeFileName(`${values.project || "Release"} ${values.version}`);
+        return finish(await writer.createNote(folders.releases, title, buildReleaseNote({ ...values, title })), "Release");
+      },
+    },
     "tech-note": {
       title: "New tech note",
       fields: [
@@ -1145,6 +1386,7 @@ const CREATE_ACTIONS = [
   { kind: "sprint", icon: "timer", label: "Sprint", description: "Dates, goal, and a sprint tag for tasks." },
   { kind: "meeting", icon: "messages-square", label: "Meeting minutes", description: "Agenda, notes, decisions, action items." },
   { kind: "adr", icon: "milestone", label: "Decision (ADR)", description: "Numbered architecture decision record." },
+  { kind: "release", icon: "package", label: "Release", description: "Version, date, and generated release notes." },
   { kind: "tech-note", icon: "file-code-2", label: "Tech note", description: "How-to, snippet, or reference." },
   { kind: "postmortem", icon: "siren", label: "Postmortem", description: "Blameless incident review." },
 ];
@@ -1865,6 +2107,8 @@ class LifeOSHomeView extends ItemView {
       meetings: () => this.renderMeetingsScreen(parent),
       docs: () => this.renderDocsScreen(parent),
       inbox: () => this.renderInboxScreen(parent),
+      roadmap: () => this.renderRoadmapScreen(parent),
+      waiting: () => this.renderWaitingScreen(parent),
     };
     if (screens[this.activeScreen]) {
       screens[this.activeScreen]();
@@ -2330,13 +2574,15 @@ class LifeOSHomeView extends ItemView {
     const discuss = /(^|\s)#discuss(?:\s|$)/.test(raw);
     const text = raw
       .replace(/\s*[🛫⏳📅✅❌➕]\s*\d{4}-\d{2}-\d{2}/gu, "")
+      .replace(/\s*🆔\s*[\w-]+/gu, "")
+      .replace(/\s*⛔\s*[\w-]+(?:\s*,\s*[\w-]+)*/gu, "")
       .replace(/\s*[🔺⏫🔼🔽⏬]/gu, "")
       .replace(/\s+/g, " ")
       .trim();
     const tagged = (prefix) => [...raw.matchAll(new RegExp(`(?:^|\\s)#${prefix}/([\\w-]+)`, "gu"))].map((item) => item[1].toLowerCase());
     const closed = this.resolveTaskStatus(statusSymbol) === "closed";
     const display = text
-      .replace(/(^|\s)#(?:project|sprint)\/[\w-]+/gu, "")
+      .replace(/(^|\s)#(?:project|sprint|release|p)\/[\w-]+/gu, "")
       .replace(/(^|\s)#blocked(?=\s|$)/gu, "")
       .replace(/\s+/g, " ")
       .trim() || text;
@@ -2358,6 +2604,10 @@ class LifeOSHomeView extends ItemView {
       projects: tagged("project"),
       sprints: tagged("sprint"),
       owners: tagged("p"),
+      releases: tagged("release"),
+      id: raw.match(/🆔\s*([\w-]+)/u)?.[1] || "",
+      dependsOn: (raw.match(/⛔\s*([\w-]+(?:\s*,\s*[\w-]+)*)/u)?.[1] || "").split(",").map((item) => item.trim()).filter(Boolean),
+      createdDate: raw.match(/➕\s*(\d{4}-\d{2}-\d{2})/u)?.[1] || "",
       doneDate: raw.match(/✅\s*(\d{4}-\d{2}-\d{2})/)?.[1] || "",
       path: file.path,
       line: lineNumber,
@@ -2934,6 +3184,9 @@ class LifeOSHomeView extends ItemView {
     if (task.blocked && !task.closed) meta.createSpan({ cls: "life-os-task-badge is-blocked", text: "Blocked" });
     if (task.inProgress) meta.createSpan({ cls: "life-os-task-badge is-progress", text: "In progress" });
     if (task.high && !task.closed) meta.createSpan({ cls: "life-os-task-priority", text: "High" });
+    const waits = task.closed ? [] : this.openDependencies(task);
+    if (waits.length) meta.createSpan({ cls: "life-os-task-badge is-waiting", text: `Waits on ${waits.length}`, attr: { title: `Waits on: ${waits.map((dep) => dep.display).join("; ")}` } });
+    if (task.owners?.length) meta.createSpan({ cls: "life-os-task-owner", text: `@${task.owners.join(" @")}` });
     if (dueControl && !task.closed) {
       const due = meta.createEl("input", { cls: "life-os-task-due", attr: { type: "date", "aria-label": `Due date: ${task.display || task.text}` } });
       due.value = task.due || "";
@@ -2943,6 +3196,7 @@ class LifeOSHomeView extends ItemView {
       const next = task.inProgress ? "x" : "/";
       this.addSmallButton(meta, task.inProgress ? "Done" : "Start", () => this.runWrite(() => this.writer.setTaskStatus(task, next), task.inProgress ? "Task completed." : "Task started."), { icon: task.inProgress ? "check" : "play" });
     }
+    this.addSmallButton(meta, "", () => this.openTaskEditor(task), { icon: "pencil", title: `Edit: ${task.display || task.text}` });
     return row;
   }
 
@@ -3091,11 +3345,7 @@ class LifeOSHomeView extends ItemView {
   }
 
   openForm(kind, preset = {}) {
-    if (!this.plugin?.data) {
-      new Notice("Dev OS forms need the plugin to be loaded.");
-      return null;
-    }
-    return openCreateForm(this.plugin, kind, preset, (file) => this.afterCreate(file, kind));
+    return openCreateForm(this.formHost(), kind, preset, (file) => this.afterCreate(file, kind));
   }
 
   async afterCreate(file, kind) {
@@ -3281,7 +3531,7 @@ class LifeOSHomeView extends ItemView {
     const tabs = page.createDiv({ cls: "life-os-tabs", attr: { role: "tablist" } });
     const tab = this.projectTab(file.path);
     const meetings = this.data.forProject(this.data.meetings(), file).sort((a, b) => String(this.getFrontmatter(b).date || "").localeCompare(String(this.getFrontmatter(a).date || "")));
-    const docs = this.data.forProject(this.data.docs(), file);
+    const docs = [...this.data.forProject(this.data.docs(), file), ...this.data.forProject(this.data.releases(), file)];
     const clips = this.data.forProject(this.data.clippings(), file);
     for (const [id, label, count] of [["overview", "Overview", null], ["tasks", "Tasks", progress.open], ["meetings", "Meetings", meetings.length], ["docs", "Docs", docs.length], ["clips", "Clips", clips.length]]) {
       const button = tabs.createEl("button", { cls: "life-os-tab", text: count === null ? label : `${label} · ${count}`, attr: { role: "tab", "aria-selected": String(tab === id) } });
@@ -3356,6 +3606,7 @@ class LifeOSHomeView extends ItemView {
       this.addChip(decisionCard, String(this.getFrontmatter(adrs[0]).status || "proposed"), `is-${slugify(this.getFrontmatter(adrs[0]).status || "proposed")}`);
     } else decisionCard.createEl("p", { text: "No decision records yet." });
     this.addSmallButton(decisionCard, "New ADR", () => this.openForm("adr", { project: this.getFileTitle(file) }), { icon: "plus" });
+    this.renderMilestones(grid, file, data);
   }
 
   renderProjectTasks(panel, { file, slug, tasks }) {
@@ -3383,6 +3634,12 @@ class LifeOSHomeView extends ItemView {
     const ownerField = options.createEl("label", { cls: "life-os-field" });
     ownerField.createSpan({ cls: "life-os-field-label", text: "Owner" });
     this.addSelect(ownerField, "Owner", personOptions(this.data, "Me"), draft.owner, (value) => { draft.owner = value; });
+    const releases = this.data.forProject(this.data.releases(), file).filter((release) => String(this.getFrontmatter(release).status || "") !== "released");
+    if (releases.length) {
+      const releaseField = options.createEl("label", { cls: "life-os-field" });
+      releaseField.createSpan({ cls: "life-os-field-label", text: "Release" });
+      this.addSelect(releaseField, "Release", [{ value: "", label: "None" }, ...releases.map((release) => ({ value: slugify(this.getFileTitle(release)), label: this.getFileTitle(release) }))], draft.release || "", (value) => { draft.release = value; });
+    }
     const flags = options.createDiv({ cls: "life-os-flags" });
     for (const [key, label] of [["high", "High priority"], ["blocked", "Blocked"]]) {
       const wrap = flags.createEl("label", { cls: "life-os-inline-check", text: label });
@@ -3392,11 +3649,12 @@ class LifeOSHomeView extends ItemView {
     }
     const submit = async () => {
       draft.text = text.value;
-      const line = buildTaskLine({ ...draft, project: slug, created: this.today() });
+      let line = buildTaskLine({ ...draft, project: slug, created: this.today() });
+      if (line && draft.release) line = editTaskLine(line, { release: draft.release });
       if (!line) { new Notice("Write the task first."); return; }
       const heading = this.settingsSnapshot().taskHeading || "## Tasks";
       const ok = await this.runWrite(() => this.writer.appendUnderHeading(file.path, heading, line, ["## Tasks", "## Inline tasks"]), "Task added.");
-      if (ok) Object.assign(draft, { text: "", due: "", scheduled: "", high: false, blocked: false });
+      if (ok) Object.assign(draft, { text: "", due: "", scheduled: "", high: false, blocked: false, release: "" });
     };
     this.addSmallButton(row, "Add task", submit, { icon: "plus", primary: true });
     this.registerDomEvent(text, "keydown", (event) => { if (event.key === "Enter") { event.preventDefault?.(); void submit(); } });
@@ -3628,6 +3886,7 @@ class LifeOSHomeView extends ItemView {
     this.addSmallButton(toolbar, "New ADR", () => this.openForm("adr", { project: title }), { icon: "milestone", primary: true });
     this.addSmallButton(toolbar, "New tech note", () => this.openForm("tech-note", { project: title }), { icon: "file-code-2" });
     this.addSmallButton(toolbar, "New postmortem", () => this.openForm("postmortem", { project: title }), { icon: "siren" });
+    this.addSmallButton(toolbar, "New release", () => this.openForm("release", { project: title }), { icon: "package" });
     if (!docs.length) { panel.createDiv({ cls: "life-os-live-empty", text: "No decision records, tech notes, or postmortems for this project." }); return; }
     this.renderDocTable(panel, docs);
   }
@@ -3675,7 +3934,7 @@ class LifeOSHomeView extends ItemView {
     const status = String(data.status || "planned").toLowerCase();
     const controls = section.createDiv({ cls: "life-os-form-actions" });
     if (status === "planned") this.addSmallButton(controls, "Start sprint", () => this.runWrite(() => this.writer.setFrontmatter(sprint.path, { status: "active" }), "Sprint started."), { icon: "play", primary: true });
-    if (status === "active") this.addSmallButton(controls, "Close sprint", () => this.runWrite(() => this.writer.setFrontmatter(sprint.path, { status: "closed" }), `Sprint closed with ${progress.open} open tasks. Move them by changing their #sprint tag.`), { icon: "flag" });
+    if (status === "active") this.addSmallButton(controls, "Close sprint", () => this.closeSprint(sprint), { icon: "flag" });
     const project = this.data.fileByTitle(linkTarget(data.project), this.data.projects());
     if (project) this.addSmallButton(controls, linkTarget(data.project), () => this.openProject(project.path), { icon: "folder-kanban" });
     this.addSmallButton(controls, "Open note", () => this.openPath(sprint.path), { icon: "file-text" });
@@ -3714,6 +3973,10 @@ class LifeOSHomeView extends ItemView {
         const meta = card.createDiv({ cls: "life-os-task-meta" });
         if (task.blocked && !task.closed) meta.createSpan({ cls: "life-os-task-badge is-blocked", text: "Blocked" });
         if (task.high && !task.closed) meta.createSpan({ cls: "life-os-task-priority", text: "High" });
+        const waits = task.closed ? [] : this.openDependencies(task);
+        if (waits.length) meta.createSpan({ cls: "life-os-task-badge is-waiting", text: `Waits on ${waits.length}`, attr: { title: waits.map((dep) => dep.display).join("; ") } });
+        if (task.owners?.length) meta.createSpan({ cls: "life-os-task-owner", text: `@${task.owners[0]}` });
+        this.addSmallButton(meta, "", () => this.openTaskEditor(task), { icon: "pencil", title: `Edit: ${task.display}` });
         const moves = id === "todo" ? [["/", "Start", "play"], ["x", "Done", "check"]] : id === "doing" ? [[" ", "Back", "undo-2"], ["x", "Done", "check"]] : [[" ", "Reopen", "rotate-ccw"]];
         for (const [symbol, text, icon] of moves) {
           this.addSmallButton(meta, text, () => this.runWrite(() => this.writer.setTaskStatus(task, symbol), `${text}: ${task.display}`), { icon, primary: symbol === "x" });
@@ -3762,7 +4025,7 @@ class LifeOSHomeView extends ItemView {
     const project = this.docProject || "all";
     this.renderLiveHeading(section, "Decisions and docs", "Architecture decision records, tech notes, and postmortems. Status changes write to the note's properties.", `${docs.length} docs`);
     const toolbar = section.createDiv({ cls: "life-os-toolbar" });
-    this.addSelect(toolbar, "Doc type", [{ value: "all", label: "All types" }, { value: "adr", label: "Decisions (ADR)" }, { value: "tech-note", label: "Tech notes" }, { value: "postmortem", label: "Postmortems" }], type, (value) => { this.docType = value; this.render(); });
+    this.addSelect(toolbar, "Doc type", [{ value: "all", label: "All types" }, { value: "adr", label: "Decisions (ADR)" }, { value: "tech-note", label: "Tech notes" }, { value: "postmortem", label: "Postmortems" }, { value: "release", label: "Releases" }], type, (value) => { this.docType = value; this.render(); });
     const statuses = [...new Set(docs.map((file) => String(this.getFrontmatter(file).status || "draft")))].sort();
     this.addSelect(toolbar, "Doc status", [{ value: "all", label: "All statuses" }, ...statuses], status, (value) => { this.docStatus = value; this.render(); });
     const projects = [...new Set(docs.map((file) => linkTarget(this.getFrontmatter(file).project)).filter(Boolean))].sort();
@@ -3774,6 +4037,8 @@ class LifeOSHomeView extends ItemView {
       const data = this.getFrontmatter(file);
       return (type === "all" || data.type === type) && (status === "all" || String(data.status || "draft") === status) && (project === "all" || linkTarget(data.project) === project);
     });
+    if (type === "all" || type === "release") this.renderReleases(section);
+    if (type === "release") return;
     if (!visible.length) { section.createDiv({ cls: "life-os-live-empty", text: docs.length ? "No docs match these filters." : "No decision records or tech notes yet." }); }
     else this.renderDocTable(section, visible);
     this.addSmallButton(section, "Article board", () => this.openPath("06 Writing/Articles/Article Board.md"), { icon: "newspaper" });
@@ -3793,8 +4058,8 @@ class LifeOSHomeView extends ItemView {
       const open = row.createEl("button", { cls: "life-os-doc-title", text: this.getFileTitle(file), attr: { role: "cell" } });
       open.type = "button";
       this.registerDomEvent(open, "click", () => void this.openPath(file.path));
-      row.createSpan({ cls: "life-os-chip", text: { adr: "ADR", "tech-note": "Tech note", postmortem: "Postmortem" }[data.type] || String(data.type), attr: { role: "cell" } });
-      const statuses = data.type === "adr" ? ADR_STATUSES : data.type === "postmortem" ? ["draft", "in-review", "published"] : ["draft", "published", "archived"];
+      row.createSpan({ cls: "life-os-chip", text: { adr: "ADR", "tech-note": "Tech note", postmortem: "Postmortem", release: "Release" }[data.type] || String(data.type), attr: { role: "cell" } });
+      const statuses = data.type === "adr" ? ADR_STATUSES : data.type === "postmortem" ? ["draft", "in-review", "published"] : data.type === "release" ? ["planned", "released", "cancelled"] : ["draft", "published", "archived"];
       const current = String(data.status || statuses[0]);
       this.addSelect(row, `Status of ${this.getFileTitle(file)}`, statuses.includes(current) ? statuses : [current, ...statuses], current, (value) => this.runWrite(() => this.writer.setFrontmatter(file.path, { status: value }), `Status set to ${value}.`), `life-os-select is-${slugify(current)}`);
       row.createSpan({ text: linkTarget(data.project) || "None", attr: { role: "cell" } });
@@ -3883,6 +4148,439 @@ class LifeOSHomeView extends ItemView {
       }, { icon: "copy" });
     }
     this.addSmallButton(section, "Web Clipper guide", () => this.openPath("Guide/24 Web Clipper.md"), { icon: "book-open" });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Task editor and dependencies
+
+  formHost() {
+    // Forms need app, data, and writer; the plugin provides them, the view
+    // can stand in when it runs without one (tests, embedded previews).
+    return this.plugin?.data && this.plugin?.writer ? this.plugin : { app: this.app, data: this.data, writer: this.writer, settings: this.settingsSnapshot() };
+  }
+
+  tasksById() {
+    const map = new Map();
+    for (const task of this.allTasks()) if (task.id) map.set(task.id, task);
+    return map;
+  }
+
+  openDependencies(task, byId = this.tasksById()) {
+    return (task.dependsOn || []).map((id) => byId.get(id)).filter((dep) => dep && !dep.closed);
+  }
+
+  openTaskEditor(task) {
+    const byId = this.tasksById();
+    const projectSlug = task.projects?.[0] || "";
+    const project = projectSlug ? this.data.projects().find((file) => slugify(this.getFileTitle(file)) === projectSlug) : null;
+    const sprints = (project ? this.data.forProject(this.data.sprints(), project) : this.data.sprints())
+      .filter((file) => String(this.getFrontmatter(file).status || "") !== "closed" || slugify(this.getFileTitle(file)) === task.sprints?.[0]);
+    const releases = (project ? this.data.forProject(this.data.releases(), project) : this.data.releases())
+      .filter((file) => String(this.getFrontmatter(file).status || "") !== "released" || slugify(this.getFileTitle(file)) === task.releases?.[0]);
+    const candidates = this.allTasks()
+      .filter((other) => !other.closed && !(other.path === task.path && other.line === task.line))
+      .filter((other) => !projectSlug || (other.projects || []).includes(projectSlug) || other.path === task.path)
+      .slice(0, 200);
+    const current = (task.dependsOn || []).map((id) => byId.get(id)?.display || id);
+    const fields = [
+      { key: "text", label: "Task", wide: true, required: true, value: task.display || task.text },
+      { key: "due", label: "Due", type: "date", value: task.due || "" },
+      { key: "scheduled", label: "Scheduled", type: "date", value: task.scheduled || "" },
+      { key: "sprint", label: "Sprint", type: "select", value: task.sprints?.[0] || "", options: [{ value: "", label: "Backlog" }, ...sprints.map((file) => ({ value: slugify(this.getFileTitle(file)), label: this.getFileTitle(file) }))] },
+      { key: "owner", label: "Owner", type: "select", value: task.owners?.[0] || "", options: personOptions(this.data, "Me") },
+      { key: "release", label: "Release", type: "select", value: task.releases?.[0] || "", options: [{ value: "", label: "None" }, ...releases.map((file) => ({ value: slugify(this.getFileTitle(file)), label: this.getFileTitle(file) }))] },
+      { key: "high", label: "High priority", type: "checkbox", value: Boolean(task.high) },
+      { key: "blocked", label: "Blocked", type: "checkbox", value: Boolean(task.blocked) },
+      { key: "waitsOn", label: "Waits on", type: "select", wide: true, value: "", hint: current.length ? `Currently waits on: ${current.join("; ")}` : "Pick a task this one cannot start before.", options: [{ value: "", label: "No new dependency" }, ...candidates.map((other) => ({ value: `${other.path}::${other.line}`, label: `${other.display}${other.path !== task.path ? ` (${this.getFileTitle({ path: other.path })})` : ""}` }))] },
+    ];
+    if (current.length) fields.push({ key: "clearDeps", label: "Remove current dependencies", type: "checkbox", value: false });
+    const modal = new LifeOSFormModal(this.app, {
+      title: "Edit task",
+      description: `${this.getFileTitle({ path: task.path })}, line ${task.line}. Other tags, recurrence, and dates stay as they are.`,
+      fields,
+      submitLabel: "Save",
+      onSubmit: async (values) => {
+        const target = values.waitsOn ? candidates.find((other) => `${other.path}::${other.line}` === values.waitsOn) : null;
+        let dependsOn = values.clearDeps ? [] : [...(task.dependsOn || [])];
+        if (target) {
+          let id = target.id;
+          if (!id) {
+            id = newTaskId(new Set(byId.keys()));
+            await this.writer.editTask(target, { id });
+          }
+          dependsOn = [...dependsOn, id];
+        }
+        const patch = {
+          text: values.text, due: values.due, scheduled: values.scheduled, sprint: values.sprint,
+          owner: values.owner, release: values.release, high: values.high, blocked: values.blocked,
+        };
+        if (target || values.clearDeps) patch.dependsOn = dependsOn;
+        // A dependency write may have shifted nothing, but re-read when the
+        // target sits in the same file so the stale check uses fresh text.
+        if (target && target.path === task.path) {
+          await this.refreshLiveData();
+          const fresh = this.allTasks().find((item) => item.path === task.path && item.line === task.line);
+          if (fresh) task = fresh;
+        }
+        await this.writer.editTask(task, patch);
+        new Notice("Task saved.");
+        await this.refreshLiveData();
+        return true;
+      },
+    });
+    modal.open();
+    return modal;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Sprint close with carry-over
+
+  closeSprint(sprint) {
+    const data = this.getFrontmatter(sprint);
+    const open = this.tasksForSprint(sprint).filter((task) => !task.closed);
+    if (!open.length) return this.runWrite(() => this.writer.setFrontmatter(sprint.path, { status: "closed" }), "Sprint closed.");
+    const project = linkTarget(data.project);
+    const siblings = (project ? this.data.sprints().filter((file) => linkTarget(this.getFrontmatter(file).project) === project) : this.data.sprints())
+      .filter((file) => file.path !== sprint.path && ["planned", "active"].includes(String(this.getFrontmatter(file).status || "planned")));
+    const numbers = this.data.sprints().filter((file) => linkTarget(this.getFrontmatter(file).project) === project).map((file) => Number(this.getFrontmatter(file).number) || 0);
+    const nextNumber = Math.max(Number(data.number) || 0, ...numbers) + 1;
+    const length = Math.max(1, daysBetween(isoDate(data.start), isoDate(data.end)) ?? 13);
+    const nextStart = isoDate(data.end) ? isoAddDays(isoDate(data.end), 1) : this.today();
+    const nextTitle = safeFileName(`${project || "Team"} Sprint ${nextNumber}`);
+    const modal = new LifeOSFormModal(this.app, {
+      title: `Close ${this.getFileTitle(sprint)}`,
+      description: `${open.length} open ${open.length === 1 ? "task is" : "tasks are"} still tagged #sprint/${slugify(this.getFileTitle(sprint))}. Choose where they go; done tasks keep their tag as history.`,
+      fields: [
+        { key: "target", label: "Move open tasks to", type: "select", wide: true, value: siblings[0] ? siblings[0].path : "__new__", options: [
+          ...siblings.map((file) => ({ value: file.path, label: `${this.getFileTitle(file)} (${this.getFrontmatter(file).status || "planned"})` })),
+          { value: "__new__", label: `New sprint: ${nextTitle} (${nextStart} to ${isoAddDays(nextStart, length)})` },
+          { value: "__backlog__", label: "Backlog (remove the sprint tag)" },
+          { value: "__keep__", label: "Leave them tagged to this sprint" },
+        ] },
+        { key: "goal", label: "Goal for a new sprint", wide: true, value: "" },
+        { key: "activate", label: "Make the target sprint active", type: "checkbox", value: true },
+      ],
+      submitLabel: "Close sprint",
+      onSubmit: async (values) => {
+        let targetSlug = null;
+        let targetPath = null;
+        if (values.target === "__new__") {
+          const file = await this.writer.createNote(this.data.folders().sprints, nextTitle, buildSprintNote({
+            title: nextTitle, project, number: nextNumber, start: nextStart, end: isoAddDays(nextStart, length),
+            goal: values.goal, status: values.activate ? "active" : "planned",
+          }));
+          targetSlug = slugify(nextTitle);
+          targetPath = file?.path || `${this.data.folders().sprints}/${nextTitle}.md`;
+        } else if (values.target === "__backlog__") {
+          targetSlug = "";
+        } else if (values.target !== "__keep__") {
+          targetPath = values.target;
+          targetSlug = slugify(this.getFileTitle({ path: values.target }));
+        }
+        let moved = { written: 0, stale: 0 };
+        if (targetSlug !== null) moved = await this.writer.updateTaskLines(open, (line) => editTaskLine(line, { sprint: targetSlug }));
+        await this.writer.setFrontmatter(sprint.path, { status: "closed" });
+        if (targetPath && values.activate) {
+          if (values.target !== "__new__") await this.writer.setFrontmatter(targetPath, { status: "active" });
+          const projectFile = project ? this.data.fileByTitle(project, this.data.projects()) : null;
+          if (projectFile) await this.writer.setFrontmatter(projectFile.path, { current_sprint: wikiLink(this.getFileTitle({ path: targetPath })) });
+          this.activeSprintPath = targetPath;
+        }
+        new Notice(`Sprint closed. ${moved.written} moved${moved.stale ? `, ${moved.stale} skipped because they changed` : ""}.`);
+        await this.refreshLiveData();
+        return true;
+      },
+    });
+    modal.open();
+    return modal;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Waiting on: delegated work, dependencies, blockers
+
+  mySlug() {
+    return slugify(this.settingsSnapshot().me || "");
+  }
+
+  renderWaitingScreen(parent) {
+    const section = parent.createEl("section", { cls: "life-os-waiting-live" });
+    const open = this.allTasks().filter((task) => !task.closed);
+    const me = this.mySlug();
+    const byId = this.tasksById();
+    const delegated = open.filter((task) => (task.owners || []).some((owner) => owner !== me));
+    const waitingOnDeps = open.filter((task) => this.openDependencies(task, byId).length);
+    const blocked = open.filter((task) => task.blocked);
+    this.renderLiveHeading(section, "Waiting on", `Work owned by someone else (#p/<person>${me ? `, excluding you, #p/${me}` : ""}), tasks waiting on other tasks (⛔), and #blocked items. Ages count from the ➕ created date.`, `${delegated.length} delegated · ${waitingOnDeps.length} dependent · ${blocked.length} blocked`);
+    if (!this.taskSnapshot) { section.createDiv({ cls: "life-os-live-empty", text: "Loading tasks..." }); return; }
+    if (!me) section.createEl("p", { cls: "life-os-form-hint", text: "Tip: set Your person note in Settings, Dev OS, so tasks tagged with you are not listed as delegated." });
+
+    section.createEl("h3", { cls: "life-os-subheading", text: "Delegated, by person" });
+    if (!delegated.length) section.createDiv({ cls: "life-os-live-empty", text: "Nothing delegated. Give a task an owner from the task editor or the project page." });
+    const people = new Map(this.data.people().map((file) => [slugify(this.getFileTitle(file)), file]));
+    const groups = new Map();
+    for (const task of delegated) {
+      for (const owner of task.owners.filter((item) => item !== me)) {
+        if (!groups.has(owner)) groups.set(owner, []);
+        groups.get(owner).push(task);
+      }
+    }
+    const age = (task) => (task.createdDate ? daysBetween(task.createdDate, this.today()) : null);
+    const grid = section.createDiv({ cls: "life-os-waiting-grid" });
+    for (const [owner, tasks] of [...groups.entries()].sort((a, b) => b[1].length - a[1].length)) {
+      const person = people.get(owner);
+      const name = person ? this.getFileTitle(person) : owner;
+      const oldest = Math.max(...tasks.map((task) => age(task) ?? 0));
+      const card = grid.createDiv({ cls: "life-os-panel-card life-os-waiting-person" });
+      const head = card.createDiv({ cls: "life-os-home-card-heading" });
+      setIcon(head.createSpan({ cls: "life-os-record-icon" }), "user");
+      head.createEl("h3", { text: name });
+      this.addChip(head, `${tasks.length} open${oldest ? ` · oldest ${oldest}d` : ""}`, tasks.some((task) => task.overdue) ? "is-alert" : "");
+      for (const task of tasks.sort((a, b) => (age(b) ?? 0) - (age(a) ?? 0))) {
+        const row = this.renderTaskRow(card, task, { context: true });
+        const days = age(task);
+        if (days !== null) row.createSpan({ cls: "life-os-task-age", text: `${days}d` });
+      }
+      const actions = card.createDiv({ cls: "life-os-form-actions" });
+      this.addSmallButton(actions, "Copy follow-up", async () => {
+        try {
+          await globalThis.navigator?.clipboard?.writeText(buildFollowUpText(name.split(" ")[0], tasks));
+          new Notice("Follow-up copied.");
+        } catch (error) {
+          new Notice("Clipboard unavailable.");
+        }
+      }, { icon: "copy" });
+      if (person) this.addSmallButton(actions, "Open person", () => this.openPath(person.path), { icon: "file-text" });
+    }
+
+    section.createEl("h3", { cls: "life-os-subheading", text: "Waiting on other tasks" });
+    if (!waitingOnDeps.length) section.createDiv({ cls: "life-os-live-empty", text: "No task waits on an open task. Add a dependency from the task editor (Waits on)." });
+    for (const task of waitingOnDeps) {
+      const box = section.createDiv({ cls: "life-os-dependency" });
+      this.renderTaskRow(box, task, { context: true });
+      const chain = box.createDiv({ cls: "life-os-dependency-chain" });
+      chain.createSpan({ cls: "life-os-field-label", text: "Waits on" });
+      for (const dep of this.openDependencies(task, byId)) {
+        const button = chain.createEl("button", { cls: "life-os-link-row", text: `${dep.display}${dep.owners?.length ? ` · #p/${dep.owners[0]}` : ""}${dep.due ? ` · due ${dep.due}` : ""}` });
+        button.type = "button";
+        this.registerDomEvent(button, "click", () => void this.openPath(dep.path, dep.line));
+      }
+    }
+
+    section.createEl("h3", { cls: "life-os-subheading", text: "Blocked" });
+    if (!blocked.length) section.createDiv({ cls: "life-os-live-empty", text: "Nothing is tagged #blocked." });
+    else this.renderTaskList(section, blocked, { context: true });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Roadmap
+
+  roadmapWindow() {
+    const months = this.roadmapMonths || 6;
+    const today = new Date(`${this.today()}T12:00:00Z`);
+    const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + (this.roadmapOffset || 0) - (months >= 6 ? 1 : 0), 1, 12));
+    const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + months, 1, 12));
+    const iso = (date) => date.toISOString().slice(0, 10);
+    return { start: iso(start), end: iso(end), months, span: daysBetween(iso(start), iso(end)) };
+  }
+
+  roadmapPercent(window, date) {
+    return Math.max(0, Math.min(100, (daysBetween(window.start, date) / window.span) * 100));
+  }
+
+  renderRoadmapScreen(parent) {
+    const section = parent.createEl("section", { cls: "life-os-roadmap-live" });
+    const window = this.roadmapWindow();
+    const includeDone = Boolean(this.roadmapDone);
+    const projects = this.data.projects().filter((file) => includeDone || !["done", "archived", "cancelled"].includes(String(this.getFrontmatter(file).status || "").toLowerCase()));
+    const scheduled = [];
+    const unscheduled = [];
+    for (const file of projects) {
+      const data = this.getFrontmatter(file);
+      const start = isoDate(data.started || data.start);
+      const due = isoDate(data.due);
+      (start || due ? scheduled : unscheduled).push({ file, data, start: start || due, end: due || start });
+    }
+    scheduled.sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
+    this.renderLiveHeading(section, "Roadmap", "Projects from started to due, sprints under them, milestones (◆) and releases (▲). Click a bar to open the project page; dates change there.", `${window.start} to ${isoAddDays(window.end, -1)}`);
+    const toolbar = section.createDiv({ cls: "life-os-toolbar" });
+    this.addSmallButton(toolbar, "", () => { this.roadmapOffset = (this.roadmapOffset || 0) - Math.max(1, Math.floor(window.months / 2)); this.render(); }, { icon: "chevron-left", title: "Earlier" });
+    this.addSmallButton(toolbar, "Today", () => { this.roadmapOffset = 0; this.render(); }, { icon: "calendar" });
+    this.addSmallButton(toolbar, "", () => { this.roadmapOffset = (this.roadmapOffset || 0) + Math.max(1, Math.floor(window.months / 2)); this.render(); }, { icon: "chevron-right", title: "Later" });
+    for (const months of [3, 6, 12]) {
+      const button = toolbar.createEl("button", { cls: "life-os-filter", text: `${months} months`, attr: { "aria-pressed": String(window.months === months) } });
+      button.type = "button";
+      this.registerDomEvent(button, "click", () => { this.roadmapMonths = months; this.render(); });
+    }
+    const done = toolbar.createEl("button", { cls: "life-os-filter", text: includeDone ? "Hide done" : "Show done", attr: { "aria-pressed": String(includeDone) } });
+    done.type = "button";
+    this.registerDomEvent(done, "click", () => { this.roadmapDone = !includeDone; this.render(); });
+
+    const chart = section.createDiv({ cls: "life-os-roadmap", attr: { role: "img", "aria-label": `Roadmap of ${scheduled.length} scheduled projects` } });
+    const scale = chart.createDiv({ cls: "life-os-roadmap-row is-scale" });
+    scale.createDiv({ cls: "life-os-roadmap-label" });
+    const scaleTrack = scale.createDiv({ cls: "life-os-roadmap-track" });
+    for (let index = 0; index < window.months; index += 1) {
+      const startDate = new Date(`${window.start}T12:00:00Z`);
+      const month = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth() + index, 1, 12));
+      const iso = month.toISOString().slice(0, 10);
+      scaleTrack.createSpan({ cls: "life-os-roadmap-month", text: month.toLocaleDateString(undefined, { month: "short", year: window.months > 6 || month.getUTCMonth() === 0 ? "2-digit" : undefined, timeZone: "UTC" }), attr: { style: `left:${this.roadmapPercent(window, iso)}%` } });
+    }
+    const today = this.today();
+    const showToday = today >= window.start && today < window.end;
+    const sprints = this.data.sprints();
+    const releases = this.data.releases();
+    if (!scheduled.length) chart.createDiv({ cls: "life-os-live-empty", text: "No project has a started or due date yet." });
+    for (const item of scheduled) {
+      const row = chart.createDiv({ cls: "life-os-roadmap-row" });
+      const label = row.createEl("button", { cls: "life-os-roadmap-label", text: this.getFileTitle(item.file), attr: { title: `${item.start} to ${item.end}` } });
+      label.type = "button";
+      this.registerDomEvent(label, "click", () => this.openProject(item.file.path));
+      const track = row.createDiv({ cls: "life-os-roadmap-track" });
+      if (showToday) track.createDiv({ cls: "life-os-roadmap-today", attr: { style: `left:${this.roadmapPercent(window, today)}%` } });
+      const visible = item.end >= window.start && item.start < window.end;
+      if (visible) {
+        const left = this.roadmapPercent(window, item.start);
+        const right = this.roadmapPercent(window, isoAddDays(item.end, 1));
+        const status = slugify(item.data.status || "active");
+        const late = item.end < today && !["done", "archived"].includes(status);
+        const progress = this.projectProgress(this.tasksForProject(item.file));
+        const bar = track.createEl("button", { cls: `life-os-roadmap-bar is-${status}${late ? " is-late" : ""}`, attr: { style: `left:${left}%;width:${Math.max(0.8, right - left)}%`, title: `${this.getFileTitle(item.file)}: ${item.start} to ${item.end}, ${Math.round(progress.ratio * 100)}% of tasks done${late ? ", past due" : ""}` } });
+        bar.type = "button";
+        bar.createDiv({ cls: "life-os-roadmap-progress", attr: { style: `width:${Math.round(progress.ratio * 100)}%` } });
+        bar.createSpan({ text: `${Math.round(progress.ratio * 100)}%` });
+        this.registerDomEvent(bar, "click", () => this.openProject(item.file.path));
+      } else {
+        track.createSpan({ cls: "life-os-roadmap-outside", text: item.end < window.start ? `Ended ${item.end}` : `Starts ${item.start}` });
+      }
+      for (const sprint of this.data.forProject(sprints, item.file)) {
+        const data = this.getFrontmatter(sprint);
+        const start = isoDate(data.start);
+        const end = isoDate(data.end) || start;
+        if (!start || end < window.start || start >= window.end) continue;
+        const left = this.roadmapPercent(window, start);
+        const right = this.roadmapPercent(window, isoAddDays(end, 1));
+        track.createDiv({ cls: `life-os-roadmap-sprint is-${slugify(data.status || "planned")}`, attr: { style: `left:${left}%;width:${Math.max(0.5, right - left)}%`, title: `${this.getFileTitle(sprint)}: ${start} to ${end}` } });
+      }
+      for (const milestone of parseMilestones(item.data.milestones)) {
+        if (milestone.date < window.start || milestone.date >= window.end) continue;
+        track.createSpan({ cls: `life-os-roadmap-marker is-milestone${milestone.date < today ? " is-past" : ""}`, text: "◆", attr: { style: `left:${this.roadmapPercent(window, milestone.date)}%`, title: `${milestone.date} ${milestone.name}` } });
+      }
+      for (const release of this.data.forProject(releases, item.file)) {
+        const data = this.getFrontmatter(release);
+        const date = isoDate(data.date);
+        if (!date || date < window.start || date >= window.end) continue;
+        const marker = track.createEl("button", { cls: `life-os-roadmap-marker is-release is-${slugify(data.status || "planned")}`, text: "▲", attr: { style: `left:${this.roadmapPercent(window, date)}%`, title: `${date} ${this.getFileTitle(release)} (${data.status || "planned"})` } });
+        marker.type = "button";
+        this.registerDomEvent(marker, "click", () => { this.go("docs", { docType: "release", expandedRelease: release.path }); });
+      }
+    }
+    const legend = section.createDiv({ cls: "life-os-roadmap-legend" });
+    for (const [cls, text] of [["is-active", "Active"], ["is-idea", "Idea"], ["is-on-hold", "On hold"], ["is-late", "Past due"]]) {
+      const item = legend.createSpan();
+      item.createSpan({ cls: `life-os-roadmap-swatch ${cls}` });
+      item.createSpan({ text });
+    }
+    legend.createSpan({ text: "◆ milestone · ▲ release · thin bars: sprints" });
+    if (unscheduled.length) {
+      section.createEl("h3", { cls: "life-os-subheading", text: "Not on the roadmap yet" });
+      const list = section.createDiv({ cls: "life-os-form-actions" });
+      for (const item of unscheduled) this.addSmallButton(list, this.getFileTitle(item.file), () => this.openProject(item.file.path), { icon: "calendar-plus", title: `Set dates for ${this.getFileTitle(item.file)}` });
+    }
+  }
+
+  renderMilestones(parent, file, data) {
+    const card = parent.createEl("section", { cls: "life-os-panel-card" });
+    card.createEl("h3", { text: "Milestones" });
+    const milestones = parseMilestones(data.milestones);
+    if (!milestones.length) card.createEl("p", { text: "No milestones. They show as ◆ on the roadmap." });
+    for (const milestone of milestones) {
+      const row = card.createDiv({ cls: "life-os-decision-row" });
+      row.createSpan({ text: `${milestone.date} · ${milestone.name}` });
+      this.addSmallButton(row, "", () => this.runWrite(() => this.writer.setFrontmatter(file.path, {
+        milestones: milestones.filter((item) => item !== milestone).map((item) => item.raw),
+      }), "Milestone removed."), { icon: "x", title: `Remove ${milestone.name}` });
+    }
+    const form = card.createDiv({ cls: "life-os-form-row" });
+    const date = form.createEl("input", { cls: "life-os-input", attr: { type: "date", "aria-label": "Milestone date" } });
+    const name = form.createEl("input", { cls: "life-os-input is-grow", attr: { type: "text", placeholder: "Beta to customers", "aria-label": "Milestone name" } });
+    this.addSmallButton(form, "Add", () => {
+      if (!isoDate(date.value) || !name.value.trim()) { new Notice("A milestone needs a date and a name."); return; }
+      return this.runWrite(() => this.writer.setFrontmatter(file.path, {
+        milestones: [...milestones.map((item) => item.raw), `${date.value} ${name.value.trim()}`],
+      }), "Milestone added.");
+    }, { icon: "plus", primary: true });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Releases
+
+  releaseModel(file) {
+    const data = this.getFrontmatter(file);
+    const slug = slugify(this.getFileTitle(file));
+    const tasks = this.allTasks().filter((task) => (task.releases || []).includes(slug));
+    const date = isoDate(data.date);
+    const project = this.data.fileByTitle(linkTarget(data.project), this.data.projects());
+    const earlier = this.data.releases()
+      .filter((other) => other.path !== file.path && linkTarget(this.getFrontmatter(other).project) === linkTarget(data.project))
+      .map((other) => isoDate(this.getFrontmatter(other).date))
+      .filter((other) => other && (!date || other < date))
+      .sort();
+    const since = earlier[earlier.length - 1] || "";
+    const decisions = project
+      ? this.data.forProject(this.data.docs(), project)
+        .filter((doc) => this.getFrontmatter(doc).type === "adr" && String(this.getFrontmatter(doc).status || "") === "accepted")
+        .filter((doc) => { const adrDate = isoDate(this.getFrontmatter(doc).date); return adrDate && adrDate > since && (!date || adrDate <= date); })
+        .map((doc) => this.getFileTitle(doc))
+      : [];
+    const done = tasks.filter((task) => task.closed);
+    const open = tasks.filter((task) => !task.closed);
+    const version = String(data.version || this.getFileTitle(file));
+    return { data, slug, tasks, done, open, decisions, version, date, project, notes: buildReleaseNotes({ version, date, done, open, decisions }) };
+  }
+
+  renderReleases(parent) {
+    const releases = this.data.releases().sort((a, b) => (isoDate(this.getFrontmatter(b).date) || "9999").localeCompare(isoDate(this.getFrontmatter(a).date) || "9999"));
+    const section = parent.createEl("section", { cls: "life-os-releases" });
+    const head = section.createDiv({ cls: "life-os-live-heading" });
+    const copy = head.createDiv();
+    copy.createEl("h2", { text: "Releases" });
+    copy.createEl("p", { text: "Tag tasks #release/<release-note-slug>. Notes group done tasks by #fix, #change, #security, #remove (else Added) and add accepted ADRs since the previous release." });
+    this.addSmallButton(head, "New release", () => this.openForm("release"), { icon: "package", primary: true });
+    if (!releases.length) { section.createDiv({ cls: "life-os-live-empty", text: "No release notes yet." }); return; }
+    for (const file of releases) {
+      const model = this.releaseModel(file);
+      const expanded = this.expandedRelease === file.path;
+      const card = section.createDiv({ cls: `life-os-release-card${expanded ? " is-open" : ""}` });
+      const header = card.createEl("button", { cls: "life-os-meeting-head", attr: { "aria-expanded": String(expanded) } });
+      header.type = "button";
+      header.createSpan({ cls: "life-os-meeting-date", text: model.date || "No date" });
+      header.createEl("strong", { text: this.getFileTitle(file) });
+      header.createSpan({ cls: `life-os-chip is-${slugify(model.data.status || "planned")}`, text: String(model.data.status || "planned") });
+      header.createSpan({ cls: "life-os-record-metrics", text: `${model.done.length} of ${model.tasks.length} done` });
+      this.registerDomEvent(header, "click", () => { this.expandedRelease = expanded ? null : file.path; this.render(); });
+      if (!expanded) continue;
+      const body = card.createDiv({ cls: "life-os-meeting-body" });
+      this.addMeter(body, model.tasks.length ? model.done.length / model.tasks.length : 0, `${this.getFileTitle(file)} progress`);
+      body.createEl("pre", { cls: "life-os-release-preview", text: model.notes });
+      const actions = body.createDiv({ cls: "life-os-form-actions" });
+      this.addSmallButton(actions, "Copy", async () => {
+        try {
+          await globalThis.navigator?.clipboard?.writeText(model.notes);
+          new Notice("Release notes copied.");
+        } catch (error) {
+          new Notice("Clipboard unavailable.");
+        }
+      }, { icon: "copy" });
+      this.addSmallButton(actions, "Write to note", () => this.runWrite(() => this.writer.replaceSection(file.path, "## Release notes", buildReleaseNotes({ ...model, level: 3 })), "Release notes written."), { icon: "file-pen-line" });
+      if (String(model.data.status || "planned") !== "released") {
+        this.addSmallButton(actions, "Mark released", () => this.runWrite(() => this.writer.setFrontmatter(file.path, { status: "released", date: model.date || this.today() }), "Release marked as released."), { icon: "rocket", primary: true });
+      }
+      this.addSmallButton(actions, "Open note", () => this.openPath(file.path), { icon: "file-text" });
+      if (model.open.length) {
+        body.createEl("h4", { text: "Still open" });
+        this.renderTaskList(body, model.open, { context: true });
+      }
+    }
   }
 
   pluginLoaded(id) {
@@ -4341,6 +5039,10 @@ class LifeOSSettingTab extends PluginSettingTab {
       .setName("Default project")
       .setDesc("Preselected in Quick add and Capture. Use the project note's title.")
       .addText((text) => text.setPlaceholder("Billing API").setValue(settings.defaultProject || "").onChange(async (value) => { settings.defaultProject = value.trim(); await save(); }));
+    new Setting(containerEl)
+      .setName("Your person note")
+      .setDesc("Title of your own note in 05 People. Tasks tagged with you count as yours, not as delegated, on the Waiting screen.")
+      .addText((text) => text.setPlaceholder("Jane Doe").setValue(settings.me || "").onChange(async (value) => { settings.me = value.trim(); await save(); }));
     new Setting(containerEl)
       .setName("Project task heading")
       .setDesc("Tasks added from a project page go under this heading. Missing headings are created at the end of the note.")

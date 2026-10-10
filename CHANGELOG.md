@@ -4,6 +4,28 @@ Format: Added, Changed, Templates (manual merge notes), Plugins, Breaking. Semve
 
 ## Unreleased
 
+### Dev OS: application 1.1.0 candidate
+Added
+- **Task editor:** a pencil on every task row and sprint card. It edits text, due, scheduled, sprint, owner, release, high priority, blocked, and Waits on. It rewrites only those parts and keeps other tags, recurrence, and dates.
+- **Dependencies** in Tasks format (`🆔`, `⛔`): Waits on badges, and ids generated when missing.
+- **Close sprint with carry-over:** open tasks move to a new next sprint (same length, following dates), another sprint, or the backlog. It can activate the target and set the project's `current_sprint`.
+- **Waiting screen:** delegated tasks by person with age and a copyable follow-up, dependency chains, and `#blocked`. New setting: your person note.
+- **Roadmap screen:** project bars with progress, sprints, milestones (◆), releases (▲), and a today line; 3, 6, or 12 months. Milestones are added on the project page.
+- **Releases:**
+  - `06 Writing/Releases`, `Templates/Release.md`, QuickAdd **New release**, and a Dev OS form.
+  - Release notes generated from `#release/` tasks (`#fix`, `#change`, `#security`, `#remove`) and accepted ADRs; copy them or write them to `## Release notes`; mark the release released.
+  - A Releases table on the Decisions dashboard.
+- Writer methods for a batch of task lines and for one generated section, both with stale-line protection.
+
+Changed
+- Renamed the remaining Compass leftovers:
+  - `Meta/Dev OS Config.md`: the plugin still reads the old path.
+  - `Personal Dashboard`, `Guide/10 Personal Dashboard.md`.
+  - `Example Project - Dev OS Setup`.
+  - The cover image, widget headers, and CI build names.
+- `wiki/routing-map.md` routes Web Clipper clippings: ingest `status: read` clips in place.
+- Owner tags (`#p/`) show as a chip instead of in the task text.
+
 ### Dev OS: application 1.0.0 candidate
 Added
 - Interactive Dev OS dashboard for developers and IT project managers.

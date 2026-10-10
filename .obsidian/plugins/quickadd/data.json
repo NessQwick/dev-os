@@ -601,6 +601,36 @@
       "setFileExistsBehavior": true
     },
     {
+      "id": "lifeos-new-release",
+      "name": "📦 New release",
+      "type": "Template",
+      "command": true,
+      "templatePath": "Templates/Release.md",
+      "folder": {
+        "enabled": true,
+        "folders": [
+          "06 Writing/Releases"
+        ],
+        "chooseWhenCreatingNote": false,
+        "createInSameFolderAsActiveFile": false,
+        "chooseFromSubfolders": false
+      },
+      "fileNameFormat": {
+        "enabled": true,
+        "format": "{{VALUE:title|label:Release title (Project 1.4.0)|trim}}"
+      },
+      "appendLink": false,
+      "openFile": true,
+      "openFileInNewTab": {
+        "enabled": false,
+        "direction": "vertical",
+        "focus": true
+      },
+      "openFileInMode": "default",
+      "fileExistsMode": "Nothing",
+      "setFileExistsBehavior": true
+    },
+    {
       "id": "lifeos-new-article",
       "name": "📰 New article",
       "type": "Template",

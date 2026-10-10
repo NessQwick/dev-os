@@ -25,3 +25,11 @@ FROM "06 Writing"
 WHERE type = "tech-note" OR type = "postmortem"
 SORT file.mtime DESC
 ```
+
+## Releases
+```dataview
+TABLE WITHOUT ID file.link AS Release, version AS Version, project AS Project, date AS Date, status AS Status
+FROM "06 Writing/Releases"
+WHERE type = "release"
+SORT date DESC
+```

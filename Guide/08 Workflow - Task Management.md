@@ -12,6 +12,8 @@
 | Sprint | `#sprint/<slug>` where the slug is the sprint note's title; sprint notes live in `04 Projects/Sprints` |
 | Owner or person | `#p/<slug>`; the person note and its **To discuss** query collect them (`#discuss`) |
 | Blocker | `#blocked`; shows on Today's standup and as a red badge on boards and lists |
+| Dependency | `🆔 <id>` on the task that must finish first, `⛔ <id>` on the one that waits (Tasks format); set from the task editor's **Waits on** |
+| Release | `#release/<slug>` where the slug is the release note's title; `#fix`, `#change`, `#security`, `#remove` pick the release-notes heading |
 | Meeting action items | tasks under `## Action items` in `10 Meetings/*.md`, tagged with the project and owner |
 | Dashboards | Dev OS Home, Today, Sprint, and Tasks screens; `00 Dashboards/Task Dashboard.md` and `Sprint Dashboard.md` without the plugin |
 
@@ -20,9 +22,11 @@ Slug = note title lowercased, non-alphanumerics to `-`. Project, Sprint, and Per
 ## A working week
 1. **Plan:** create a sprint from the Sprint screen or the project page (number, dates, goal). Tag tasks into it from the project page's add form (Sprint select) or by adding `#sprint/<slug>` by hand.
 2. **Daily:** open Today. The standup lists what you finished since the last working day, what is due or in progress, and what is blocked. Copy it into chat or write it to `## Standup` in the daily note. Keep a running `## Work log` there if you like; Prompt 18 uses it.
-3. **During the day:** tick tasks off wherever they appear; move sprint cards with Start and Done; add tasks with quick add or on the project page.
+3. **During the day:** tick tasks off wherever they appear; move sprint cards with Start and Done; add tasks with quick add or on the project page. The pencil on any task opens the editor: dates, sprint, owner, release, priority, blocked, and Waits on.
 4. **Meetings:** open the project, Meetings tab, New meeting minutes. Agenda, notes, decisions, action items with owners and due dates. Save once; the action items are tasks from that moment. Before a one-on-one, run Prompt 07 from the person's note.
-5. **End of sprint:** run Prompt 17 on the sprint note, write the review and retro, close the sprint, and retag unfinished tasks into the next one.
+5. **End of sprint:** run Prompt 17 on the sprint note and write the review and retro. Then **Close sprint**: Dev OS moves the open tasks to the next sprint (creating it with the same length), another sprint, or the backlog.
+6. **Follow-ups:** open **Waiting** before one-on-ones and standups. Delegated work is grouped by person with its age, and **Copy follow-up** gives you a ready message.
+7. **Planning across projects:** **Roadmap** shows every project's dates, sprints, milestones, and releases on one timeline.
 
 ## Execution model
 The dashboards recommend; you decide. Pick what you will do today and protect time for it. A task without a date is normal; dates are for things that are actually due.

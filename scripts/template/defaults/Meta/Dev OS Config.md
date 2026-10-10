@@ -11,6 +11,7 @@ meetings_folder: 10 Meetings
 decisions_folder: 06 Writing/Decisions
 docs_folder: 06 Writing
 clippings_folder: 07 Library/Clippings
+releases_folder: 06 Writing/Releases
 dq_prefix: dq_
 habit_prefix: habit_
 wheel_prefix: wheel_
@@ -55,6 +56,7 @@ The single place the system reads its settings from. Every dashboard widget in `
 | `decisions_folder` | Docs screen, New ADR | `06 Writing/Decisions` |
 | `docs_folder` | Docs screen (tech notes, postmortems) | `06 Writing` |
 | `clippings_folder` | Inbox screen, Web Clipper templates | `07 Library/Clippings` |
+| `releases_folder` | Docs, Releases; Roadmap release markers | `06 Writing/Releases` |
 
 Change a folder here and in the Templater folder templates together. Web Clipper templates in `Meta/Web Clipper/` carry their own `path`; edit it there too.
 

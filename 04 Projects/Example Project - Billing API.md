@@ -8,6 +8,9 @@ quarter: 2026-Q3
 started: 2026-09-01
 due: 2026-10-30
 current_sprint: "[[Example Sprint - Billing API Sprint 1]]"
+milestones:
+  - "2026-09-25 Invoices in staging"
+  - "2026-10-15 Release 1.0.0"
 people:
   - "[[Example Person - Alex Rivera]]"
 stakeholders:
@@ -30,10 +33,10 @@ sort by due
 ```
 
 ## Tasks
-- [x] Agree the invoice schema #project/example-project-billing-api #sprint/example-sprint-billing-api-sprint-1 ✅ 2026-09-08
-- [/] Implement the invoice endpoint #project/example-project-billing-api #sprint/example-sprint-billing-api-sprint-1 📅 2026-09-12
-- [ ] Load test with production-sized data #project/example-project-billing-api #sprint/example-sprint-billing-api-sprint-1 #blocked 📅 2026-09-14
-- [ ] Write the migration runbook #project/example-project-billing-api #p/example-person-alex-rivera 📅 2026-09-20 ⏫
+- [x] Agree the invoice schema #project/example-project-billing-api #sprint/example-sprint-billing-api-sprint-1 #release/example-release-billing-api-1-0-0 #change ✅ 2026-09-08
+- [/] Implement the invoice endpoint #project/example-project-billing-api #sprint/example-sprint-billing-api-sprint-1 #release/example-release-billing-api-1-0-0 📅 2026-09-12 🆔 inv001
+- [ ] Load test with production-sized data #project/example-project-billing-api #sprint/example-sprint-billing-api-sprint-1 #release/example-release-billing-api-1-0-0 #blocked 📅 2026-09-14 ⛔ inv001
+- [ ] Write the migration runbook #project/example-project-billing-api #p/example-person-alex-rivera ⏫ 📅 2026-09-20 ➕ 2026-09-08
 
 ## Notes
 - Decision log lives in [[Example ADR-0001 Use PostgreSQL for invoices]].

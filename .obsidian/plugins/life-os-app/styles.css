@@ -1812,3 +1812,58 @@
   .life-os-task-row.is-interactive .life-os-task-meta { grid-column: 2; justify-content: flex-start; }
   .life-os-form-modal .life-os-form { grid-template-columns: 1fr; }
 }
+
+/* Dev OS 1.1: task editor badges, Waiting, Roadmap, Releases. */
+.life-os-task-owner { padding: 3px 7px; border-radius: 999px; color: var(--text-muted); background: color-mix(in srgb, var(--text-normal) 7%, transparent); font-size: 0.62rem; font-weight: 650; }
+.life-os-task-badge.is-waiting { color: var(--life-os-accent-soft); background: color-mix(in srgb, var(--life-os-accent) 8%, transparent); border: 1px dashed color-mix(in srgb, var(--life-os-accent) 40%, transparent); }
+.life-os-task-age { justify-self: end; color: var(--text-faint); font-size: 0.66rem; font-variant-numeric: tabular-nums; }
+.life-os-waiting-live, .life-os-roadmap-live { margin: 0 0 34px; padding: 20px; border: 1px solid var(--life-os-line); border-radius: 18px; background: var(--life-os-raised); }
+.life-os-waiting-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.life-os-waiting-person { display: grid; gap: 8px; align-content: start; }
+.life-os-waiting-person .life-os-task-row.is-interactive { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+.life-os-dependency { display: grid; gap: 6px; margin-bottom: 10px; padding: 10px; border: 1px dashed var(--life-os-line); border-radius: 12px; }
+.life-os-dependency-chain { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-left: 26px; }
+.life-os-home .life-os-dependency-chain button.life-os-link-row { width: auto; border-bottom: 0; color: var(--life-os-accent-soft); }
+
+.life-os-roadmap { display: grid; gap: 4px; margin: 10px 0; overflow-x: auto; }
+.life-os-roadmap-row { display: grid; grid-template-columns: minmax(120px, 200px) minmax(420px, 1fr); align-items: center; gap: 10px; min-height: 34px; }
+.life-os-roadmap-row.is-scale { min-height: 22px; border-bottom: 1px solid var(--life-os-line); }
+.life-os-home button.life-os-roadmap-label { height: auto; padding: 4px 0; border: 0; background: none; box-shadow: none; color: var(--text-normal); font-size: 0.76rem; font-weight: 650; text-align: left; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
+.life-os-roadmap-track { position: relative; height: 30px; border-radius: 8px; background: repeating-linear-gradient(90deg, transparent 0 calc(100% / 12 - 1px), color-mix(in srgb, var(--text-normal) 4%, transparent) calc(100% / 12 - 1px) calc(100% / 12)); }
+.life-os-roadmap-row.is-scale .life-os-roadmap-track { height: 22px; background: none; }
+.life-os-roadmap-month { position: absolute; top: 3px; padding-left: 4px; border-left: 1px solid var(--life-os-line); color: var(--text-faint); font-size: 0.64rem; white-space: nowrap; }
+.life-os-roadmap-today { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--color-red); opacity: 0.7; z-index: 2; }
+.life-os-home button.life-os-roadmap-bar { position: absolute; top: 3px; height: 18px; min-height: 0; padding: 0 6px; overflow: hidden; display: flex; align-items: center; border: 1px solid color-mix(in srgb, var(--life-os-accent) 55%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--life-os-accent) 22%, var(--background-primary)); box-shadow: none; color: var(--text-normal); font-size: 0.62rem; font-weight: 700; cursor: pointer; }
+.life-os-roadmap-bar > span { position: relative; z-index: 1; }
+.life-os-roadmap-progress { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--life-os-accent) 45%, transparent); }
+.life-os-roadmap-bar.is-idea { border-style: dashed; background: color-mix(in srgb, var(--text-normal) 6%, var(--background-primary)); }
+.life-os-roadmap-bar.is-on-hold { opacity: 0.55; }
+.life-os-roadmap-bar.is-done { border-color: color-mix(in srgb, var(--color-green) 55%, transparent); background: color-mix(in srgb, var(--color-green) 18%, var(--background-primary)); }
+.life-os-roadmap-bar.is-late { border-color: var(--color-red); box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-red) 40%, transparent); }
+.life-os-roadmap-sprint { position: absolute; bottom: 2px; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--text-normal) 30%, transparent); }
+.life-os-roadmap-sprint.is-active { background: var(--life-os-accent-soft); }
+.life-os-roadmap-sprint.is-closed { background: color-mix(in srgb, var(--text-normal) 15%, transparent); }
+.life-os-roadmap-marker { position: absolute; top: 4px; transform: translateX(-50%); z-index: 3; color: var(--life-os-accent-soft); font-size: 0.82rem; line-height: 1; }
+.life-os-roadmap-marker.is-past { color: var(--text-faint); }
+.life-os-home button.life-os-roadmap-marker { height: auto; min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; cursor: pointer; }
+.life-os-roadmap-marker.is-release { color: var(--color-green); top: auto; bottom: 6px; }
+.life-os-roadmap-marker.is-release.is-planned { color: var(--life-os-accent); }
+.life-os-roadmap-outside { position: absolute; top: 7px; left: 6px; color: var(--text-faint); font-size: 0.66rem; }
+.life-os-roadmap-legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--text-muted); font-size: 0.7rem; }
+.life-os-roadmap-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.life-os-roadmap-swatch { display: inline-block; width: 18px; height: 10px; border: 1px solid color-mix(in srgb, var(--life-os-accent) 55%, transparent); border-radius: 3px; background: color-mix(in srgb, var(--life-os-accent) 22%, transparent); }
+.life-os-roadmap-swatch.is-idea { border-style: dashed; background: transparent; }
+.life-os-roadmap-swatch.is-on-hold { opacity: 0.55; }
+.life-os-roadmap-swatch.is-late { border-color: var(--color-red); }
+
+.life-os-releases { margin: 0 0 18px; }
+.life-os-release-card { margin-bottom: 8px; border: 1px solid var(--life-os-line); border-radius: 14px; background: var(--background-primary); }
+.life-os-release-card.is-open { border-color: color-mix(in srgb, var(--life-os-accent) 40%, var(--life-os-line)); }
+.life-os-release-preview { max-height: 360px; overflow: auto; margin: 10px 0 0; padding: 12px; border: 1px solid var(--life-os-line); border-radius: 10px; background: var(--background-secondary); font-size: 0.74rem; line-height: 1.5; white-space: pre-wrap; }
+.life-os-chip.is-released { color: var(--color-green); }
+.life-os-chip.is-planned { color: var(--life-os-accent-soft); }
+
+@container (max-width: 700px) {
+  .life-os-waiting-grid { grid-template-columns: 1fr; }
+  .life-os-roadmap-row { grid-template-columns: 110px minmax(420px, 1fr); }
+}
