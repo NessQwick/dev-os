@@ -3,9 +3,9 @@ date: <% tp.date.now("YYYY-MM-DD") %>
 quarter: <% tp.file.title.slice(0, 7) %>
 tags:
   - retreat
-<%* const _cf = app.vault.getAbstractFileByPath("Meta/Compass Config.md"); const _cfg = _cf ? (app.metadataCache.getFileCache(_cf)?.frontmatter ?? {}) : {}; const _ws = Array.isArray(_cfg.wheel_areas) && _cfg.wheel_areas.length ? _cfg.wheel_areas : ["wheel_health","wheel_relationships","wheel_family","wheel_career","wheel_finances","wheel_growth","wheel_fun","wheel_meaning"]; tR += _ws.map(k => k + ": ").join("\n"); %>
+<%* const _cf = app.vault.getAbstractFileByPath("Meta/Dev OS Config.md"); const _cfg = _cf ? (app.metadataCache.getFileCache(_cf)?.frontmatter ?? {}) : {}; const _ws = Array.isArray(_cfg.wheel_areas) && _cfg.wheel_areas.length ? _cfg.wheel_areas : ["wheel_health","wheel_relationships","wheel_family","wheel_career","wheel_finances","wheel_growth","wheel_fun","wheel_meaning"]; tR += _ws.map(k => k + ": ").join("\n"); %>
 ---
-> Name this note `YYYY-QN Personal Retreat` (for example `2026-Q3 Personal Retreat`). The Compass dashboard finds this quarter's retreat by that naming convention and renders the wheel of life from the `wheel_*` properties above. No code changes needed.
+> Name this note `YYYY-QN Personal Retreat` (for example `2026-Q3 Personal Retreat`). The Personal dashboard finds this quarter's retreat by that naming convention and renders the wheel of life from the `wheel_*` properties above. No code changes needed.
 
 Previous retreat: [[02 Retreats/<% moment(tp.file.title.slice(0, 7), "YYYY-[Q]Q").subtract(1, "quarter").format("YYYY-[Q]Q") %> Personal Retreat]] · Quarter note: [[01 Journal/Quarterly/<% tp.file.title.slice(0, 7) %>]] · Same quarter last year: [[02 Retreats/<% moment(tp.file.title.slice(0, 7), "YYYY-[Q]Q").subtract(1, "year").format("YYYY-[Q]Q") %> Personal Retreat]]
 
@@ -45,7 +45,7 @@ Wins this quarter:
 ```dataviewjs
 const q = moment(dv.current().quarter, "YYYY-[Q]Q");
 const from = q.clone().startOf("quarter"), to = q.clone().endOf("quarter");
-const cfg = dv.page("Meta/Compass Config") || {};
+const cfg = dv.page("Meta/Dev OS Config") || {};
 const pages = dv.pages(`"${cfg.daily_folder || "01 Journal/Daily"}"`).where(p => /^\d{4}-\d{2}-\d{2}$/.test(p.file.name) && moment(p.file.name).isBetween(from, to, "day", "[]")).sort(p => p.file.name);
 const wins = [];
 for (const p of pages) for (const L of p.file.lists) if (L.section && L.section.subpath === "Wins") wins.push(`${p.file.link}: ${L.text}`);

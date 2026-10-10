@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="t d">
-  <title id="t">Compass</title>
-  <desc id="d">Run your whole life out of Obsidian: one honest question set a night, everything else follows.</desc>
+  <title id="t">Dev OS</title>
+  <desc id="d">Plan the work. Ship the work. Remember why.</desc>
   <defs>
     <radialGradient id="glow" cx="1000" cy="320" r="420" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#e3a75b" stop-opacity="0.16"/>
@@ -34,12 +34,12 @@
 
   <!-- copy -->
   <text x="96" y="214" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="600" letter-spacing="3.5" fill="#e3a75b">OBSIDIAN VAULT TEMPLATE</text>
-  <text x="92" y="322" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="118" font-weight="700" letter-spacing="-3" fill="#f3f4f6">Compass</text>
+  <text x="92" y="322" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="118" font-weight="700" letter-spacing="-3" fill="#f3f4f6">Dev OS</text>
   <text font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="26" fill="#a3aab8">
-    <tspan x="96" y="378">Run your whole life out of Obsidian:</tspan>
-    <tspan x="96" y="414">one honest question set a night,</tspan>
-    <tspan x="96" y="450">everything else follows.</tspan>
+    <tspan x="96" y="378">Projects, sprints, meetings, decisions,</tspan>
+    <tspan x="96" y="414">and everything you clip from the web,</tspan>
+    <tspan x="96" y="450">in plain Markdown.</tspan>
   </text>
   <line x1="96" y1="506" x2="640" y2="506" stroke="#2a3140" stroke-width="1"/>
-  <text x="96" y="546" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="17" font-weight="500" letter-spacing="0.8" fill="#6f7787">Journal<tspan fill="#e3a75b">&#160;·&#160;</tspan>Retreat<tspan fill="#e3a75b">&#160;·&#160;</tspan>Plan<tspan fill="#e3a75b">&#160;·&#160;</tspan>Habits<tspan fill="#e3a75b">&#160;·&#160;</tspan>Tasks<tspan fill="#e3a75b">&#160;·&#160;</tspan>Write<tspan fill="#e3a75b">&#160;·&#160;</tspan>Assistant</text>
+  <text x="96" y="546" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="17" font-weight="500" letter-spacing="0.8" fill="#6f7787">Projects<tspan fill="#e3a75b">&#160;·&#160;</tspan>Sprints<tspan fill="#e3a75b">&#160;·&#160;</tspan>Meetings<tspan fill="#e3a75b">&#160;·&#160;</tspan>Decisions<tspan fill="#e3a75b">&#160;·&#160;</tspan>Releases<tspan fill="#e3a75b">&#160;·&#160;</tspan>Clips</text>
 </svg>

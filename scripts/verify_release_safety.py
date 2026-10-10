@@ -68,7 +68,7 @@ class ReleaseSafety(unittest.TestCase):
         self.assertIn("fixture.txt", (self.live / "MANIFEST.sha256").read_text())
         self.assertFalse((self.base / "MANIFEST.sha256").exists())
     def test_private_defaults_never_staged(self):
-        for rel in ["Meta/Compass Config.md", "03 Planning/Life Theme.md", "08 Tasks/Tasks.md"]:
+        for rel in ["Meta/Dev OS Config.md", "03 Planning/Life Theme.md", "08 Tasks/Tasks.md"]:
             path = self.live / rel
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("SYNTHETIC_PRIVATE_SENTINEL")

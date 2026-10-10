@@ -11,7 +11,7 @@ await dv.view("Meta/views/habits", { days: 14 });
 ```
 
 ## Changing the habits you track
-1. Open [[Compass Config]].
+1. Open [[Dev OS Config]].
 2. Add or remove entries in the `habits` list (keep the `habit_` prefix).
 3. Done. New daily notes carry the new checkbox, and this dashboard picks it up automatically.
 

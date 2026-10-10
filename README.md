@@ -1,5 +1,5 @@
-<p align="center"><img src="Meta/attachments/cover.png" alt="Compass" width="100%"></p>
-<!-- Fallback if the PNG is missing: <p align="center"><img src="Meta/attachments/cover.svg" alt="Compass" width="100%"></p> -->
+<p align="center"><img src="Meta/attachments/cover.png" alt="Dev OS" width="100%"></p>
+<!-- Fallback if the PNG is missing: <p align="center"><img src="Meta/attachments/cover.svg" alt="Dev OS" width="100%"></p> -->
 
 # Dev OS
 
@@ -29,32 +29,36 @@ Notes tagged `example` are seed data; the Setup checklist (`00 Dashboards/Setup.
 | Home | See what needs attention, the active sprint, today's meetings, the clip inbox; quick-add a task | task lines |
 | Today | Standup drafted from tasks (done since last working day, due or in progress, `#blocked`); copy it or write it to the daily note | `## Standup` in the daily note, task lines |
 | Projects | Change status and priority on each card, see progress and overdue counts | project properties |
+| Roadmap | Projects as bars from `started` to `due` with progress, sprints underneath, milestones and releases as markers, a today line; 3, 6, or 12 months | nothing (milestones are added on the project page) |
 | Project page | Edit status, priority, target date, repo, stakeholders; tabs for Tasks (add with due, scheduled, sprint, owner, priority, blocked), Meetings (minutes composer and timeline), Docs, Clips | project properties, task lines under `## Tasks`, new meeting notes, `## Notes` in a meeting |
-| Sprint | Board with To do, In progress, Done; start, finish, reopen; start or close the sprint | task status (`[ ]`, `[/]`, `[x]`), sprint status |
+| Sprint | Board with To do, In progress, Done; start, finish, reopen; close the sprint and move open tasks to the next one (created for you) or the backlog | task status (`[ ]`, `[/]`, `[x]`), `#sprint/` tags, sprint status |
 | Meetings | Minutes composer, upcoming and recent meetings, open action items | new meeting notes, task lines |
-| Docs | ADRs, tech notes, postmortems with filters; status from a dropdown; auto-numbered new ADRs | doc properties, new notes |
+| Docs | ADRs, tech notes, postmortems, and releases with filters; status from a dropdown; auto-numbered new ADRs; release notes generated from `#release/` tasks and accepted ADRs, copied or written to the release note | doc properties, new notes, `## Release notes` |
 | Inbox | Triage Web Clipper clips: assign a project, mark read, archive, keep as a tech note | clip properties, one file move |
+| Waiting | Delegated tasks grouped by person with age and a copyable follow-up, tasks waiting on other tasks (`⛔`), and `#blocked` work | task lines |
 | Tasks, People, Library, Brain, AI | Every open task, people with discussion items, books and clips, the link graph, AI readiness | task lines |
+
+Every task row has an editor (pencil): text, due and scheduled dates, sprint, owner, release, priority, blocked, and a Waits on dependency, written in Tasks format without touching the rest of the line.
 
 All writes go through one class in the plugin, happen only on an explicit click, never overwrite an existing note, and refuse to change a task line that changed since it was read. The plugin makes no network requests. Details: `Guide/21 Life OS Application.md`.
 
 ## What is inside
 
 ```
-00 Dashboards/   Setup, Task, Projects, Sprint, Decisions, Boards, Assistant (+ personal: Compass, Habit Canvas, Daily Questions)
+00 Dashboards/   Setup, Task, Projects, Sprint, Decisions (and releases), Boards, Assistant (+ personal: Personal Dashboard, Habit Canvas, Daily Questions)
 01 Journal/      Daily notes (Standup, Work log, Journal), Weekly, Quarterly
 02 Retreats/     quarterly personal retreats (personal layer)
 03 Planning/     Life Theme, Core Values, Ideal Week (personal layer)
 04 Projects/     project notes (#project/<slug> tasks), Sprints/ (#sprint/<slug>), Projects Board
 05 People/       teammates and stakeholders (#p/<slug> tasks, #discuss roll-ups)
-06 Writing/      Decisions (ADRs), Tech Notes, Postmortems, Articles (with a Kanban board)
+06 Writing/      Decisions (ADRs), Releases, Tech Notes, Postmortems, Articles (with a Kanban board)
 07 Library/      Clippings (Web Clipper inbox), Book Notes
 08 Tasks/        Tasks.md, the master inbox
 09 Reading/      reading plan module (personal layer, optional)
 10 Meetings/     meeting minutes: agenda, notes, decisions, action items
 Prompts/         18 prompts for your AI agent, one note per recurring job
 Templates/       Templater templates for every note type
-Meta/            Compass Config.md (folders, questions, habits), Web Clipper/ templates, views/*.js
+Meta/            Dev OS Config.md (folders, questions, habits), Web Clipper/ templates, views/*.js
 Guide/           how the system works, one page per workflow
 wiki/, inbox/    knowledge layer for the claude-obsidian plugin (optional)
 scripts/         template build and verify, reading plan generator
@@ -66,12 +70,14 @@ AGENTS.md        rules and folder map for any AI agent; CLAUDE.md and GEMINI.md 
 .mcp.example.json  how to point an agent at Obsidian's MCP server (Local REST API)
 ```
 
-`Meta/Compass Config.md` is the single config: folders for projects, sprints, meetings, decisions, docs, and clippings, plus the personal layer's questions, habits, and wheel areas.
+`Meta/Dev OS Config.md` is the single config: folders for projects, sprints, meetings, decisions, docs, and clippings, plus the personal layer's questions, habits, and wheel areas.
 
 ## Conventions
 
 - Tasks use the Obsidian Tasks emoji format: `📅` due, `⏳` scheduled, `⏫` high, `➕` created, `✅` done. `- [/]` is in progress.
-- Routing tags: `#project/<slug>` (project), `#sprint/<slug>` (sprint), `#p/<slug>` (owner or person), `#blocked`, `#discuss`. The slug is the note title lowercased, with non-alphanumerics replaced by `-`.
+- Routing tags: `#project/<slug>` (project), `#sprint/<slug>` (sprint), `#release/<slug>` (release), `#p/<slug>` (owner or person), `#blocked`, `#discuss`. Release notes sort tasks by `#fix`, `#change`, `#security`, `#remove`.
+- Dependencies: `🆔 <id>` on the task that must finish first, `⛔ <id>` on the one that waits (Obsidian Tasks format).
+- Milestones: `milestones: ["YYYY-MM-DD Name"]` in the project note. The slug is the note title lowercased, with non-alphanumerics replaced by `-`.
 - Notes link to their project with a `project: "[[Project name]]"` property (sprints, meetings, ADRs, tech notes, postmortems, clippings).
 - An accepted ADR is never rewritten. A new ADR supersedes it.
 

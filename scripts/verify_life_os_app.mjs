@@ -90,6 +90,7 @@ const recordChoiceContracts = [
   ["lifeos-new-adr", "Templates/ADR.md", "06 Writing/Decisions"],
   ["lifeos-new-tech-note", "Templates/Tech Note.md", "06 Writing/Tech Notes"],
   ["lifeos-new-postmortem", "Templates/Postmortem.md", "06 Writing/Postmortems"],
+  ["lifeos-new-release", "Templates/Release.md", "06 Writing/Releases"],
   ["lifeos-new-article", "Templates/Article.md", "06 Writing/Articles"],
   ["lifeos-new-book", "Templates/Book Note.md", "07 Library/Book Notes"],
   ["lifeos-new-study-note", "Templates/Study Note.md", "09 Reading/Study Notes"],
@@ -373,7 +374,7 @@ try {
     ["06 Writing/Articles/Sample.md", { type: "article", tags: ["example"] }],
     ["07 Library/Task Example.md", { type: "book" }],
     [
-      "Meta/Compass Config.md",
+      "Meta/Dev OS Config.md",
       {
         questions: [{ key: "dq_goals", text: "Did I set clear goals?" }],
         habits: ["habit_journal"],
@@ -523,6 +524,8 @@ try {
       "meetings",
       "docs",
       "inbox",
+      "roadmap",
+      "waiting",
       "plan",
       "focus",
       "review",
@@ -530,7 +533,7 @@ try {
       "library",
       "ai",
     ].map((screen) => `open-${screen}`),
-    ...["project", "sprint", "meeting", "adr", "tech-note", "postmortem"].map((kind) => `new-${kind}`),
+    ...["project", "sprint", "meeting", "adr", "release", "tech-note", "postmortem"].map((kind) => `new-${kind}`),
   ];
   const missingAppCommands = requiredCommandIds.filter((id) => !commandIds.has(id));
   check(
@@ -550,6 +553,8 @@ try {
     "meetings",
     "docs",
     "inbox",
+    "roadmap",
+    "waiting",
     "plan",
     "focus",
     "review",
@@ -564,6 +569,8 @@ try {
     meetings: "life-os-meetings-live",
     docs: "life-os-docs-live",
     inbox: "life-os-inbox-live",
+    roadmap: "life-os-roadmap-live",
+    waiting: "life-os-waiting-live",
     plan: "life-os-plan-live",
     focus: "life-os-collection-live",
     review: "life-os-review-live",
@@ -716,7 +723,7 @@ try {
   );
   pluginInstances.get("agent-client").settings.autoAllowPermissions = false;
 
-  metadata.set("Meta/Compass Config.md", {
+  metadata.set("Meta/Dev OS Config.md", {
     questions: [{ key: "dq_goals", text: "Did I set clear goals?" }],
     habits: ["habit_journal", "habit_exercise", "habit_reading"],
   });
@@ -760,7 +767,7 @@ try {
       coverage.recorded === 3,
     JSON.stringify(coverage)
   );
-  metadata.set("Meta/Compass Config.md", {
+  metadata.set("Meta/Dev OS Config.md", {
     daily_folder: "/Custom/Daily/",
     weekly_folder: "Custom/Weekly/",
     quarterly_folder: "Custom/Quarterly",
@@ -789,6 +796,7 @@ try {
       decisions: "06 Writing/Decisions",
       docs: "06 Writing",
       clippings: "07 Library/Clippings",
+      releases: "06 Writing/Releases",
     }),
     JSON.stringify(configuredFolders)
   );
@@ -808,7 +816,7 @@ try {
     view.isDomainRecord(new TFile("Custom/Projects/Project.md")) &&
       !view.isDomainRecord(new TFile("04 Projects/Project.md"))
   );
-  metadata.set("Meta/Compass Config.md", {
+  metadata.set("Meta/Dev OS Config.md", {
     questions: [{ key: "dq_goals", text: "Did I set clear goals?" }],
     habits: ["habit_journal"],
   });
@@ -963,6 +971,74 @@ try {
   collect(view.contentEl);
   check("personal modules are hidden by default", !railLabels.includes("Plan") && !railLabels.includes("Review") && railLabels.includes("Sprint") && railLabels.includes("Inbox"), railLabels.join(","));
   check("settings tab registered", Boolean(plugin.settingTab));
+
+  // Editing keeps unrelated metadata and only touches the requested parts.
+  check("edit keeps recurrence, created date, and other tags",
+    sandbox.editTaskLine("- [ ] Ship it #project/a #sprint/s1 #p/bob ⏫ 🔁 every week 📅 2026-09-10 ➕ 2026-09-01", { text: "Ship it now", sprint: "s2", owner: "", high: false, due: "2026-09-12", blocked: true }) ===
+      "- [ ] Ship it now #project/a #sprint/s2 #blocked 🔁 every week 📅 2026-09-12 ➕ 2026-09-01");
+  check("edit keeps issue numbers in the text and the done date", sandbox.editTaskLine("  - [x] Fix #123 crash #fix ✅ 2026-09-08", { release: "billing-1-0" }) === "  - [x] Fix #123 crash #fix #release/billing-1-0 ✅ 2026-09-08");
+  check("dependencies are written in Tasks format and deduplicated", sandbox.editTaskLine("- [ ] A", { id: "abc", dependsOn: ["x", "y", "x"] }) === "- [ ] A 🆔 abc ⛔ x,y" && sandbox.editTaskLine("- [ ] B ⛔ x,y 🆔 q", { dependsOn: [] }) === "- [ ] B 🆔 q");
+  check("milestones parse from strings and objects", JSON.stringify(sandbox.parseMilestones(["2026-10-15 Release", { date: "2026-09-25", name: "Beta" }, "nonsense"]).map((item) => `${item.date} ${item.name}`)) === JSON.stringify(["2026-09-25 Beta", "2026-10-15 Release"]));
+  const notes = sandbox.buildReleaseNotes({ version: "1.0.0", date: "2026-10-01", done: [{ text: "Fix crash #fix", display: "Fix crash" }, { text: "New API", display: "New API" }], open: [{ display: "Docs" }], decisions: ["ADR-0001 X"], level: 3 });
+  check("release notes group by tag and list decisions and open work", notes === "### 1.0.0 (2026-10-01)\n\n#### Fixed\n- Fix crash\n\n#### Added\n- New API\n\n#### Decisions\n- [[ADR-0001 X]]\n\n#### Not done\n- Docs", notes);
+
+  // Task editor, sprint carry-over, waiting, roadmap, releases on a small project.
+  const projectPath = "04 Projects/Billing.md";
+  const sprintPath = "04 Projects/Sprints/Billing Sprint 1.md";
+  const releasePath = "06 Writing/Releases/Billing 1.0.md";
+  for (const filePath of [projectPath, sprintPath, releasePath, "05 People/Alex.md"]) fakeFiles.push(new TFile(filePath));
+  metadata.set(projectPath, { type: "project", status: "active", started: "2026-09-01", due: "2026-10-30", milestones: ["2026-09-20 Beta"] });
+  metadata.set(sprintPath, { type: "sprint", project: "[[Billing]]", number: 1, start: "2026-09-07", end: "2026-09-20", status: "active" });
+  metadata.set(releasePath, { type: "release", version: "1.0", project: "[[Billing]]", date: "2026-10-01", status: "planned" });
+  metadata.set("05 People/Alex.md", { type: "person" });
+  fileContents.set(projectPath, [
+    "## Tasks",
+    "- [ ] Build API #project/billing #sprint/billing-sprint-1 #release/billing-1-0 🆔 api1 ➕ 2026-09-01",
+    "- [ ] Load test #project/billing #sprint/billing-sprint-1 ⛔ api1",
+    "- [x] Schema #project/billing #sprint/billing-sprint-1 #release/billing-1-0 #fix ✅ 2026-09-05",
+    "- [ ] Runbook #project/billing #p/alex ➕ 2026-09-02",
+  ].join("\n"));
+  fileContents.set(releasePath, "# Billing 1.0\n\n## Release notes\nold\n\n## Rollout\n- [ ] Flag");
+  listItems.set(projectPath, [1, 2, 3, 4].map((line) => taskItem(fileContents.get(projectPath).split("\n")[line].charAt(3), line)));
+  await view.refreshLiveData();
+  const loadTest = view.allTasks().find((task) => task.text.startsWith("Load test"));
+  check("dependencies resolve to open tasks", view.openDependencies(loadTest).map((task) => task.display).join() === "Build API");
+  view.activeScreen = "waiting";
+  view.render();
+  check("waiting groups delegated work by person and lists dependencies", treeHasText(view.contentEl, "Alex") && treeHasText(view.contentEl, "Delegated, by person") && treeHasText(view.contentEl, "Waits on"));
+  view.activeScreen = "roadmap";
+  view.render();
+  check("roadmap draws a bar, a milestone, and a release marker", treeHasClass(view.contentEl, "life-os-roadmap-bar") && treeHasClass(view.contentEl, "is-milestone") && treeHasClass(view.contentEl, "is-release"));
+  const release = view.releaseModel(new TFile(releasePath));
+  check("release model collects tagged tasks", release.done.length === 1 && release.open.length === 1 && release.notes.includes("### Fixed\n- Schema"), release.notes);
+  await view.runWrite(() => view.writer.replaceSection(releasePath, "## Release notes", "### 1.0\n- Schema"), "");
+  check("release notes replace only their own section", fileContents.get(releasePath) === "# Billing 1.0\n\n## Release notes\n### 1.0\n- Schema\n\n## Rollout\n- [ ] Flag", fileContents.get(releasePath));
+
+  // Task editor through the real form modal.
+  const runbook = view.allTasks().find((task) => task.text.startsWith("Runbook"));
+  const editor = view.openTaskEditor(runbook);
+  Object.assign(editor.values, { text: "Write the runbook", due: "2026-09-30", owner: "", sprint: "billing-sprint-1", waitsOn: `${projectPath}::3` });
+  await editor.submit();
+  const lines = fileContents.get(projectPath).split("\n");
+  const newId = lines[2].match(/🆔 ([a-z0-9]+) ⛔ api1$/)?.[1];
+  check("task editor rewrites the line with sprint, due, and a new dependency", Boolean(newId) && lines[4] === `- [ ] Write the runbook #project/billing #sprint/billing-sprint-1 📅 2026-09-30 ⛔ ${newId} ➕ 2026-09-02`, lines.join(" | "));
+
+  // Close the sprint and move open work into a new one.
+  fakeFiles.splice(0, fakeFiles.length, ...fakeFiles.filter((file) => !file.path.startsWith("04 Projects/Sprints/Billing Sprint 2")));
+  absentPaths.add("04 Projects/Sprints/Billing Sprint 2.md");
+  listItems.set(projectPath, [1, 2, 3, 4].map((line) => taskItem(fileContents.get(projectPath).split("\n")[line].charAt(3), line)));
+  await view.refreshLiveData();
+  const closer = view.closeSprint(new TFile(sprintPath));
+  Object.assign(closer.values, { target: "__new__", goal: "Ship it", activate: true });
+  writes.length = 0;
+  await closer.submit();
+  const after = fileContents.get(projectPath).split("\n");
+  check("closing a sprint creates the next one and moves open tasks",
+    writes.some((write) => write[0] === "create" && write[1] === "04 Projects/Sprints/Billing Sprint 2.md" && write[2].includes("start: 2026-09-21")) &&
+    after[1].includes("#sprint/billing-sprint-2") && after[2].includes("#sprint/billing-sprint-2") && after[3].includes("#sprint/billing-sprint-1") &&
+    metadata.get(sprintPath).status === "closed" && metadata.get(projectPath).current_sprint === "[[Billing Sprint 2]]", after.join(" | "));
+  const staleBatch = await view.writer.updateTaskLines([{ path: projectPath, line: 2, raw: "- [ ] not this" }], (line) => line + " x");
+  check("batch task writes skip changed lines", staleBatch.written === 0 && staleBatch.stale === 1);
 
   if (process.env.LIFE_OS_PREVIEW) {
     // Generated visual-test artifact uses synthetic fixtures only.

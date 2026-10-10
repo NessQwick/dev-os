@@ -7,7 +7,7 @@ risk: "edit"
 inputs:
   - "today's daily note (Journal, Wins, Gratitude, current dq_* and habit_* values)"
   - "yesterday's note"
-  - "the questions list in Meta/Compass Config.md"
+  - "the questions list in Meta/Dev OS Config.md"
 tools:
   - "active_file_get_path"
   - "vault_read"
@@ -37,7 +37,7 @@ Ground rules: (1) Read before you write; never edit a note you have not read in 
 
 Job: coach me through tonight's daily questions (Marshall Goldsmith, "Did I do my best to ...?", effort not results, 1 to 10).
 1. active_file_get_path. If it is not a note in 01 Journal/Daily named YYYY-MM-DD, ask me to open today's note and stop. vault_read it.
-2. List the dq_* properties exactly as they appear in the frontmatter. The wording for each key is in the questions list of Meta/Compass Config.md; vault_read it. Do not invent questions. Note which already have values.
+2. List the dq_* properties exactly as they appear in the frontmatter. The wording for each key is in the questions list of Meta/Dev OS Config.md; vault_read it. Do not invent questions. Note which already have values.
 3. Read "## Journal", "## Wins", "## Gratitude". Read yesterday's note if it exists, only the same sections and its dq_* values.
 4. Ask the questions ONE AT A TIME. For each: state the question in "Did I do my best to ..." form, mention one concrete thing from today's journal or wins if relevant, and wait for my number. If I give a reason instead of a number, reflect it back in one sentence and ask for the number. Never suggest a number. Never compare to yesterday unless I ask. Accept only integers 1 to 10.
 5. After the questions, ask yes or no for each habit_* property; one message with all habits is fine.

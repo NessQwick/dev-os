@@ -5,7 +5,7 @@ This separates reproducible development evidence from native acceptance. A local
 ## Identify the candidate
 
 - Template version: 1.1.0 candidate
-- Dev OS plugin (`life-os-app`) version: 1.0.0
+- Dev OS plugin (`life-os-app`) version: 1.1.0
 - Archive SHA256: use the exact candidate's external `.sha256` sidecar; not embedded here to avoid self-referential hashes
 - Operating system and Obsidian version: not recorded
 - Test date and reviewer: not recorded
@@ -38,7 +38,25 @@ Provider authentication, an actual AI request, external calendar integration, an
 
 Bind screenshots and results to the exact candidate checksum. Label synthetic fixtures visibly. Record failures and skipped checks. A passing static, mock-runtime, or browser test does not mark this record complete.
 
-## Development checks, 2026-10-10
+## Development checks, 2026-10-10 (Dev OS 1.1.0)
+
+Dev OS application 1.1.0 passed 102 static and mock-runtime checks. New coverage:
+- task-line editing that preserves recurrence and dates
+- Tasks-format dependencies
+- sprint close with carry-over into a newly created sprint
+- batch writes that skip changed lines
+- release notes grouping and section replacement
+- roadmap bars and markers
+- the waiting view
+
+The dashboard browser fixture passed fifteen modules: roadmap, waiting, the task editor modal, and release note writing at 1440 px, plus narrow-width checks.
+
+Still required natively:
+- the Tasks plugin reads edited lines and dependencies
+- release notes written into a real note
+- roadmap readability with many projects
+
+## Development checks, 2026-10-10 (Dev OS 1.0.0)
 
 Dev OS application 1.0.0 passed 89 static and mock-runtime checks, including writes confined to the writer class, stale task-line refusal, project page task and meeting minutes flows, and inbox filtering. The Assistant contract verifier passed 18 workflows. The dashboard browser fixture passed thirteen modules, the project page (add task, complete task, minutes composer and save), sprint card moves, inbox triage, narrow widths at 900, 620, and 390 px, and a light-theme smoke check. Native acceptance of the new write paths inside Obsidian (Tasks plugin rendering of edited lines, Templater not overwriting notes created with content, Web Clipper import) is still required.
 

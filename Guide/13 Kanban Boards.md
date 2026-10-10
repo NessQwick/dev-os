@@ -11,7 +11,7 @@ Sprints are not Kanban boards. A sprint is a note plus `#sprint/<slug>` tasks; t
 ## How it is wired
 - Global defaults in `.obsidian/plugins/obsidian-kanban/data.json`: dates typed with `@` (for example `@{2026-09-30}`) link to the daily note, relative dates shown, archive stamps the date.
 - Each board's own settings (the `%% kanban:settings %%` block at the bottom) set **New note folder** and **Note template**, so "convert card to note" from the Article board can create a note in `06 Writing/Articles` from `Templates/Article.md`.
-- `Meta/views/boards.js` reads every note with `kanban-plugin` in its properties and shows lane counts. It is on the [[Compass Dashboard]] (compact) and in full on [[Boards]]. Lanes named in `board_done_lanes` (config) count as finished.
+- `Meta/views/boards.js` reads every note with `kanban-plugin` in its properties and shows lane counts. It is on the [[Personal Dashboard]] (compact) and in full on [[Boards]]. Lanes named in `board_done_lanes` (config) count as finished.
 
 ## Practices
 - One board per type of work, in that type's folder. Capture to the backlog; drag left to right; the card reaches Published only when the thing is actually out.

@@ -1,8 +1,8 @@
-// Compass Wheel of Life widget: radar chart from wheel_* number properties.
+// Dev OS Wheel of Life widget: radar chart from wheel_* number properties.
 // Usage:
 //   await dv.view("Meta/views/wheel")                                  -> this quarter's retreat (by naming convention), else most recent
 //   await dv.view("Meta/views/wheel", { page: dv.current().file.path })  -> a specific retreat note (used inside the retreat template)
-const cfg = dv.page("Meta/Compass Config") || {};
+const cfg = dv.page("Meta/Dev OS Config") || {};
 const FOLDER = cfg.retreat_folder || "02 Retreats";
 const PREFIX = cfg.wheel_prefix || "wheel_";
 

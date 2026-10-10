@@ -1,6 +1,6 @@
-// Compass weekly review table: one row per day of the week with daily-question scores and habit hits.
+// Dev OS weekly review table: one row per day of the week with daily-question scores and habit hits.
 // Usage: await dv.view("Meta/views/week", { week: dv.current().file.name })   // file named gggg-[W]ww
-const cfg = dv.page("Meta/Compass Config") || {};
+const cfg = dv.page("Meta/Dev OS Config") || {};
 const FOLDER = cfg.daily_folder || "01 Journal/Daily";
 const DQ = cfg.dq_prefix || "dq_";
 const HB = cfg.habit_prefix || "habit_";

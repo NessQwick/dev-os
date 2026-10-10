@@ -58,6 +58,10 @@
     {
       "folder": "06 Writing/Postmortems",
       "template": "Templates/Postmortem.md"
+    },
+    {
+      "folder": "06 Writing/Releases",
+      "template": "Templates/Release.md"
     }
   ],
   "enabled_templates_hotkeys": [

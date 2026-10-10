@@ -2,7 +2,7 @@ Projects are notes in `04 Projects/` with `status`, `priority`, `repo`, `due`, a
 
 ## Active
 ```dataviewjs
-const cfg = dv.page("Meta/Compass Config") || {};
+const cfg = dv.page("Meta/Dev OS Config") || {};
 const folder = cfg.projects_folder || "04 Projects";
 const rank = { high: 0, normal: 1, low: 2 };
 const projects = dv.pages(`"${folder}"`).where(p => p.type === "project" && p.status !== "done").sort(p => `${rank[p.priority] ?? 1}${p.due ?? "9999"}`, "asc");

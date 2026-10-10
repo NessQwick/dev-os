@@ -1,6 +1,6 @@
-// Compass quick links: capture buttons (QuickAdd commands) + jump to today's multi-scale planning notes.
+// Dev OS quick links: capture buttons (QuickAdd commands) + jump to today's multi-scale planning notes.
 // Usage: await dv.view("Meta/views/quicklinks")
-const cfg = dv.page("Meta/Compass Config") || {};
+const cfg = dv.page("Meta/Dev OS Config") || {};
 const DAILY = cfg.daily_folder || "01 Journal/Daily";
 const WEEKLY = cfg.weekly_folder || "01 Journal/Weekly";
 const QUARTERLY = cfg.quarterly_folder || "01 Journal/Quarterly";

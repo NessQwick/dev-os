@@ -169,7 +169,7 @@ def validate_destination(live, output_root, name):
 
 def reset_defaults(out):
     src = os.path.join(HERE, "template", "defaults")
-    required = ["Meta/Compass Config.md", "03 Planning/Life Theme.md", "03 Planning/Core Values.md", "03 Planning/Ideal Week.md", "08 Tasks/Tasks.md"]
+    required = ["Meta/Dev OS Config.md", "03 Planning/Life Theme.md", "03 Planning/Core Values.md", "03 Planning/Ideal Week.md", "08 Tasks/Tasks.md"]
     if any(not Path(src, rel).is_file() or Path(src, rel).is_symlink() for rel in required):
         raise ValueError("Clean source defaults are missing or unsafe")
     for root, _, files in os.walk(src):
@@ -277,7 +277,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--live", default=LIVE)
     ap.add_argument("--out", default=os.path.join(os.path.dirname(LIVE), "life-os-releases"))
-    ap.add_argument("--name", default="Compass")
+    ap.add_argument("--name", default="DevOS")
     ap.add_argument("--version", required=True)
     ap.add_argument("--zip", action="store_true")
     ap.add_argument("--without-reading", action="store_true")

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Gate for a built template folder. Exit 1 on any failure.
-    python3 scripts/verify_template.py build/Compass [--json]
+    python3 scripts/verify_template.py build/DevOS [--json]
 """
 import json, os, re, sys, subprocess, stat, hashlib
 
@@ -16,7 +16,7 @@ SKIP_DIR_PARTS = ("/.obsidian/plugins/",)
 DATE_LINK = re.compile(r"^\d{4}-(\d\d-\d\d|W\d\d|Q\d( Personal Retreat)?)$")
 
 def main():
-    root = sys.argv[1] if len(sys.argv) > 1 else "build/Compass"
+    root = sys.argv[1] if len(sys.argv) > 1 else "build/DevOS"
     as_json = "--json" in sys.argv
     results = []
     def check(name, ok, detail=""):
@@ -142,7 +142,7 @@ def main():
         if rel.endswith(".md") and any(rel.startswith(u) for u in ["01 Journal/", "02 Retreats/", "04 Projects/", "05 People/", "06 Writing/", "07 Library/", "10 Meetings/"]) and not rel.endswith(" Board.md"):
             t = texts.get(rel, ""); fm = re.match(r"^---\n(.*?)\n---", t, re.S)
             check("user-folder note tagged example: %s" % rel, bool(fm) and re.search(r"^\s*-\s*example\s*$", fm.group(1), re.M) is not None)
-    cfg = texts.get("Meta/Compass Config.md", ""); check("config birthdate empty", re.search(r"^birthdate:\s*$", cfg, re.M) is not None)
+    cfg = texts.get("Meta/Dev OS Config.md", ""); check("config birthdate empty", re.search(r"^birthdate:\s*$", cfg, re.M) is not None)
     check("Life Theme is template text", "Replace this line with your life theme" in texts.get("03 Planning/Life Theme.md", ""))
     check("Core Values is template text", "**Value one**" in texts.get("03 Planning/Core Values.md", ""))
     check("wiki log empty", re.sub(r"^---.*?---\n", "", texts.get("wiki/log.md", ""), flags=re.S).strip().endswith("Newest completed operations appear first."))

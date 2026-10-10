@@ -18,7 +18,7 @@ labels: bug
 
 ## Environment
 
-- Compass version (`Meta/version.md`):
+- Dev OS version (`Meta/version.md`):
 - Obsidian version and OS:
 - Restricted mode turned off and app reloaded? yes / no
 - Plugins changed from the shipped versions? which

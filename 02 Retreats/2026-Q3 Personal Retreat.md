@@ -13,7 +13,7 @@ wheel_growth: 8
 wheel_fun: 5
 wheel_meaning: 7
 ---
-> Example retreat so the Compass dashboard has a wheel to draw. Replace the numbers and the text with your own; keep the file name pattern `YYYY-QN Personal Retreat`.
+> Example retreat so the Personal dashboard has a wheel to draw. Replace the numbers and the text with your own; keep the file name pattern `YYYY-QN Personal Retreat`.
 
 Previous retreat: [[2026-Q2 Personal Retreat]] · Quarter note: [[2026-Q3]] · Same quarter last year: [[2025-Q3 Personal Retreat]]
 
@@ -73,7 +73,7 @@ Changes to make:
 - Add "friend call" to Thursday 20:00.
 
 ## 7. Projects to commit to
-- [[Example Project - Compass Vault]]
+- [[Example Project - Dev OS Setup]]
 
 ## Closing
 - A quarter of showing up for people, tracked honestly.

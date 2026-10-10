@@ -1,6 +1,6 @@
 // Dev OS Setup status widget. Usage: await dv.view("Meta/views/setup")
 // Detects what is still at its template default. Renders booleans only; never shows key values; never writes.
-const cfg = dv.page("Meta/Compass Config") || {};
+const cfg = dv.page("Meta/Dev OS Config") || {};
 const cur = dv.current() || {};
 const rows = [];
 const add = (tier, item, ok, where, note) => rows.push({ tier, item, ok, where, note: note || "" });
@@ -32,13 +32,13 @@ const examples = dv.pages("#example").length;
 add(1, "Example notes deleted", examples === 0, "[[16 Onboarding Assistant]] step 6, or delete notes tagged example", examples ? `${examples} example notes remain` : "");
 
 // Tier 5: personal layer (optional)
-add(5, "Birthdate set", !!cfg.birthdate && String(cfg.birthdate).slice(0, 10) !== "1990-01-01", "[[Compass Config]]");
+add(5, "Birthdate set", !!cfg.birthdate && String(cfg.birthdate).slice(0, 10) !== "1990-01-01", "[[Dev OS Config]]");
 const theme = await readText("03 Planning/Life Theme.md");
 add(5, "Life theme written", theme.length > 0 && !theme.includes("Replace this line with your life theme"), "[[Life Theme]]");
 const values = await readText("03 Planning/Core Values.md");
 add(5, "Core values written", values.length > 0 && !/\*\*Value one\*\*/.test(values), "[[Core Values]]");
 add(5, "Ideal week is yours (example property removed)", !((dv.page("03 Planning/Ideal Week") || {}).example === true), "[[Ideal Week]]", "fill the grid, then delete the example property");
-add(5, "Questions, habits, wheel areas reviewed", Array.isArray(cfg.questions) && cfg.questions.length > 0 && Array.isArray(cfg.habits) && cfg.habits.length <= 5, "[[Compass Config]]", Array.isArray(cfg.habits) && cfg.habits.length > 5 ? "more than 5 habits; keep 3 to 5 per season" : "");
+add(5, "Questions, habits, wheel areas reviewed", Array.isArray(cfg.questions) && cfg.questions.length > 0 && Array.isArray(cfg.habits) && cfg.habits.length <= 5, "[[Dev OS Config]]", Array.isArray(cfg.habits) && cfg.habits.length > 5 ? "more than 5 habits; keep 3 to 5 per season" : "");
 // Tier 2: the practice
 const daily = cfg.daily_folder || "01 Journal/Daily";
 const dqp = cfg.dq_prefix || "dq_";

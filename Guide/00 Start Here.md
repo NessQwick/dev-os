@@ -23,12 +23,12 @@ New here? Open [[Setup]] first. It has the status checklist. Then open the Dev O
 ## Personal layer (optional, hidden in the Dev OS view by default)
 | # | Workflow | Where it lives | Guide |
 | --- | --- | --- | --- |
-| 1 | Journaling with Daily Questions | `01 Journal/Daily`, `Templates/Daily Questions Prompt.md`, questions in `Meta/Compass Config.md` | [[03 Workflow - Journaling and Daily Questions]] |
+| 1 | Journaling with Daily Questions | `01 Journal/Daily`, `Templates/Daily Questions Prompt.md`, questions in `Meta/Dev OS Config.md` | [[03 Workflow - Journaling and Daily Questions]] |
 | 2 | Quarterly personal retreat | `02 Retreats`, `Templates/Personal Retreat.md` | [[04 Workflow - Personal Retreat]] |
 | 3 | Multi-scale planning | `01 Journal/{Daily,Weekly,Quarterly}`, `03 Planning` | [[05 Workflow - Multi-Scale Planning]] |
 | 4 | Habit tracking | `habit_*` properties in the daily note, `00 Dashboards/Habit Canvas.md` | [[06 Workflow - Habit Tracking]] |
 | 5 | Daily reading (Bible as the worked example) | `09 Reading` | [[07 Workflow - Daily Reading]] |
-| + | Compass dashboard | `00 Dashboards/Compass Dashboard.md`, `Meta/views/*.js` | [[10 Compass Dashboard]] |
+| + | Personal dashboard | `00 Dashboards/Personal Dashboard.md`, `Meta/views/*.js` | [[10 Personal Dashboard]] |
 
 Turn it on in **Settings, Dev OS, Show personal modules** (or the View menu). Nothing in it is deleted when hidden.
 

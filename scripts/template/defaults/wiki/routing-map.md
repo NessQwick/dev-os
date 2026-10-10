@@ -11,13 +11,14 @@ tags:
 
 # Routing Map
 
-Where claude-obsidian operations file things in this Compass vault. The plugin can only write under `wiki/` (and `.raw/` for ingest payloads); these rules decide the subfolder and what to link instead of duplicating.
+Where claude-obsidian operations file things in this Dev OS vault. The plugin can only write under `wiki/` (and `.raw/` for ingest payloads); these rules decide the subfolder and what to link instead of duplicating.
 
 | Operation | Destination | Rule |
 | --- | --- | --- |
-| `/save` an answer, decision, or insight | `wiki/concepts/<slug>.md` | One page per idea. Link the Compass note it came from (a daily note, a retreat, a project). |
+| `/save` an answer, decision, or insight | `wiki/concepts/<slug>.md` | One page per idea. Link the Dev OS note it came from (a daily note, a retreat, a project). |
 | `/save` a session summary | `wiki/log.md` | Append; newest first. |
 | Ingest a book, article, transcript, clipped page | `wiki/sources/<slug>.md` + source ledger row | Book notes that the user writes by hand stay in `07 Library/Book Notes` (Templater folder template, block-id quotes). Do not move them. |
+| Web Clipper clippings (`07 Library/Clippings`, `type: clipping`) | `wiki/sources/<slug>.md` + source ledger row, only for clips with `status: read` | Ingest from the clip note in place; do not move or delete it. Keep its `source` URL as provenance and link the clip's `project` note. Clips with `status: inbox` are untriaged and `archived` ones were rejected: skip both. After filing, the person may set the clip to `archived` in the Dev OS Inbox. |
 | Anything about a person | link to `05 People/<Name>.md` | Do not create `wiki/entities/<name>.md` for people who have a people note. |
 | Anything about a project | link to `04 Projects/<Name>.md` | Same rule. |
 | Journal, retreat, planning, habit, task content | never ingested | Personal operating data; no ledger rows, no provenance model. |

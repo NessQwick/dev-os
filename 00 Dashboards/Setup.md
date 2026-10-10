@@ -36,7 +36,7 @@ Five items are self-declared because no script can see them (your Claude login, 
 - Day 8: delete the notes tagged `example` (the [[16 Onboarding Assistant]] can do it one file at a time, or use search `tag:#example`).
 - Day 10: write your first ADR when a decision gets discussed twice ([[09 Workflow - Writing]]).
 - Day 14: optional, AI in the vault: [[14 Agent Client and Claude Code]], then press **Help me set up this vault** below. Try Prompt 18 (standup) and Prompt 17 (sprint review).
-- Optional personal layer: turn on **Show personal modules** in Settings, Dev OS, then follow [[03 Workflow - Journaling and Daily Questions]]. Set `birthdate` in [[Compass Config]]. Decide the reading module: fill [[Reading Plan]] or delete `09 Reading`.
+- Optional personal layer: turn on **Show personal modules** in Settings, Dev OS, then follow [[03 Workflow - Journaling and Daily Questions]]. Set `birthdate` in [[Dev OS Config]]. Decide the reading module: fill [[Reading Plan]] or delete `09 Reading`.
 
 ## With an assistant
 ```agent
@@ -47,7 +47,7 @@ viewType: right-pane
 ```
 
 ## Not in English?
-Rename the keys in [[Compass Config]] (`dq_aprender`) and translate the question text there; every chart labels itself from the key. The Guide stays in English.
+Rename the keys in [[Dev OS Config]] (`dq_aprender`) and translate the question text there; every chart labels itself from the key. The Guide stays in English.
 
 ## When you are done
 Set this note's `status` property to `done`. The checklist hides itself. Reopen it any time by setting it back to `open`.

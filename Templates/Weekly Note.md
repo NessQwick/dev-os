@@ -4,7 +4,7 @@ quarter: <% moment(tp.file.title, "gggg-[W]ww").format("YYYY-[Q]Q") %>
 tags:
   - weekly
 ---
-« [[01 Journal/Weekly/<% moment(tp.file.title, "gggg-[W]ww").subtract(1, "week").format("gggg-[W]ww") %>|Last week]] · [[01 Journal/Quarterly/<% moment(tp.file.title, "gggg-[W]ww").format("YYYY-[Q]Q") %>|Quarter]] · [[Compass Dashboard]] · [[01 Journal/Weekly/<% moment(tp.file.title, "gggg-[W]ww").add(1, "week").format("gggg-[W]ww") %>|Next week]] »
+« [[01 Journal/Weekly/<% moment(tp.file.title, "gggg-[W]ww").subtract(1, "week").format("gggg-[W]ww") %>|Last week]] · [[01 Journal/Quarterly/<% moment(tp.file.title, "gggg-[W]ww").format("YYYY-[Q]Q") %>|Quarter]] · [[Personal Dashboard]] · [[01 Journal/Weekly/<% moment(tp.file.title, "gggg-[W]ww").add(1, "week").format("gggg-[W]ww") %>|Next week]] »
 
 # Week <% moment(tp.file.title, "gggg-[W]ww").format("w, gggg") %>
 <% moment(tp.file.title, "gggg-[W]ww").startOf("week").format("MMM D") %> to <% moment(tp.file.title, "gggg-[W]ww").endOf("week").format("MMM D") %>

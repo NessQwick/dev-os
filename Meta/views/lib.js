@@ -1,4 +1,4 @@
-// Shared helpers for Compass widgets. Loaded by other views with dv.view? No: Dataview
+// Shared helpers for Dev OS widgets. Loaded by other views with dv.view? No: Dataview
 // views cannot import each other, so each view re-declares what it needs. This file
 // documents the conventions and is kept for reference only.
 //
