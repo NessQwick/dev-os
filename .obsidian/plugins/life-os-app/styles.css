@@ -1959,3 +1959,50 @@
   .life-os-property-form { grid-template-columns: 1fr; }
 }
 .life-os-prompt-library { margin-top: 18px; }
+
+/* Dev OS 1.5: task panel, task views, sprint tabs, review cards */
+.life-os-app-frame.has-task-panel { grid-template-columns: 176px minmax(0, 1fr) 360px; }
+.life-os-task-panel { position: sticky; top: 0; z-index: 9; display: flex; flex-direction: column; gap: 12px; height: 100vh; min-width: 0; overflow: auto; padding: 16px; border-left: 1px solid var(--life-os-line); background: var(--background-secondary); outline: none; }
+.life-os-task-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.life-os-home .life-os-task-panel-title { min-height: 54px; font-size: 0.95rem; font-weight: 650; }
+.life-os-task-panel-section { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--life-os-line); }
+.life-os-task-panel-section h4 { margin: 0; color: var(--text-muted); font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.life-os-task-panel .life-os-property-form { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; }
+.life-os-task-panel-link { display: flex; align-items: center; gap: 6px; }
+.life-os-task-panel-link .life-os-link-row { flex: 1 1 auto; }
+.life-os-segmented { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; border: 1px solid var(--life-os-line); border-radius: 999px; background: var(--background-primary); max-width: 100%; }
+.life-os-home .life-os-segmented button { height: auto; min-height: 28px; padding: 5px 12px; border: 0; border-radius: 999px; background: transparent; box-shadow: none; color: var(--text-muted); font-size: 0.74rem; cursor: pointer; }
+.life-os-home .life-os-segmented button[aria-pressed="true"] { color: #1d1714; background: var(--life-os-accent); font-weight: 650; }
+.life-os-focus-views { margin-bottom: 14px; }
+.life-os-sprint-live > .life-os-tabs, .life-os-tabs + .life-os-sprint-live { margin-top: 0; }
+.life-os-tabs { margin-bottom: 14px; }
+.life-os-sprint-card.is-active { border-color: color-mix(in srgb, var(--life-os-accent) 40%, var(--life-os-line)); }
+.life-os-sprint-card.is-closed { opacity: 0.85; }
+.life-os-velocity { display: grid; gap: 8px; margin-bottom: 8px; }
+.life-os-velocity h3 { margin: 0 0 4px; font-size: 0.86rem; }
+.life-os-velocity-row { display: grid; grid-template-columns: minmax(0, 180px) minmax(0, 1fr) 32px; align-items: center; gap: 10px; font-size: 0.74rem; }
+.life-os-velocity-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.life-os-velocity-track { height: 10px; border-radius: 999px; background: color-mix(in srgb, var(--text-normal) 9%, transparent); overflow: hidden; }
+.life-os-velocity-fill { height: 100%; border-radius: 999px; background: var(--life-os-accent); }
+.life-os-quarter-group { margin-top: 18px; }
+.life-os-question-bars .life-os-wheel-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.life-os-memento-years { display: grid; grid-template-columns: repeat(auto-fill, minmax(9px, 1fr)); gap: 3px; margin: 8px 0; }
+.life-os-memento-years > span { aspect-ratio: 1; border-radius: 2px; background: color-mix(in srgb, var(--text-normal) 10%, transparent); }
+.life-os-memento-years > span.is-lived { background: color-mix(in srgb, var(--life-os-accent) 55%, transparent); }
+.life-os-memento-years > span.is-now { background: var(--life-os-accent); box-shadow: 0 0 0 1px var(--life-os-accent-soft); }
+.life-os-memento small { color: var(--text-muted); }
+@container (max-width: 1150px) {
+  .life-os-app-frame.has-task-panel { grid-template-columns: 176px minmax(0, 1fr); }
+  .life-os-task-panel { position: fixed; top: 0; right: 0; bottom: 0; z-index: 40; width: min(380px, 100vw); height: auto; box-shadow: -12px 0 32px rgba(0, 0, 0, 0.28); }
+}
+@container (max-width: 700px) {
+  .life-os-task-panel { width: 100vw; border-left: 0; }
+  .life-os-task-panel .life-os-property-form { grid-template-columns: 1fr; }
+  .life-os-velocity-row { grid-template-columns: minmax(0, 1fr) 32px; }
+  .life-os-velocity-track { grid-column: 1 / -1; grid-row: 2; }
+}
+@media (max-width: 900px) {
+  .life-os-app-frame.has-task-panel { grid-template-columns: 150px minmax(0, 1fr); }
+}
+.life-os-task-panel .life-os-flags { justify-content: flex-start; }
+.life-os-question-bars .life-os-wheel-row strong { white-space: nowrap; font-size: 0.72rem; }

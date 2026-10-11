@@ -1,6 +1,6 @@
 Sprints are notes in `04 Projects/Sprints/` with `type: sprint`, a `project` link, `start`, `end`, `goal`, and `status` (planned, active, closed). A task joins a sprint with the tag `#sprint/<sprint-note-slug>`. In progress is `- [/]`, blocked is `#blocked`.
 
-The Dev OS view (Sprint in the rail) shows the same data as a board you can move cards on. This page is the plain Markdown fallback.
+The Dev OS view (Sprint in the rail) shows the same data as a board you can move cards on, plus All sprints and Across sprints tabs that replace this page. This page is the plain Markdown fallback.
 
 ## Sprints
 ```dataview

@@ -1,3 +1,5 @@
+The Dev OS Tasks screen shows these views live and editable (By urgency, Next 7 days, To discuss, High without a date, Inbox, Done this week); this page is the plain Markdown fallback.
+
 This page is a **recommendation engine**, not the place the day gets executed. Read it, pick what you will actually do, time block it (paper notebook or calendar). "The computer is the brain, the notebook is the list."
 
 ```agent

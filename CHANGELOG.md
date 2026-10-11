@@ -4,6 +4,26 @@ Format: Added, Changed, Templates (manual merge notes), Plugins, Breaking. Semve
 
 ## Unreleased
 
+### Dev OS: application 1.5.0 candidate
+Added
+- **Task side panel:** clicking a task in Dev OS shows its details instead of opening the note. You can edit:
+  - the status, text, due and scheduled dates, priority, and blocked flag
+  - the project, sprint, owner, and release
+  - dependencies in both directions
+  The panel also shows the source note and dates, and has Open in note. A setting sends clicks to the note instead.
+- **Tasks views** from the Task Dashboard: Next 7 days, To discuss by person, High without a date, Inbox, and Done this week.
+- **Sprint tabs:**
+  - All sprints: cards with goal, dates, and progress, plus Start and Close.
+  - Across sprints: velocity; in progress, blocked, and done in 14 days.
+- **Projects by quarter.**
+- **Review:** an 8-week range, a Daily questions card (average and days answered), and Memento mori.
+
+Changed
+- Shortcut cards open Dev OS screens instead of the Markdown dashboards. The dashboards remain as a fallback.
+- Notes created with Dev OS forms open in Dev OS.
+- Capture creates projects and people with Dev OS forms instead of QuickAdd templates.
+- The pencil on a task opens the panel.
+
 ### Dev OS: application 1.4.0 candidate
 Added
 - **People screen and person page.** People shows cards with role, company, cadence, and open, to-discuss, and overdue counts, with filters. The person page has:
