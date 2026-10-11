@@ -52,7 +52,7 @@ try {
     const app={vault:{getMarkdownFiles:()=>[...files.values()],getFiles:()=>[...files.values()],getAbstractFileByPath:p=>files.get(p),cachedRead:async f=>contents.get(f.path)||'',read:async f=>contents.get(f.path)||'',on(){},
       process:async(f,fn)=>{const next=fn(contents.get(f.path)||'');contents.set(f.path,next);reindex(f.path);window.writes.push(['process',f.path]);return next;},
       create:async(p,c)=>{const fm={};for(const line of (c.match(/^---\n([\s\S]*?)\n---/)?.[1]||'').split('\n')){const m=line.match(/^(\w+): (.+)$/);if(m)fm[m[1]]=m[2].startsWith('"')?JSON.parse(m[2]):m[2];}add(p,fm,c);window.writes.push(['create',p]);return files.get(p);},createFolder:async()=>{}},
-      fileManager:{processFrontMatter:async(f,fn)=>{fn(metadata.get(f.path).frontmatter);window.writes.push(['frontmatter',f.path]);},renameFile:async(f,t)=>{window.writes.push(['rename',f.path,t]);}},metadataCache:{getFileCache:f=>metadata.get(f.path),on(){}},plugins:{getPlugin:id=>plugins[id]},workspace:{getLeaf:()=>({openFile:async(f,o)=>window.opened.push({path:f.path,options:o})}),revealLeaf:async()=>{}},commands:{commands:{}}};
+      fileManager:{processFrontMatter:async(f,fn)=>{fn(metadata.get(f.path).frontmatter);window.writes.push(['frontmatter',f.path]);},renameFile:async(f,t)=>{window.writes.push(['rename',f.path,t]);for(const store of [metadata,contents])if(store.has(f.path)){store.set(t,store.get(f.path));store.delete(f.path);}files.delete(f.path);files.set(t,new TFile(t));},trashFile:async(f)=>{window.writes.push(['trash',f.path]);files.delete(f.path);}},metadataCache:{getFileCache:f=>metadata.get(f.path),on(){}},plugins:{getPlugin:id=>plugins[id]},workspace:{getLeaf:()=>({openFile:async(f,o)=>window.opened.push({path:f.path,options:o})}),revealLeaf:async()=>{}},commands:{commands:{}}};
     const module={exports:{}};
     const View=new Function('require','module',`${source};return LifeOSHomeView;`)(()=>({Component,ItemView,TFile,Plugin:class{},PluginSettingTab:class{},Setting:class{},Modal,Notice:class{},moment,setIcon(){}}),module);
     const plugin={runCommand:(id)=>{window.commands.push(id);return true;},openCapture(){window.commands.push('capture');},activateView(){}};
@@ -163,6 +163,13 @@ try {
       await page.getByRole('button',{name:'Write to note',exact:true}).click();
       await page.waitForFunction(()=>window.writes.some(w=>w[0]==='process'&&w[1].includes('Releases')));
       assert.ok((await page.locator('.life-os-doc-table').innerText()).includes('ADR-0001 Fixture decision'));
+      await page.locator('.life-os-doc-table summary[aria-label="Actions for ADR-0001 Fixture decision"]').click();
+      await page.locator('.life-os-doc-table .life-os-item-actions-menu').getByRole('button',{name:'Delete',exact:true}).click();
+      assert.ok((await page.locator('.modal-fixture').textContent()).includes('Type "ADR-0001 Fixture decision" to confirm'));
+      await page.locator('.modal-fixture').getByRole('button',{name:'Delete',exact:true}).click();
+      assert.ok((await page.locator('.modal-fixture').innerText()).includes('Required'));
+      await page.locator('.modal-fixture').getByRole('button',{name:'Cancel',exact:true}).click();
+      assert.ok(await page.evaluate(()=>!window.writes.some(w=>w[0]==='trash')));
       await page.screenshot({path:'/tmp/life-os-docs.png',fullPage:true});
     }
     if(screen==='people'){
@@ -232,6 +239,40 @@ try {
     }
   }
   await page.setViewportSize({width:1440,height:1000});
+  // Project description, archive, unarchive, and rename from the project page.
+  const projectFm=()=>page.evaluate(()=>window.view.getFrontmatter(window.view.app.vault.getAbstractFileByPath(window.view.activeProjectPath)));
+  await page.evaluate(()=>{window.view.activeScreen='project';window.view.activeProjectPath='04 Projects/Synthetic project.md';window.view.render();});
+  await page.getByLabel('Project description',{exact:true}).fill('Fixture project for the browser check');
+  await page.getByLabel('Project description',{exact:true}).press('Tab');
+  await page.waitForFunction(()=>window.writes.some(w=>w[0]==='frontmatter'&&w[1]==='04 Projects/Synthetic project.md'));
+  assert.equal((await projectFm()).description,'Fixture project for the browser check');
+  await page.locator('.life-os-project-header summary[aria-label="Actions for Synthetic project"]').click();
+  await page.screenshot({path:'/tmp/life-os-project-actions.png'});
+  await page.locator('.life-os-project-header .life-os-item-actions-menu').getByRole('button',{name:'Archive',exact:true}).click();
+  await page.locator('.modal-fixture').getByRole('button',{name:'Archive',exact:true}).click();
+  await page.waitForSelector('.life-os-archived-banner');
+  assert.equal((await projectFm()).archived,true);
+  await page.screenshot({path:'/tmp/life-os-project-archived.png',fullPage:true});
+  await page.evaluate(()=>{window.view.activeScreen='projects';window.view.render();});
+  assert.equal(await page.locator('.life-os-project-card').count(),0);
+  await page.getByRole('button',{name:'Archived',exact:true}).click();
+  assert.equal(await page.locator('.life-os-project-card').count(),1);
+  assert.ok((await page.locator('.life-os-project-card').innerText()).includes('Fixture project for the browser check'));
+  await page.locator('.life-os-project-card-open').click();
+  await page.locator('.life-os-archived-banner').getByRole('button',{name:'Unarchive'}).click();
+  await page.locator('.modal-fixture').getByRole('button',{name:'Unarchive',exact:true}).click();
+  await page.waitForFunction(()=>!document.querySelector('.life-os-archived-banner'));
+  assert.equal((await projectFm()).archived,undefined);
+  await page.locator('.life-os-project-header summary').click();
+  await page.locator('.life-os-project-header .life-os-item-actions-menu').getByRole('button',{name:'Rename',exact:true}).click();
+  await page.getByLabel('New title',{exact:true}).fill('Fixture platform');
+  await page.locator('.modal-fixture').getByRole('button',{name:'Rename',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('.life-os-project-headline h1')?.innerText==='Fixture platform');
+  assert.ok(await page.evaluate(()=>window.view.activeProjectPath==='04 Projects/Fixture platform.md'&&window.writes.some(w=>w[0]==='rename'&&w[2]==='04 Projects/Sprints/Fixture platform Sprint 1.md')));
+  assert.equal(await page.locator('.life-os-project-headline .life-os-eyebrow').textContent(),'#project/fixture-platform');
+  await page.getByRole('tab',{name:/^Tasks/}).click();
+  assert.ok((await page.locator('.life-os-tab-panel').innerText()).includes('Build the fixture'));
+  await page.evaluate(()=>{window.view.projectFilter='open';window.view.activeScreen='home';window.view.render();});
   await page.locator('.life-os-display-options summary').click();
   await page.getByRole('button',{name:'Use compact spacing',exact:true}).click();
   assert.equal(await page.locator('.life-os-app-frame.is-compact').count(),1);
@@ -265,5 +306,5 @@ try {
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.screenshot({path:'/tmp/life-os-home-light-candidate.png'});
   await page.evaluate(()=>window.view.onClose());
-  console.log('Dashboard browser checks passed: sixteen modules, Configure save and health check, project page tasks and minutes composer, sprint moves, inbox triage, roadmap bars and markers, waiting groups, task editor, release notes, Home spacing, preview/full Brain navigation, workload groups, project counts, discussion links, board previews, Library filters and remote-cover rejection, AI branches, per-module controls, narrow widths and light-theme smoke check. Synthetic fixture only.');
+  console.log('Dashboard browser checks passed: sixteen modules, Configure save and health check, project page tasks and minutes composer, sprint moves, inbox triage, roadmap bars and markers, waiting groups, task editor, release notes, project description, archive, unarchive and rename, Home spacing, preview/full Brain navigation, workload groups, project counts, discussion links, board previews, Library filters and remote-cover rejection, AI branches, per-module controls, narrow widths and light-theme smoke check. Synthetic fixture only.');
 }finally{await browser.close();}

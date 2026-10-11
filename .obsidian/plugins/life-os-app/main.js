@@ -133,6 +133,44 @@ function wikiLink(title) {
   return `[[${title}]]`;
 }
 
+function escapeRegExp(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Rewrites [[Old]], [[Old|alias]], [[Old#heading]], [[folder/Old]] and the
+// quoted "[[Old]]" form used in properties. [[Old project 2]] is left alone.
+function replaceWikiLinks(text, oldTitle, newTitle) {
+  if (!oldTitle || oldTitle === newTitle) return String(text);
+  const pattern = new RegExp(`(\\[\\[)((?:[^\\]|#\\n]*/)?)${escapeRegExp(oldTitle)}(?=[\\]|#])`, "g");
+  return String(text).replace(pattern, (match, open, folder) => `${open}${folder}${newTitle}`);
+}
+
+// Rewrites #prefix/old to #prefix/new. An empty new slug removes the tag
+// (and the space before it). #prefix/old-2 and #prefix/old/sub stay.
+function replaceTag(text, prefix, oldSlug, newSlug) {
+  if (!oldSlug || oldSlug === newSlug) return String(text);
+  const tag = `#${escapeRegExp(prefix)}/${escapeRegExp(oldSlug)}(?![A-Za-z0-9_/-])`;
+  if (!newSlug) return String(text).replace(new RegExp(`[ \\t]?${tag}`, "g"), "");
+  return String(text).replace(new RegExp(tag, "g"), `#${prefix}/${newSlug}`);
+}
+
+function isArchivedData(data = {}) {
+  return data.archived === true || String(data.archived ?? "").toLowerCase() === "true";
+}
+
+const TAG_PREFIX_BY_TYPE = { project: "project", sprint: "sprint", release: "release" };
+
+const ITEM_LABELS = {
+  project: "Project",
+  sprint: "Sprint",
+  meeting: "Meeting",
+  adr: "Decision record",
+  "tech-note": "Tech note",
+  postmortem: "Postmortem",
+  release: "Release",
+  clipping: "Clip",
+};
+
 function isoAddDays(iso, days) {
   const date = new Date(`${iso}T12:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
@@ -288,10 +326,10 @@ function frontmatterBlock(fields) {
   return lines.join("\n");
 }
 
-function buildProjectNote({ title, status = "active", priority = "normal", due = "", repo = "", stakeholders = [], today, quarter }) {
+function buildProjectNote({ title, status = "active", priority = "normal", due = "", repo = "", description = "", stakeholders = [], today, quarter }) {
   const slug = slugify(title);
   return `${frontmatterBlock({
-    type: "project", status, priority, area: "", repo, quarter, started: today, due,
+    type: "project", status, priority, description: String(description || "").replace(/\s+/g, " ").trim(), area: "", repo, quarter, started: today, due,
     current_sprint: "", people: [], stakeholders: stakeholders.map(wikiLink), tags: ["project"],
   })}
 Tag tasks anywhere in the vault with \`#project/${slug}\` and they roll up here.
@@ -1327,6 +1365,40 @@ class LifeOSWriter {
     return this.app.vault.create(path, content);
   }
 
+  // Renames a note inside its own folder. Links are not rewritten here; the
+  // view does that explicitly with rewriteText.
+  async renameNote(path, newTitle) {
+    const file = this.file(path);
+    const name = safeFileName(newTitle);
+    if (!name) throw new Error("A title is required.");
+    const folder = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+    const target = `${folder ? `${folder}/` : ""}${name}.md`;
+    if (target === path) return target;
+    if (this.app.vault.getAbstractFileByPath(target)) throw new Error(`${target} already exists. Nothing was renamed.`);
+    await this.app.fileManager.renameFile(file, target);
+    return target;
+  }
+
+  async rewriteText(path, transform) {
+    const file = this.file(path);
+    let changed = false;
+    await this.app.vault.process(file, (data) => {
+      const next = transform(data);
+      if (typeof next !== "string" || next === data) return data;
+      changed = true;
+      return next;
+    });
+    return changed;
+  }
+
+  // Moves a note to the trash the person chose in Obsidian's settings, so it
+  // can be restored.
+  async trashNote(path) {
+    const file = this.file(path);
+    await this.app.fileManager.trashFile(file);
+    return true;
+  }
+
   async moveFile(path, folder) {
     const file = this.file(path);
     const target = `${folder}/${file.name || path.split("/").pop()}`;
@@ -1448,7 +1520,11 @@ class LifeOSData {
     return file.basename || file.path.split("/").pop().replace(/\.md$/i, "");
   }
 
-  typed(type, folder, { includeClosed = true } = {}) {
+  isArchived(data) {
+    return isArchivedData(data);
+  }
+
+  typed(type, folder, { includeClosed = true, includeArchived = false } = {}) {
     const samples = Boolean(this.settings().includeSamples);
     return this.app.vault
       .getMarkdownFiles()
@@ -1457,6 +1533,7 @@ class LifeOSData {
         const data = this.frontmatter(file);
         if ((Array.isArray(type) ? !type.includes(data.type) : data.type !== type)) return false;
         if (!samples && this.isExample(data)) return false;
+        if (!includeArchived && isArchivedData(data)) return false;
         if (!includeClosed && ["done", "complete", "completed", "archived", "closed", "cancelled"].includes(String(data.status || "").toLowerCase())) return false;
         return true;
       })
@@ -1465,11 +1542,24 @@ class LifeOSData {
 
   projects(options) { return this.typed("project", this.folders().projects, options); }
   people() { return this.typed("person", "05 People"); }
-  sprints() { return this.typed("sprint", this.folders().sprints); }
-  meetings() { return this.typed("meeting", this.folders().meetings); }
-  docs() { return this.typed(["adr", "tech-note", "postmortem"], this.folders().docs); }
-  releases() { return this.typed("release", this.folders().releases); }
-  clippings() { return this.typed("clipping", this.folders().clippings); }
+  sprints(options) { return this.typed("sprint", this.folders().sprints, options); }
+  meetings(options) { return this.typed("meeting", this.folders().meetings, options); }
+  docs(options) { return this.typed(["adr", "tech-note", "postmortem"], this.folders().docs, options); }
+  releases(options) { return this.typed("release", this.folders().releases, options); }
+  clippings(options) { return this.typed("clipping", this.folders().clippings, options); }
+
+  // Everything that points at a project with `project: "[[Title]]"`,
+  // archived items included.
+  relatedItems(project) {
+    const all = { includeArchived: true };
+    return {
+      sprints: this.forProject(this.sprints(all), project),
+      meetings: this.forProject(this.meetings(all), project),
+      docs: this.forProject(this.docs(all), project),
+      releases: this.forProject(this.releases(all), project),
+      clips: this.forProject(this.clippings(all), project),
+    };
+  }
 
   linksTo(value, file) {
     const title = this.title(file);
@@ -1525,6 +1615,7 @@ function openCreateForm(plugin, kind, preset = {}, done = () => {}) {
         { key: "priority", label: "Priority", type: "select", value: "normal", options: ["low", "normal", "high"].map((value) => ({ value })) },
         { key: "due", label: "Target date", type: "date" },
         { key: "repo", label: "Repository URL", placeholder: "https://..." },
+        { key: "description", label: "Description", type: "textarea", wide: true, placeholder: "What this project is and why it matters", value: preset.description || "" },
       ],
       submit: async (values) => {
         const content = buildProjectNote({ ...values, today, quarter: moment().format("YYYY-[Q]Q") });
@@ -2878,7 +2969,20 @@ class LifeOSHomeView extends ItemView {
     const today = moment().format("YYYY-MM-DD");
     const tasks = [];
     const closedTasks = [];
+    const archivedTasks = [];
     const sections = {};
+    // Tasks in archived notes, or tagged only with archived projects or
+    // sprints, are kept apart so lists stay clean; archived pages still see them.
+    const archivedSlugs = { project: new Set(), sprint: new Set() };
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      const data = this.getFrontmatter(file);
+      if (isArchivedData(data) && archivedSlugs[data.type]) archivedSlugs[data.type].add(slugify(this.getFileTitle(file)));
+    }
+    const isArchivedTask = (task, file) => {
+      if (isArchivedData(this.getFrontmatter(file))) return true;
+      const tagged = [...(task.projects || []).map((slug) => ["project", slug]), ...(task.sprints || []).map((slug) => ["sprint", slug])];
+      return tagged.length > 0 && tagged.every(([kind, slug]) => archivedSlugs[kind].has(slug));
+    };
     const exampleFiles = this.includeExamples ? [] : files.filter((file) => this.isExample(this.getFrontmatter(file)));
     const indexFiles = this.includeExamples ? files : files.filter((file) => !this.isExample(this.getFrontmatter(file)));
 
@@ -2953,7 +3057,8 @@ class LifeOSHomeView extends ItemView {
             malformedItems += 1;
             continue;
           }
-          (task.closed ? closedTasks : tasks).push(task);
+          if (isArchivedTask(task, file)) archivedTasks.push(task);
+          else (task.closed ? closedTasks : tasks).push(task);
         }
       }
       tasks.sort((left, right) => {
@@ -2981,6 +3086,7 @@ class LifeOSHomeView extends ItemView {
       return {
         tasks,
         closedTasks,
+        archivedTasks,
         sections,
         error: "",
         state: skipped || unresolvedStatuses || malformedItems ? "partial" : "ready",
@@ -2995,6 +3101,7 @@ class LifeOSHomeView extends ItemView {
       return {
         tasks: [],
         closedTasks: [],
+        archivedTasks: [],
         sections: {},
         error: error?.message || "Task index unavailable",
         state: "unavailable",
@@ -3357,14 +3464,20 @@ class LifeOSHomeView extends ItemView {
     return snapshot ? [...snapshot.tasks, ...(snapshot.closedTasks || [])] : [];
   }
 
+  // Archived pages also see the tasks that were set aside for being archived.
+  tasksFor(file) {
+    const archived = isArchivedData(this.getFrontmatter(file)) ? this.taskSnapshot?.archivedTasks || [] : [];
+    return [...this.allTasks(), ...archived];
+  }
+
   tasksForProject(file) {
     const slug = slugify(this.getFileTitle(file));
-    return this.allTasks().filter((task) => task.path === file.path || (task.projects || []).includes(slug));
+    return this.tasksFor(file).filter((task) => task.path === file.path || (task.projects || []).includes(slug));
   }
 
   tasksForSprint(file) {
     const slug = slugify(this.getFileTitle(file));
-    return this.allTasks().filter((task) => (task.sprints || []).includes(slug));
+    return this.tasksFor(file).filter((task) => (task.sprints || []).includes(slug));
   }
 
   projectProgress(tasks) {
@@ -3658,12 +3771,12 @@ class LifeOSHomeView extends ItemView {
   // Projects
 
   renderProjectsScreen(parent) {
-    const projects = this.data.projects();
+    const filter = this.projectFilter || "open";
+    const projects = this.data.projects({ includeArchived: filter === "archived" });
     const section = parent.createEl("section", { cls: "life-os-collection-live" });
     this.renderLiveHeading(section, "Projects", "Status and priority change here and write to the note's properties. Open a card for the full project page.", `${projects.length} ${projects.length === 1 ? "project" : "projects"}`);
     const toolbar = section.createDiv({ cls: "life-os-toolbar" });
-    const filter = this.projectFilter || "open";
-    for (const [id, label] of [["open", "Open"], ["active", "Active"], ["on-hold", "On hold"], ["idea", "Ideas"], ["done", "Done"], ["all", "All"]]) {
+    for (const [id, label] of [["open", "Open"], ["active", "Active"], ["on-hold", "On hold"], ["idea", "Ideas"], ["done", "Done"], ["all", "All"], ["archived", "Archived"]]) {
       const button = toolbar.createEl("button", { cls: "life-os-filter", text: label, attr: { "aria-pressed": String(filter === id) } });
       button.type = "button";
       this.registerDomEvent(button, "click", () => { this.projectFilter = id; this.render(); });
@@ -3671,12 +3784,13 @@ class LifeOSHomeView extends ItemView {
     this.addSmallButton(toolbar, "New project", () => this.openForm("project"), { icon: "plus", primary: true });
     const visible = projects.filter((file) => {
       const status = String(this.getFrontmatter(file).status || "active").toLowerCase();
+      if (filter === "archived") return isArchivedData(this.getFrontmatter(file));
       if (filter === "all") return true;
       if (filter === "open") return !["done", "archived", "cancelled"].includes(status);
       return status === filter;
     });
     if (!visible.length) {
-      section.createDiv({ cls: "life-os-live-empty", text: projects.length ? "No projects match this filter." : "No projects yet. Create one, or show sample data from the View menu." });
+      section.createDiv({ cls: "life-os-live-empty", text: filter === "archived" ? "No archived projects." : projects.length ? "No projects match this filter." : "No projects yet. Create one, or show sample data from the View menu." });
       return;
     }
     const grid = section.createDiv({ cls: "life-os-project-grid" });
@@ -3691,11 +3805,14 @@ class LifeOSHomeView extends ItemView {
       copy.createEl("strong", { text: this.getFileTitle(file) });
       copy.createSpan({ cls: "life-os-record-metrics", text: !this.taskSnapshot ? "Loading tasks" : `${progress.open} open · ${progress.done} done${progress.overdue ? ` · ${progress.overdue} overdue` : ""}` });
       this.registerDomEvent(open, "click", () => this.openProject(file.path));
+      if (String(data.description || "").trim()) card.createEl("p", { cls: "life-os-project-description", text: String(data.description).trim() });
       this.addMeter(card, progress.ratio, `${this.getFileTitle(file)} progress`);
       const controls = card.createDiv({ cls: "life-os-project-controls" });
+      if (isArchivedData(data)) this.addChip(controls, "Archived", "is-archived");
       this.addSelect(controls, `Status of ${this.getFileTitle(file)}`, PROJECT_STATUSES, String(data.status || "active"), (value) => this.runWrite(() => this.writer.setFrontmatter(file.path, { status: value }), `Status set to ${value}.`));
       this.addSelect(controls, `Priority of ${this.getFileTitle(file)}`, PRIORITIES, String(data.priority || "normal"), (value) => this.runWrite(() => this.writer.setFrontmatter(file.path, { priority: value }), `Priority set to ${value}.`));
       if (isoDate(data.due)) this.addChip(controls, `Due ${isoDate(data.due)}`, isoDate(data.due) < this.today() ? "is-alert" : "");
+      this.renderItemActions(controls, file);
     }
   }
 
@@ -3722,6 +3839,20 @@ class LifeOSHomeView extends ItemView {
     const headline = header.createDiv({ cls: "life-os-project-headline" });
     headline.createSpan({ cls: "life-os-eyebrow", text: `#project/${slug}` });
     headline.createEl("h1", { text: title });
+    const archived = isArchivedData(data);
+    if (archived) {
+      const banner = headline.createDiv({ cls: "life-os-archived-banner" });
+      this.addChip(banner, "Archived", "is-archived");
+      banner.createSpan({ text: "Hidden from dashboards, task lists, and pickers." });
+      this.addSmallButton(banner, "Unarchive", () => this.openArchiveDialog(file), { icon: "archive-restore" });
+    }
+    const description = headline.createEl("textarea", { cls: "life-os-textarea life-os-project-description-input", attr: { rows: "2", placeholder: "Add a description: what this project is and why it matters", "aria-label": "Project description" } });
+    description.value = String(data.description || "");
+    this.registerDomEvent(description, "change", () => {
+      const value = description.value.replace(/\s+/g, " ").trim();
+      if (value === String(data.description || "").trim()) return;
+      void this.runWrite(() => this.writer.setFrontmatter(file.path, { description: value }), "Description saved.");
+    });
     const fields = header.createDiv({ cls: "life-os-project-fields" });
     const field = (label) => {
       const wrap = fields.createEl("label", { cls: "life-os-field" });
@@ -3771,12 +3902,14 @@ class LifeOSHomeView extends ItemView {
     const links = header.createDiv({ cls: "life-os-form-actions" });
     this.externalLink(links, data.repo, "Open repository");
     this.addSmallButton(links, "Open note", () => this.openPath(file.path), { icon: "file-text" });
+    this.renderItemActions(links, file, { onRenamed: (path) => this.openProject(path), onDeleted: () => this.go("projects") });
 
     const tabs = page.createDiv({ cls: "life-os-tabs", attr: { role: "tablist" } });
     const tab = this.projectTab(file.path);
-    const meetings = this.data.forProject(this.data.meetings(), file).sort((a, b) => String(this.getFrontmatter(b).date || "").localeCompare(String(this.getFrontmatter(a).date || "")));
-    const docs = [...this.data.forProject(this.data.docs(), file), ...this.data.forProject(this.data.releases(), file)];
-    const clips = this.data.forProject(this.data.clippings(), file);
+    const scope = { includeArchived: archived };
+    const meetings = this.data.forProject(this.data.meetings(scope), file).sort((a, b) => String(this.getFrontmatter(b).date || "").localeCompare(String(this.getFrontmatter(a).date || "")));
+    const docs = [...this.data.forProject(this.data.docs(scope), file), ...this.data.forProject(this.data.releases(scope), file)];
+    const clips = this.data.forProject(this.data.clippings(scope), file);
     for (const [id, label, count] of [["overview", "Overview", null], ["tasks", "Tasks", progress.open], ["meetings", "Meetings", meetings.length], ["docs", "Docs", docs.length], ["clips", "Clips", clips.length]]) {
       const button = tabs.createEl("button", { cls: "life-os-tab", text: count === null ? label : `${label} · ${count}`, attr: { role: "tab", "aria-selected": String(tab === id) } });
       button.type = "button";
@@ -4083,6 +4216,7 @@ class LifeOSHomeView extends ItemView {
     head.createSpan({ cls: "life-os-meeting-date", text: isoDate(data.date) || "No date" });
     head.createEl("strong", { text: this.getFileTitle(meeting).replace(/^\d{4}-\d{2}-\d{2}\s+/, "") });
     head.createSpan({ cls: "life-os-chip", text: String(data.kind || "meeting") });
+    if (isArchivedData(data)) head.createSpan({ cls: "life-os-chip is-archived", text: "Archived" });
     head.createSpan({ cls: "life-os-record-metrics", text: `${actions.filter((task) => !task.closed).length} open actions` });
     this.registerDomEvent(head, "click", () => {
       if (expanded) this.expandedMeetings.delete(meeting.path);
@@ -4122,6 +4256,7 @@ class LifeOSHomeView extends ItemView {
       if (ok) { delete drafts[meeting.path]; this.render(); }
     }, { icon: "plus", primary: true });
     this.addSmallButton(note, "Open", () => this.openPath(meeting.path), { icon: "file-text" });
+    this.renderItemActions(note, meeting);
   }
 
   renderProjectDocs(panel, { file, docs }) {
@@ -4152,15 +4287,15 @@ class LifeOSHomeView extends ItemView {
   // Sprint board
 
   renderSprintScreen(parent) {
-    const sprints = this.data.sprints().sort((a, b) => {
-      const rank = (file) => ({ active: 0, planned: 1 })[String(this.getFrontmatter(file).status || "").toLowerCase()] ?? 2;
+    const sprints = this.data.sprints({ includeArchived: true }).sort((a, b) => {
+      const rank = (file) => (isArchivedData(this.getFrontmatter(file)) ? 3 : ({ active: 0, planned: 1 })[String(this.getFrontmatter(file).status || "").toLowerCase()] ?? 2);
       return rank(a) - rank(b) || String(this.getFrontmatter(b).start || "").localeCompare(String(this.getFrontmatter(a).start || ""));
     });
     const section = parent.createEl("section", { cls: "life-os-sprint-live" });
     const sprint = sprints.find((file) => file.path === this.activeSprintPath) || sprints[0];
     const toolbar = section.createDiv({ cls: "life-os-toolbar" });
     if (sprints.length) {
-      this.addSelect(toolbar, "Sprint", sprints.map((file) => ({ value: file.path, label: `${this.getFileTitle(file)} · ${this.getFrontmatter(file).status || "planned"}` })), sprint.path, (value) => { this.activeSprintPath = value; this.render(); });
+      this.addSelect(toolbar, "Sprint", sprints.map((file) => ({ value: file.path, label: `${this.getFileTitle(file)} · ${isArchivedData(this.getFrontmatter(file)) ? "archived" : this.getFrontmatter(file).status || "planned"}` })), sprint.path, (value) => { this.activeSprintPath = value; this.render(); });
     }
     this.addSmallButton(toolbar, "New sprint", () => this.openForm("sprint"), { icon: "plus", primary: !sprints.length });
     if (!sprint) {
@@ -4179,9 +4314,10 @@ class LifeOSHomeView extends ItemView {
     const controls = section.createDiv({ cls: "life-os-form-actions" });
     if (status === "planned") this.addSmallButton(controls, "Start sprint", () => this.runWrite(() => this.writer.setFrontmatter(sprint.path, { status: "active" }), "Sprint started."), { icon: "play", primary: true });
     if (status === "active") this.addSmallButton(controls, "Close sprint", () => this.closeSprint(sprint), { icon: "flag" });
-    const project = this.data.fileByTitle(linkTarget(data.project), this.data.projects());
+    const project = this.data.fileByTitle(linkTarget(data.project), this.data.projects({ includeArchived: true }));
     if (project) this.addSmallButton(controls, linkTarget(data.project), () => this.openProject(project.path), { icon: "folder-kanban" });
     this.addSmallButton(controls, "Open note", () => this.openPath(sprint.path), { icon: "file-text" });
+    this.renderItemActions(controls, sprint, { onRenamed: (path) => { this.activeSprintPath = path; this.render(); } });
 
     const add = section.createDiv({ cls: "life-os-form-row" });
     const text = add.createEl("input", { cls: "life-os-input is-grow", attr: { type: "text", placeholder: project ? `Add a task to this sprint in ${this.getFileTitle(project)}` : "Add a task to this sprint", "aria-label": "New sprint task" } });
@@ -4234,11 +4370,12 @@ class LifeOSHomeView extends ItemView {
 
   renderMeetingsScreen(parent) {
     const section = parent.createEl("section", { cls: "life-os-meetings-live" });
-    const meetings = this.data.meetings().sort((a, b) => String(this.getFrontmatter(b).date || "").localeCompare(String(this.getFrontmatter(a).date || "")));
+    const meetings = this.data.meetings({ includeArchived: Boolean(this.showArchivedItems) }).sort((a, b) => String(this.getFrontmatter(b).date || "").localeCompare(String(this.getFrontmatter(a).date || "")));
     const openActions = this.allTasks().filter((task) => !task.closed && task.path.startsWith(`${this.data.folders().meetings}/`));
     this.renderLiveHeading(section, "Meeting minutes", "Write minutes here; decisions and action items stay linked to their project.", `${meetings.length} meetings · ${openActions.length} open actions`);
     const toolbar = section.createDiv({ cls: "life-os-toolbar" });
     this.addSmallButton(toolbar, this.composerOpen ? "Hide composer" : "New meeting minutes", () => { this.composerOpen = !this.composerOpen; this.render(); }, { icon: this.composerOpen ? "x" : "plus", primary: !this.composerOpen });
+    this.renderArchivedToggle(toolbar);
     if (this.composerOpen) this.renderMeetingComposer(section, { key: "global" });
     if (openActions.length) {
       const box = section.createDiv({ cls: "life-os-panel-card" });
@@ -4263,7 +4400,7 @@ class LifeOSHomeView extends ItemView {
 
   renderDocsScreen(parent) {
     const section = parent.createEl("section", { cls: "life-os-docs-live" });
-    const docs = this.data.docs();
+    const docs = this.data.docs({ includeArchived: Boolean(this.showArchivedItems) });
     const type = this.docType || "all";
     const status = this.docStatus || "all";
     const project = this.docProject || "all";
@@ -4277,6 +4414,7 @@ class LifeOSHomeView extends ItemView {
     this.addSmallButton(toolbar, "New ADR", () => this.openForm("adr"), { icon: "milestone", primary: true });
     this.addSmallButton(toolbar, "Tech note", () => this.openForm("tech-note"), { icon: "file-code-2" });
     this.addSmallButton(toolbar, "Postmortem", () => this.openForm("postmortem"), { icon: "siren" });
+    this.renderArchivedToggle(toolbar);
     const visible = docs.filter((file) => {
       const data = this.getFrontmatter(file);
       return (type === "all" || data.type === type) && (status === "all" || String(data.status || "draft") === status) && (project === "all" || linkTarget(data.project) === project);
@@ -4291,7 +4429,7 @@ class LifeOSHomeView extends ItemView {
   renderDocTable(parent, docs) {
     const table = parent.createDiv({ cls: "life-os-doc-table", attr: { role: "table" } });
     const header = table.createDiv({ cls: "life-os-doc-row is-header", attr: { role: "row" } });
-    for (const label of ["Doc", "Type", "Status", "Project", "Date"]) header.createSpan({ text: label, attr: { role: "columnheader" } });
+    for (const label of ["Doc", "Type", "Status", "Project", "Date", ""]) header.createSpan({ text: label, attr: { role: "columnheader" } });
     const sorted = [...docs].sort((a, b) => {
       const date = (file) => isoDate(this.getFrontmatter(file).date || this.getFrontmatter(file).created || this.getFrontmatter(file).incident_date);
       return date(b).localeCompare(date(a)) || this.getFileTitle(a).localeCompare(this.getFileTitle(b));
@@ -4299,7 +4437,7 @@ class LifeOSHomeView extends ItemView {
     for (const file of sorted) {
       const data = this.getFrontmatter(file);
       const row = table.createDiv({ cls: "life-os-doc-row", attr: { role: "row" } });
-      const open = row.createEl("button", { cls: "life-os-doc-title", text: this.getFileTitle(file), attr: { role: "cell" } });
+      const open = row.createEl("button", { cls: "life-os-doc-title", text: `${this.getFileTitle(file)}${isArchivedData(data) ? " (archived)" : ""}`, attr: { role: "cell" } });
       open.type = "button";
       this.registerDomEvent(open, "click", () => void this.openPath(file.path));
       row.createSpan({ cls: "life-os-chip", text: { adr: "ADR", "tech-note": "Tech note", postmortem: "Postmortem", release: "Release" }[data.type] || String(data.type), attr: { role: "cell" } });
@@ -4308,6 +4446,7 @@ class LifeOSHomeView extends ItemView {
       this.addSelect(row, `Status of ${this.getFileTitle(file)}`, statuses.includes(current) ? statuses : [current, ...statuses], current, (value) => this.runWrite(() => this.writer.setFrontmatter(file.path, { status: value }), `Status set to ${value}.`), `life-os-select is-${slugify(current)}`);
       row.createSpan({ text: linkTarget(data.project) || "None", attr: { role: "cell" } });
       row.createSpan({ text: isoDate(data.date || data.created || data.incident_date) || "", attr: { role: "cell" } });
+      this.renderItemActions(row.createDiv({ cls: "life-os-doc-actions", attr: { role: "cell" } }), file);
     }
   }
 
@@ -4356,6 +4495,7 @@ class LifeOSHomeView extends ItemView {
         this.addSmallButton(actions, "Archive", () => this.runWrite(() => this.writer.setFrontmatter(clip.path, { status: "archived" }), "Archived."), { icon: "archive" });
       }
       this.addSmallButton(actions, "Keep as tech note", () => this.promoteClip(clip), { icon: "file-code-2" });
+      this.renderItemActions(actions, clip);
     }
   }
 
@@ -4469,6 +4609,193 @@ class LifeOSHomeView extends ItemView {
         await this.writer.editTask(task, patch);
         new Notice("Task saved.");
         await this.refreshLiveData();
+        return true;
+      },
+    });
+    modal.open();
+    return modal;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Item actions: rename, archive, delete
+
+  renderArchivedToggle(parent) {
+    const button = parent.createEl("button", { cls: "life-os-filter", text: "Show archived", attr: { "aria-pressed": String(Boolean(this.showArchivedItems)) } });
+    button.type = "button";
+    this.registerDomEvent(button, "click", () => { this.showArchivedItems = !this.showArchivedItems; this.render(); });
+    return button;
+  }
+
+  itemKind(file) {
+    return String(this.getFrontmatter(file).type || "");
+  }
+
+  itemLabel(file) {
+    return ITEM_LABELS[this.itemKind(file)] || "Note";
+  }
+
+  renderItemActions(parent, file, { onRenamed, onDeleted } = {}) {
+    const title = this.getFileTitle(file);
+    const archived = isArchivedData(this.getFrontmatter(file));
+    const menu = parent.createEl("details", { cls: "life-os-item-actions" });
+    menu.createEl("summary", { cls: "life-os-item-actions-toggle", text: "⋯", attr: { "aria-label": `Actions for ${title}`, title: "Rename, archive, or delete" } });
+    const list = menu.createDiv({ cls: "life-os-item-actions-menu" });
+    const close = () => { menu.open = false; };
+    this.addSmallButton(list, "Rename", () => { close(); return this.openRenameDialog(file, onRenamed); }, { icon: "pencil-line" });
+    if (this.itemKind(file) !== "clipping") {
+      this.addSmallButton(list, archived ? "Unarchive" : "Archive", () => { close(); return this.openArchiveDialog(file); }, { icon: archived ? "archive-restore" : "archive" });
+    }
+    const remove = this.addSmallButton(list, "Delete", () => { close(); return this.openDeleteDialog(file, onDeleted); }, { icon: "trash-2" });
+    remove.addClass("is-danger");
+    return menu;
+  }
+
+  // Rewrites links and tags after renames. `changes` is a list of
+  // { oldTitle, newTitle, prefix, oldSlug, newSlug }. Returns the number of
+  // notes that changed.
+  async rewriteReferences(changes) {
+    const needles = changes.flatMap((change) => [`[[${change.oldTitle}`, `/${change.oldTitle}`, change.prefix ? `#${change.prefix}/${change.oldSlug}` : null]).filter(Boolean);
+    const transform = (text) => changes.reduce((value, change) => {
+      let next = replaceWikiLinks(value, change.oldTitle, change.newTitle);
+      if (change.prefix) next = replaceTag(next, change.prefix, change.oldSlug, change.newSlug);
+      return next;
+    }, text);
+    let updated = 0;
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      if (/^(Templates|scripts|build)\//.test(file.path)) continue;
+      let text = "";
+      try {
+        text = await this.app.vault.cachedRead(file);
+      } catch (error) {
+        continue;
+      }
+      if (!needles.some((needle) => text.includes(needle)) || transform(text) === text) continue;
+      if (await this.writer.rewriteText(file.path, transform)) updated += 1;
+    }
+    return updated;
+  }
+
+  openRenameDialog(file, onRenamed) {
+    const kind = this.itemKind(file);
+    const title = this.getFileTitle(file);
+    const prefix = TAG_PREFIX_BY_TYPE[kind] || "";
+    const fields = [{ key: "title", label: "New title", required: true, wide: true, value: title }];
+    const followers = kind === "project"
+      ? [...this.data.sprints({ includeArchived: true }), ...this.data.releases({ includeArchived: true })].filter((item) => this.getFileTitle(item).startsWith(`${title} `))
+      : [];
+    if (followers.length) fields.push({ key: "cascade", label: `Also rename ${followers.length} ${followers.length === 1 ? "sprint or release" : "sprints and releases"} named "${title} ..."`, type: "checkbox", value: true });
+    const modal = new LifeOSFormModal(this.app, {
+      title: `Rename ${this.itemLabel(file).toLowerCase()}`,
+      description: `Links to [[${title}]]${prefix ? ` and #${prefix}/${slugify(title)} tags` : ""} across the vault are updated to the new name.`,
+      fields,
+      submitLabel: "Rename",
+      onSubmit: async (values) => {
+        const newTitle = safeFileName(values.title);
+        if (!newTitle) throw new Error("A title is required.");
+        if (newTitle === title) return true;
+        const renames = [{ file, oldTitle: title, newTitle, prefix }];
+        if (values.cascade) {
+          for (const item of followers) {
+            const old = this.getFileTitle(item);
+            renames.push({ file: item, oldTitle: old, newTitle: safeFileName(`${newTitle}${old.slice(title.length)}`), prefix: TAG_PREFIX_BY_TYPE[this.itemKind(item)] || "" });
+          }
+        }
+        let newPath = file.path;
+        for (const rename of renames) {
+          const data = this.getFrontmatter(rename.file);
+          const oldPath = rename.file.path;
+          const target = await this.writer.renameNote(oldPath, rename.newTitle);
+          if (oldPath === file.path) newPath = target;
+          if (this.itemKind(rename.file) === "clipping" && String(data.title || "") === rename.oldTitle) await this.writer.setFrontmatter(target, { title: rename.newTitle });
+          if (this.activeSprintPath === oldPath) this.activeSprintPath = target;
+          if (this.activeProjectPath === oldPath) this.activeProjectPath = target;
+        }
+        const updated = await this.rewriteReferences(renames.map((rename) => ({ ...rename, oldSlug: slugify(rename.oldTitle), newSlug: slugify(rename.newTitle) })));
+        new Notice(`Renamed to ${newTitle}. Updated ${updated} ${updated === 1 ? "note" : "notes"}.`);
+        await this.refreshLiveData();
+        onRenamed?.(newPath);
+        return true;
+      },
+    });
+    modal.open();
+    return modal;
+  }
+
+  openArchiveDialog(file) {
+    const kind = this.itemKind(file);
+    const title = this.getFileTitle(file);
+    const archived = isArchivedData(this.getFrontmatter(file));
+    const patch = (item) => {
+      if (archived) return { archived: undefined };
+      const status = String(this.getFrontmatter(item).status || "").toLowerCase();
+      return this.itemKind(item) === "sprint" && ["active", "planned"].includes(status) ? { archived: true, status: "closed" } : { archived: true };
+    };
+    if (kind !== "project") {
+      return this.runWrite(() => this.writer.setFrontmatter(file.path, patch(file)), archived ? `${title} unarchived.` : `${title} archived. Find it under Projects, Archived, or in the note itself.`);
+    }
+    const related = this.data.relatedItems(file);
+    const items = [...related.sprints, ...related.meetings, ...related.docs, ...related.releases].filter((item) => isArchivedData(this.getFrontmatter(item)) === archived);
+    const fields = items.length ? [{ key: "related", label: `Also ${archived ? "unarchive" : "archive"} ${items.length} related ${items.length === 1 ? "note" : "notes"} (sprints, meetings, docs, releases)`, type: "checkbox", value: true }] : [];
+    const modal = new LifeOSFormModal(this.app, {
+      title: `${archived ? "Unarchive" : "Archive"} ${title}`,
+      description: archived
+        ? "The project and its tasks come back to the dashboards. Sprints closed by archiving stay closed."
+        : "Archived notes keep their files and links but leave the dashboards, task lists, and pickers. Open sprints are closed. Clips are not changed.",
+      fields,
+      submitLabel: archived ? "Unarchive" : "Archive",
+      onSubmit: async (values) => {
+        await this.writer.setFrontmatter(file.path, patch(file));
+        let count = 0;
+        if (values.related) {
+          for (const item of items) { await this.writer.setFrontmatter(item.path, patch(item)); count += 1; }
+        }
+        new Notice(`${title} ${archived ? "unarchived" : "archived"}${count ? ` with ${count} related ${count === 1 ? "note" : "notes"}` : ""}.`);
+        await this.refreshLiveData();
+        return true;
+      },
+    });
+    modal.open();
+    return modal;
+  }
+
+  openDeleteDialog(file, onDeleted) {
+    const kind = this.itemKind(file);
+    const title = this.getFileTitle(file);
+    const data = this.getFrontmatter(file);
+    const prefix = TAG_PREFIX_BY_TYPE[kind] || "";
+    const slug = slugify(title);
+    const related = kind === "project" ? this.data.relatedItems(file) : null;
+    const notes = related ? [...related.sprints, ...related.meetings, ...related.docs, ...related.releases] : [];
+    const tagged = (paths) => (prefix ? [...this.allTasks(), ...(this.taskSnapshot?.archivedTasks || [])] : [])
+      .filter((task) => !paths.has(task.path) && (task[{ project: "projects", sprint: "sprints", release: "releases" }[kind]] || []).includes(slug));
+    const fields = [{ key: "confirm", label: `Type "${title}" to confirm`, required: true, wide: true, value: "" }];
+    if (notes.length) fields.push({ key: "related", label: `Also move ${notes.length} related ${notes.length === 1 ? "note" : "notes"} to the trash (sprints, meetings, docs, releases)`, type: "checkbox", value: false });
+    if (related?.clips.length) fields.push({ key: "clips", label: `Clear the project on ${related.clips.length} ${related.clips.length === 1 ? "clip" : "clips"}`, type: "checkbox", value: true });
+    const outside = tagged(new Set([file.path]));
+    if (outside.length) fields.push({ key: "tags", label: `Remove #${prefix}/${slug} from ${outside.length} ${outside.length === 1 ? "task" : "tasks"} in other notes`, type: "checkbox", value: false });
+    const warnings = [];
+    if (kind === "adr" && String(data.status || "").toLowerCase() === "accepted") warnings.push("This decision is accepted. The usual way to retire it is a new ADR that supersedes it.");
+    const modal = new LifeOSFormModal(this.app, {
+      title: `Delete ${title}`,
+      description: [`The note goes to the trash set in Obsidian's settings, so it can be restored. Links to it are left as they are.`, ...warnings].join(" "),
+      fields,
+      submitLabel: "Delete",
+      onSubmit: async (values) => {
+        if (String(values.confirm || "").trim() !== title) throw new Error("The name does not match. Nothing was deleted.");
+        const trash = [file, ...(values.related ? notes : [])];
+        const paths = new Set(trash.map((item) => item.path));
+        let removed = { written: 0, stale: 0 };
+        if (values.tags) removed = await this.writer.updateTaskLines(tagged(paths), (line) => replaceTag(line, prefix, slug, ""));
+        if (values.clips) {
+          for (const clip of related.clips) await this.writer.setFrontmatter(clip.path, { project: "" });
+        }
+        for (const item of trash) await this.writer.trashNote(item.path);
+        const left = values.tags ? removed.stale : tagged(paths).length;
+        new Notice(`Deleted ${trash.length} ${trash.length === 1 ? "note" : "notes"}.${left ? ` ${left} ${left === 1 ? "task still carries" : "tasks still carry"} #${prefix}/${slug}.` : ""}`);
+        if (paths.has(this.activeSprintPath)) this.activeSprintPath = null;
+        if (paths.has(this.activeProjectPath) && this.activeScreen === "project") { this.activeProjectPath = null; this.activeScreen = "projects"; }
+        await this.refreshLiveData();
+        onDeleted?.();
         return true;
       },
     });
@@ -4676,7 +5003,7 @@ class LifeOSHomeView extends ItemView {
     if (!scheduled.length) chart.createDiv({ cls: "life-os-live-empty", text: "No project has a started or due date yet." });
     for (const item of scheduled) {
       const row = chart.createDiv({ cls: "life-os-roadmap-row" });
-      const label = row.createEl("button", { cls: "life-os-roadmap-label", text: this.getFileTitle(item.file), attr: { title: `${item.start} to ${item.end}` } });
+      const label = row.createEl("button", { cls: "life-os-roadmap-label", text: this.getFileTitle(item.file), attr: { title: `${item.start} to ${item.end}${String(this.getFrontmatter(item.file).description || "").trim() ? `. ${String(this.getFrontmatter(item.file).description).trim()}` : ""}` } });
       label.type = "button";
       this.registerDomEvent(label, "click", () => this.openProject(item.file.path));
       const track = row.createDiv({ cls: "life-os-roadmap-track" });
@@ -4761,9 +5088,9 @@ class LifeOSHomeView extends ItemView {
   releaseModel(file) {
     const data = this.getFrontmatter(file);
     const slug = slugify(this.getFileTitle(file));
-    const tasks = this.allTasks().filter((task) => (task.releases || []).includes(slug));
+    const tasks = this.tasksFor(file).filter((task) => (task.releases || []).includes(slug));
     const date = isoDate(data.date);
-    const project = this.data.fileByTitle(linkTarget(data.project), this.data.projects());
+    const project = this.data.fileByTitle(linkTarget(data.project), this.data.projects({ includeArchived: true }));
     const earlier = this.data.releases()
       .filter((other) => other.path !== file.path && linkTarget(this.getFrontmatter(other).project) === linkTarget(data.project))
       .map((other) => isoDate(this.getFrontmatter(other).date))
@@ -4783,7 +5110,7 @@ class LifeOSHomeView extends ItemView {
   }
 
   renderReleases(parent) {
-    const releases = this.data.releases().sort((a, b) => (isoDate(this.getFrontmatter(b).date) || "9999").localeCompare(isoDate(this.getFrontmatter(a).date) || "9999"));
+    const releases = this.data.releases({ includeArchived: Boolean(this.showArchivedItems) }).sort((a, b) => (isoDate(this.getFrontmatter(b).date) || "9999").localeCompare(isoDate(this.getFrontmatter(a).date) || "9999"));
     const section = parent.createEl("section", { cls: "life-os-releases" });
     const head = section.createDiv({ cls: "life-os-live-heading" });
     const copy = head.createDiv();
@@ -4799,6 +5126,7 @@ class LifeOSHomeView extends ItemView {
       header.type = "button";
       header.createSpan({ cls: "life-os-meeting-date", text: model.date || "No date" });
       header.createEl("strong", { text: this.getFileTitle(file) });
+      if (isArchivedData(model.data)) header.createSpan({ cls: "life-os-chip is-archived", text: "Archived" });
       header.createSpan({ cls: `life-os-chip is-${slugify(model.data.status || "planned")}`, text: String(model.data.status || "planned") });
       header.createSpan({ cls: "life-os-record-metrics", text: `${model.done.length} of ${model.tasks.length} done` });
       this.registerDomEvent(header, "click", () => { this.expandedRelease = expanded ? null : file.path; this.render(); });
@@ -4820,6 +5148,7 @@ class LifeOSHomeView extends ItemView {
         this.addSmallButton(actions, "Mark released", () => this.runWrite(() => this.writer.setFrontmatter(file.path, { status: "released", date: model.date || this.today() }), "Release marked as released."), { icon: "rocket", primary: true });
       }
       this.addSmallButton(actions, "Open note", () => this.openPath(file.path), { icon: "file-text" });
+      this.renderItemActions(actions, file);
       if (model.open.length) {
         body.createEl("h4", { text: "Still open" });
         this.renderTaskList(body, model.open, { context: true });
@@ -5118,7 +5447,7 @@ class LifeOSHomeView extends ItemView {
       folders: folderList,
       pathWarnings: this.configPathWarnings(config.folders),
       notes,
-      tasks: this.allTasks(),
+      tasks: [...this.allTasks(), ...(this.taskSnapshot?.archivedTasks || [])],
       people: notes.filter((note) => note.type === "person").map((note) => slugify(note.title)),
     };
   }

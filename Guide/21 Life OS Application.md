@@ -29,7 +29,7 @@ Plan and Review, plus the daily check-in on Today, appear only when **Show perso
 
 ## The project page
 
-- **Header:** status and priority selects, target date, repository URL (opens in your browser), stakeholders as chips (add from `05 People`, remove with ×), progress meter, open and overdue counts, days to target.
+- **Header:** a description (saved to the `description` property when you leave the field), status and priority selects, target date, repository URL (opens in your browser), stakeholders as chips (add from `05 People`, remove with ×), progress meter, open and overdue counts, days to target.
 - **Overview:** next five tasks, the active sprint with its goal and meter, the last meeting with its open action items, the latest decision.
 - **Tasks:**
   - An add form with text, due, scheduled, sprint (the project's open sprints), owner (`#p/<slug>`), high priority, and blocked.
@@ -42,6 +42,25 @@ Plan and Review, plus the daily check-in on Today, appear only when **Show perso
   - The draft survives refreshes and is kept in plugin data until you save or discard it.
   - Past meetings form a timeline. Expand one to see attendees, decisions (each with an **ADR** button that prefills a decision record), action items with checkboxes, and a box that appends a note to its `## Notes`.
 - **Docs and Clips:** linked documents with status selects and New ADR, tech note, and postmortem buttons; clips assigned to the project, and a picker to assign one from the inbox.
+
+## Rename, archive, delete
+
+Projects, sprints, meetings, decision records, tech notes, postmortems, releases, and clips have a **⋯** menu: on the project page header and project cards, on the sprint board controls, in an expanded meeting or release, in each row of the docs table, and on clip cards.
+
+- **Rename:** renames the note in its folder and refuses a name that is taken.
+  - It then rewrites every `[[Old title]]` link (also with an alias, a heading, a folder path, or inside a property) and, for projects, sprints, and releases, every `#project/`, `#sprint/`, or `#release/` tag with the old slug.
+  - For a project it offers to rename the sprints and releases whose titles start with the project name (`Billing Sprint 3` becomes `Payments Sprint 3`).
+  - Obsidian's own link updating is not needed for this.
+- **Archive:** sets `archived: true`. The file stays where it is and keeps its status.
+  - Archived notes leave the dashboards, task lists, pickers, and the roadmap. Their tasks are set aside too, as are tasks tagged only with archived projects or sprints.
+  - The project page of an archived project still shows everything and has an **Unarchive** button.
+  - Projects has an **Archived** filter. Meetings and Docs have **Show archived**. Archived sprints stay at the end of the sprint picker.
+  - For a project, the dialog offers to archive its related sprints, meetings, docs, and releases too. Open sprints are closed. Clips use their own `status: archived` and are not changed.
+- **Delete:** you type the exact title to confirm. The note goes to the trash set in Obsidian's settings (system trash or `.trash`), so it can be restored.
+  - For a project you can also send its related sprints, meetings, docs, and releases to the trash, clear `project` on its clips, and remove `#project/<slug>` from tasks in other notes.
+  - Sprints and releases offer the same tag cleanup.
+  - Links to a deleted note are left as they are.
+  - An accepted ADR shows a reminder that superseding it is the usual way to retire a decision.
 
 ## Editing a task
 
@@ -130,8 +149,8 @@ Each item opens the note, at the task line where there is one.
 - **Task lines:** the writer re-reads the file and changes the line only if it still matches what the screen showed. Otherwise it writes nothing, shows a notice, and refreshes.
 - **Properties:** written with Obsidian's `processFrontMatter`, one key per action, unless a form writes several at once.
 - **New notes:** created only at a path that does not exist yet. An existing note is never overwritten.
-- **Moves:** use Obsidian's rename so links update. The only move is Inbox, Keep as tech note.
-- **No deletion:** the plugin deletes nothing and has no network, process, or raw file-system write capability. External links open in your browser.
+- **Moves and renames:** use Obsidian's rename. A rename from the ⋯ menu then rewrites links and tags itself; the only move is Inbox, Keep as tech note.
+- **Deletion:** only from the ⋯ menu after typing the name, through Obsidian's `trashFile`, so the note can be restored. The plugin has no network, process, or raw file-system write capability. External links open in your browser.
 - **Templater:** notes created from Dev OS forms already have content, so Templater folder templates do not run over them. Notes created with QuickAdd or by hand still use the templates.
 
 ## Settings
@@ -182,7 +201,8 @@ Run `node scripts/verify_life_os_app.mjs .` for static contracts and a mock runt
 - task-line helpers and stale-line refusal
 - the project page task form and minutes composer
 - inbox filtering
+- rename with link and tag rewrites, archive and unarchive, delete to the trash, and the project description
 
 `PLAYWRIGHT_MODULE=<path to playwright> node scripts/verify_dashboard_view.mjs` exercises the same flows in Chromium with a synthetic vault at 1440, 900, 620, and 390 px. Neither replaces checking the view inside Obsidian after a reload; see [[23 Native Acceptance]].
 
-The application version is 1.2.0.
+The application version is 1.3.0.

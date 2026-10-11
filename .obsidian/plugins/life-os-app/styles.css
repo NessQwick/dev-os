@@ -1900,3 +1900,28 @@
   .life-os-health-item { grid-template-columns: minmax(0, 1fr) auto; }
   .life-os-health-code { grid-column: 1 / -1; }
 }
+
+/* Dev OS 1.3: rename, archive, delete, project description */
+.life-os-item-actions { position: relative; display: inline-block; }
+.life-os-item-actions-toggle { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; min-height: 30px; padding: 0 9px; border: 1px solid var(--life-os-line); border-radius: 999px; background: var(--background-primary); color: var(--text-muted); font-weight: 700; cursor: pointer; list-style: none; user-select: none; }
+.life-os-item-actions-toggle::-webkit-details-marker { display: none; }
+.life-os-item-actions[open] > .life-os-item-actions-toggle { border-color: var(--life-os-accent); color: var(--text-normal); }
+.life-os-item-actions-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; display: grid; gap: 6px; min-width: 140px; padding: 8px; border: 1px solid var(--life-os-line); border-radius: 12px; background: var(--background-primary); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18); }
+.life-os-home .life-os-item-actions-menu .life-os-small-button { justify-content: flex-start; }
+.life-os-home .life-os-small-button.is-danger { color: var(--color-red); border-color: color-mix(in srgb, var(--color-red) 45%, var(--life-os-line)); }
+.life-os-chip.is-archived { color: var(--text-muted); border-style: dashed; }
+.life-os-archived-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; padding: 8px 10px; border: 1px dashed var(--life-os-line); border-radius: 12px; color: var(--text-muted); font-size: 0.76rem; }
+.life-os-home .life-os-project-description-input { display: block; margin: 0 0 14px; max-width: 70ch; border-style: dashed; background: transparent; font-size: 0.86rem; }
+.life-os-home .life-os-project-description-input:focus { border-style: solid; background: var(--background-primary); }
+.life-os-project-description { display: -webkit-box; margin: 8px 0 0; overflow: hidden; color: var(--text-muted); font-size: 0.74rem; line-height: 1.4; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.life-os-doc-actions { display: flex; justify-content: flex-end; }
+.life-os-doc-row { grid-template-columns: minmax(0, 2.4fr) auto minmax(110px, 0.8fr) minmax(0, 1fr) 92px 36px; }
+@container (max-width: 700px) {
+  .life-os-doc-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .life-os-doc-row > :nth-child(n + 4) { display: none; }
+  .life-os-doc-row > .life-os-doc-actions { display: flex; }
+  .life-os-doc-row.is-header > :last-child { display: none; }
+}
+.life-os-doc-table { overflow: visible; }
+.life-os-doc-row:first-child { border-radius: 14px 14px 0 0; }
+.life-os-doc-row:last-child { border-radius: 0 0 14px 14px; }

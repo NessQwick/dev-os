@@ -1,6 +1,6 @@
 # Security
 
-Dev OS is a local-first Obsidian vault. The first-party dashboard makes no network or provider calls. It writes to notes only through one writer class, on an explicit click, and never deletes or overwrites a note. Optional agents, web browsing, external-link checks, and third-party plugins have their own network behavior. This page describes configured defaults, not a guarantee that every installed component is offline.
+Dev OS is a local-first Obsidian vault. The first-party dashboard makes no network or provider calls. It writes to notes only through one writer class, on an explicit click, and never overwrites a note. Deleting is only possible from an item's Delete action after you type its name, and the note goes to the trash you chose in Obsidian's settings. Optional agents, web browsing, external-link checks, and third-party plugins have their own network behavior. This page describes configured defaults, not a guarantee that every installed component is offline.
 
 ## What the template ships, network-wise
 
