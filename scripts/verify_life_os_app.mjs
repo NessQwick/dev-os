@@ -1315,6 +1315,112 @@ try {
   view.render();
   check("AI screen lists the prompt library", treeHasClass(view.contentEl, "life-os-prompt-card") && treeHasText(view.contentEl, "Meeting Prep") && treeHasText(view.contentEl, "2 prompts"));
 
+  // 1.5: task panel, task views, sprint tabs, projects by quarter, review cards, routing.
+  check("task edit can move a task to another project", sandbox.editTaskLine("- [ ] A #project/x #sprint/s", { project: "y" }) === "- [ ] A #sprint/s #project/y" && sandbox.editTaskLine("- [ ] A #project/x", { project: "" }) === "- [ ] A");
+  const viewFixture = sandbox.taskViews([
+    { text: "a", due: "2026-09-10", path: "p.md" },
+    { text: "b", due: "2026-09-16", path: "p.md" },
+    { text: "c", due: "2026-09-30", path: "p.md" },
+    { text: "d", discuss: true, owners: ["jo"], path: "p.md" },
+    { text: "e", high: true, path: "p.md" },
+    { text: "f", path: "08 Tasks/Tasks.md" },
+    { text: "g", path: "08 Tasks/Tasks.md", projects: ["x"] },
+  ], [{ text: "h", doneDate: "2026-09-05" }, { text: "i", doneDate: "2026-08-01" }], "2026-09-09", { jo: "Jo" });
+  check("task views mirror the Task Dashboard queries",
+    viewFixture.next7.map((group) => group.label).join() === "2026-09-10,2026-09-16" && viewFixture.discuss[0].label === "Jo" &&
+    viewFixture.high[0].tasks.map((task) => task.text).join() === "e" && viewFixture.inbox[0].tasks.map((task) => task.text).join() === "f" &&
+    viewFixture.done.length === 1 && viewFixture.done[0].tasks[0].text === "h");
+  const life = sandbox.mementoModel("1990-05-01", 80, "2026-09-09");
+  const qstats = sandbox.questionStats([{ data: { dq_a: 8 } }, { data: { dq_a: 6, dq_b: true } }, { data: null }], [{ key: "dq_a", text: "A?" }, { key: "dq_b", text: "B?" }]);
+  check("memento and question stats compute from plain data", life.age === 36 && life.years === 80 && life.weeksLived > 1800 && life.weeksLeft === life.totalWeeks - life.weeksLived && sandbox.mementoModel("", 80, "2026-09-09") === null &&
+    qstats[0].average === 7 && qstats[0].answered === 2 && qstats[1].average === null);
+  check("recurrence is read from the task line", sandbox.taskRecurrence("- [ ] Standup 🔁 every weekday 📅 2026-09-10") === "every weekday");
+
+  const panelFile = "04 Projects/Platform.md";
+  fileContents.set(panelFile, "## Tasks\n- [ ] Write spec #project/platform 📅 2026-09-12\n- [ ] Review spec #project/platform");
+  listItems.set(panelFile, [taskItem(" ", 1), taskItem(" ", 2)]);
+  plugin.settings.taskClick = "panel";
+  await view.refreshLiveData();
+  const findClass = (element, className) => String(element.options?.cls || "").split(/\s+/).includes(className) ? element : element.children.map((child) => findClass(child, className)).find(Boolean);
+  view.activeScreen = "focus";
+  view.focusView = "attention";
+  view.openTaskTarget(view.allTasks().find((task) => task.display === "Write spec"));
+  check("clicking a task opens the side panel", treeHasClass(view.contentEl, "life-os-task-panel") && findByLabel(view.contentEl, "Task text")?.value === "Write spec");
+  const dueField = findByLabel(view.contentEl, "Due date");
+  dueField.value = "2026-09-20";
+  dueField.handlers.change();
+  await settle();
+  check("the panel rewrites the due date and still shows the task", fileContents.get(panelFile).split("\n")[1] === "- [ ] Write spec #project/platform 📅 2026-09-20" && findByLabel(view.contentEl, "Task text")?.value === "Write spec", fileContents.get(panelFile));
+  const waitSelect = findByLabel(view.contentEl, "Add a task this one waits on");
+  waitSelect.value = `${panelFile}::3`;
+  waitSelect.handlers.change();
+  await settle();
+  const panelLines = fileContents.get(panelFile).split("\n");
+  const depId = panelLines[2].match(/🆔 ([a-z0-9]+)$/)?.[1];
+  check("the panel adds a dependency with Tasks ids", Boolean(depId) && panelLines[1].endsWith(`⛔ ${depId}`), panelLines.join(" | "));
+  const projectSelect = findByLabel(view.contentEl, "Task project");
+  projectSelect.value = "";
+  projectSelect.handlers.change();
+  await settle();
+  check("the panel moves a task out of its project", !fileContents.get(panelFile).split("\n")[1].includes("#project/"), fileContents.get(panelFile));
+  findText(findClass(view.contentEl, "life-os-task-panel"), "Done").handlers.click();
+  await settle();
+  check("the panel status control completes the task", fileContents.get(panelFile).split("\n")[1].startsWith("- [x] Write spec") && treeHasClass(view.contentEl, "life-os-task-panel"), fileContents.get(panelFile));
+  view.closeTask();
+  check("closing the panel removes it", !treeHasClass(view.contentEl, "life-os-task-panel"));
+  plugin.settings.taskClick = "note";
+  view.openTaskTarget(view.allTasks().find((task) => task.display === "Review spec"));
+  check("the setting can send task clicks to the note", !view.activeTaskKey);
+  plugin.settings.taskClick = "panel";
+
+  const reindexMock = (filePath) => listItems.set(filePath, fileContents.get(filePath).split("\n").flatMap((line, index) => { const match = line.match(/^- \[(.)\]/); return match ? [taskItem(match[1], index)] : []; }));
+  reindexMock("08 Tasks/Tasks.md");
+  reindexMock(panelFile);
+  await view.refreshLiveData();
+  view.focusView = "discuss";
+  view.render();
+  check("Tasks screen shows the discussion view by person", treeHasText(view.contentEl, "To discuss") && treeHasText(view.contentEl, "Jordan Li · 1"));
+  view.focusView = "done";
+  view.render();
+  check("Tasks screen shows done this week", treeHasText(view.contentEl, "Done this week") && treeHasClass(view.contentEl, "life-os-task-row"));
+  view.focusView = "attention";
+
+  view.activeScreen = "sprint";
+  view.sprintTab = "all";
+  view.render();
+  check("Sprint screen lists all sprints", treeHasClass(view.contentEl, "life-os-sprint-card") && treeHasText(view.contentEl, "Platform Sprint 1"));
+  view.sprintTab = "across";
+  view.render();
+  check("Sprint screen shows work across sprints", treeHasText(view.contentEl, "Across sprints") && treeHasText(view.contentEl, "Blocked · 0"));
+  view.sprintTab = "board";
+
+  metadata.set(platformPath, { ...metadata.get(platformPath), quarter: "2026-Q3" });
+  view.activeScreen = "projects";
+  view.projectFilter = "all";
+  view.projectView = "quarter";
+  view.render();
+  check("Projects group by quarter", treeHasText(view.contentEl, "2026-Q3 · 1") && treeHasClass(view.contentEl, "life-os-quarter-group"));
+  view.projectView = "cards";
+  view.projectFilter = "open";
+
+  metadata.set(configPath, { ...metadata.get(configPath), birthdate: "1990-05-01", life_expectancy: 80 });
+  plugin.settings.showPersonal = true;
+  view.activeScreen = "review";
+  view.render();
+  check("Review shows daily questions and memento mori", treeHasClass(view.contentEl, "life-os-question-bars") && treeHasClass(view.contentEl, "life-os-memento") && treeHasText(view.contentEl, "8 weeks"));
+  plugin.settings.showPersonal = false;
+
+  view.activeScreen = "today";
+  view.render();
+  const findClickable = (element, text) => (element.handlers?.click && treeHasText(element, text) ? element : element.children.map((child) => findClickable(child, text)).find(Boolean));
+  findClickable(view.contentEl, "All tasks")?.handlers.click();
+  check("shortcuts open Dev OS screens, not Markdown dashboards", view.activeScreen === "focus" && !source.includes('path: "00 Dashboards/Task Dashboard.md"') && !source.includes('path: "00 Dashboards/Sprint Dashboard.md"'));
+  view.activeScreen = "home";
+  await view.afterCreate(new TFile(platformSprint), "sprint");
+  const sprintRoute = view.activeScreen === "sprint" && view.activeSprintPath === platformSprint;
+  await view.afterCreate(new TFile(queuesAdr), "adr");
+  check("new notes open in their Dev OS screen", sprintRoute && view.activeScreen === "docs" && view.expandedDocs.has(queuesAdr));
+
   if (process.env.LIFE_OS_PREVIEW) {
     // Generated visual-test artifact uses synthetic fixtures only.
     for (let i = 0; i < 30; i += 1) {

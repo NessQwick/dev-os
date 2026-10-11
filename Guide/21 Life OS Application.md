@@ -12,8 +12,8 @@ Dev OS opens automatically after Obsidian loads the vault. Use `Ctrl/Cmd+Shift+L
 | --- | --- | --- | --- |
 | Home | Attention tasks, active sprint, today's meetings, clip inbox count, projects, quick add | tasks, sprints, meetings, clippings | task lines |
 | Today | Standup (done since the last working day, due or in progress, `#blocked`), quick add, attention list; daily check-in when the personal layer is on | tasks, daily note | `## Standup` in today's note, task lines |
-| Sprint | Board for one sprint: To do, In progress, Done; Sprint details (project, number, dates, goal); Close sprint moves open tasks | `#sprint/<slug>` tasks, sprint notes | task status and `#sprint/` tags, sprint properties, a new sprint note, project `current_sprint` |
-| Projects | Cards with status and priority selects, progress, overdue | project notes and `#project/<slug>` tasks | project `status`, `priority` |
+| Sprint | Tabs: Board (To do, In progress, Done; Sprint details; Close sprint moves open tasks), All sprints (cards by status with progress, start, close), Across sprints (velocity, in progress, blocked, done in 14 days) | `#sprint/<slug>` tasks, sprint notes | task status and `#sprint/` tags, sprint properties, a new sprint note, project `current_sprint` |
+| Projects | Cards with status and priority selects, progress, overdue; Cards or By quarter | project notes and `#project/<slug>` tasks | project `status`, `priority` |
 | Roadmap | Projects from `started` to `due` with progress, sprints, milestones (◆), releases (▲), today line | project, sprint, and release notes | nothing |
 | Project page | Header, stakeholders, tabs: Overview, Tasks, Meetings, Docs, Clips | project note, its tasks, linked sprints, meetings, docs, clips | project properties, task lines, new meeting notes, meeting `## Notes`, clip `project` |
 | Meetings | Minutes composer, upcoming, today, recent, open action items | `10 Meetings/` | new meeting notes, task lines |
@@ -21,11 +21,11 @@ Dev OS opens automatically after Obsidian loads the vault. Use `Ctrl/Cmd+Shift+L
 | Inbox | Web Clipper triage and template setup | `07 Library/Clippings/`, `Meta/Web Clipper/` | clip `project`, `status`, one move to Tech Notes |
 | Waiting | Delegated tasks by person (age from `➕`), tasks waiting on open tasks (`⛔`), `#blocked` | task index, `05 People/` | task lines |
 | Configure | Config form with change preview; vault health check | `Meta/Dev OS Config.md`, Templater, QuickAdd, Web Clipper templates (read only), all typed notes and tasks | config note properties only |
-| Tasks | Every open task grouped by urgency, with status and due date controls | task index | task lines |
+| Tasks | Views: By urgency, Next 7 days, To discuss (by person), High without a date, Inbox, Done this week; status and due date controls | task index | task lines |
 | People | Person cards with role, cadence, and open, to-discuss, and overdue counts; filters; discussion queue | `05 People/`, task index | person properties, new person notes |
 | Person page | Properties, To discuss (add a topic), open tasks, projects together, meeting log, meetings with 1:1 minutes | person note, `#p/<slug>` tasks, projects, meetings | person properties, a `#discuss` task in `08 Tasks/Tasks.md`, `## Meeting log`, new meeting notes |
 | Library, Brain, AI | Books and clips with book details (personal layer); link graph; AI readiness and the prompt library | as before, `Prompts/` | book properties |
-| Plan, Review | Personal layer: horizons, calendar, effort and habit charts, life areas | periodic notes | nothing |
+| Plan, Review | Personal layer: horizons, calendar; effort, habit rhythm, daily questions, life areas, memento mori over 7, 30, 56, or 90 days | periodic notes, config | nothing |
 
 Plan and Review, plus the daily check-in on Today, appear only when **Show personal modules** is on (Settings, Dev OS, or the View menu).
 
@@ -98,9 +98,43 @@ Projects, sprints, meetings, decision records, tech notes, postmortems, releases
   - Links to a deleted note are left as they are.
   - An accepted ADR shows a reminder that superseding it is the usual way to retire a decision.
 
+## The task panel
+
+Clicking a task anywhere in Dev OS (a row, a sprint card, a discussion item) opens its details in a side panel instead of the note. On narrow panes the panel covers the view; Escape or × closes it.
+
+- **Status:** To do, In progress, Done.
+- **Text, due, scheduled, high priority, blocked.**
+- **Routing:** project (`#project/`), sprint (the project's open sprints), owner (`#p/`), release.
+- **Waits on and Blocks:** the dependency chain both ways. Click a task to move the panel to it, × to stop waiting, or add a task this one waits on.
+- **Context:** the source note (a project or person note opens its Dev OS page), created and done dates, recurrence, id, and other tags.
+- **Open in note** jumps to the line.
+
+Each change rewrites only that task line and refuses a line that changed since it was read. To go back to opening the note on click, turn off **Open tasks in the Dev OS panel** in Settings, Dev OS.
+
+## Tasks views
+
+The Tasks screen has the views of `00 Dashboards/Task Dashboard.md`, live:
+- **By urgency:** overdue, today, upcoming, unscheduled, with the workload bar.
+- **Next 7 days**, grouped by due date.
+- **To discuss**, grouped by person.
+- **High, no date.**
+- **Inbox:** tasks in `08 Tasks/Tasks.md` without a date, project, or person.
+- **Done this week.**
+
+## Sprint tabs
+
+The Sprint screen replaces `00 Dashboards/Sprint Dashboard.md`:
+- **Board:** one sprint, as before.
+- **All sprints:** cards grouped Active, Planned, Closed with goal, dates, project, and progress; Start, Close, and the ⋯ menu.
+- **Across sprints:** a velocity row (tasks done per closed sprint, the last six), then In progress, Blocked, and Done in the last 14 days, grouped by sprint.
+
+## Shortcuts and new notes
+
+Shortcut cards open Dev OS screens instead of Markdown dashboards: All tasks, Triage the inbox, All sprints, Projects by quarter, Decision log, Discuss queue, Last 8 weeks. The dashboards in `00 Dashboards/` stay as the plain Markdown fallback. A note created with a Dev OS form opens in Dev OS: a project or person page, the sprint board with its details open, the meeting expanded, or the doc with its property panel open. Capture creates projects and people with Dev OS forms; the QuickAdd template choices still exist in the command palette.
+
 ## Editing a task
 
-Every task row and sprint card has a pencil button. The editor changes the text, due and scheduled dates, sprint, owner (`#p/`), release (`#release/`), high priority, and blocked, and can add a dependency (**Waits on**) or remove the current ones. Only those parts of the line change: other tags, recurrence (`🔁`), and created and done dates stay where they are, and Obsidian Tasks still reads the line.
+The task panel above is the main editor. The older dialog editor changes the text, due and scheduled dates, sprint, owner (`#p/`), release (`#release/`), high priority, and blocked, and can add a dependency (**Waits on**) or remove the current ones. Only those parts of the line change: other tags, recurrence (`🔁`), and created and done dates stay where they are, and Obsidian Tasks still reads the line.
 
 **Dependencies** use the Tasks plugin fields:
 - The task that must finish first gets `🆔 <id>`. The editor adds one if it is missing; existing ids are never changed.
@@ -197,6 +231,7 @@ Settings, Dev OS covers:
 - default project for quick add
 - your person note (for Waiting)
 - the project task heading
+- whether clicking a task opens the Dev OS panel or the note
 - discard saved meeting drafts
 
 The View menu adds density, optional visuals, items per list, and both toggles. View preferences persist with the plugin.
@@ -239,7 +274,8 @@ Run `node scripts/verify_life_os_app.mjs .` for static contracts and a mock runt
 - inbox filtering
 - rename with link and tag rewrites, archive and unarchive, delete to the trash, and the project description
 - the person page, property forms and the properties dialog, sprint details, the doc panel, the prompt library, and the Bases files
+- the task panel, Tasks views, sprint tabs, projects by quarter, the Review cards, and routing after create
 
 `PLAYWRIGHT_MODULE=<path to playwright> node scripts/verify_dashboard_view.mjs` exercises the same flows in Chromium with a synthetic vault at 1440, 900, 620, and 390 px. Neither replaces checking the view inside Obsidian after a reload; see [[23 Native Acceptance]].
 
-The application version is 1.4.0.
+The application version is 1.5.0.

@@ -5,7 +5,7 @@ This separates reproducible development evidence from native acceptance. A local
 ## Identify the candidate
 
 - Template version: 1.1.0 candidate
-- Dev OS plugin (`life-os-app`) version: 1.4.0
+- Dev OS plugin (`life-os-app`) version: 1.5.0
 - Archive SHA256: use the exact candidate's external `.sha256` sidecar; not embedded here to avoid self-referential hashes
 - Operating system and Obsidian version: not recorded
 - Test date and reviewer: not recorded
@@ -37,6 +37,18 @@ Provider authentication, an actual AI request, external calendar integration, an
 ## Evidence rules
 
 Bind screenshots and results to the exact candidate checksum. Label synthetic fixtures visibly. Record failures and skipped checks. A passing static, mock-runtime, or browser test does not mark this record complete.
+
+## Development checks, 2026-10-11 (Dev OS 1.5.0)
+
+Dev OS application 1.5.0 passed 164 static and mock-runtime checks. New coverage:
+- task views, memento and question stats, recurrence parsing, and moving a task between projects
+- the task panel: open, due date, dependency, project, status, close, and the setting that sends clicks to the note
+- Tasks views, sprint tabs, projects by quarter, and the Review cards
+- shortcuts that open screens, and routing after create
+
+The browser fixture opened the panel from a task row, a waiting card, and the discussion queue. It also covered status and text edits, Escape, overflow at 900 and 390 px with the panel open, the Tasks views, the sprint tabs, By quarter, and the Review cards.
+
+Native check still required: the panel's sticky and fixed positioning inside an Obsidian pane, including a narrow split pane.
 
 ## Development checks, 2026-10-11 (Dev OS 1.4.0)
 

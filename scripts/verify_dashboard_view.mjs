@@ -66,8 +66,11 @@ try {
   assert.equal(await page.locator('.life-os-brain-preview canvas').getAttribute('tabindex'),'-1');
   assert.equal(await page.locator('.life-os-brain-preview .life-os-brain-note').count(),0);
   assert.ok(await page.locator('.life-os-task-row').count() <= 3);
-  await page.locator('.life-os-task-row').first().click();
+  await page.locator('.life-os-task-row .life-os-task-open').first().click();
+  await page.waitForSelector('.life-os-task-panel');
+  await page.locator('.life-os-task-panel').getByRole('button',{name:'Open in note'}).click();
   assert.ok(await page.evaluate(()=>window.opened.at(-1)?.options?.eState?.line >= 0));
+  await page.getByRole('button',{name:'Close task details'}).click();
   for(const screen of ['home','today','sprint','projects','meetings','docs','inbox','roadmap','waiting','config','plan','review','focus','people','library','ai']){
     await page.evaluate((s)=>{window.view.activeScreen=s;window.view.render();},screen);
     assert.ok(await page.locator('.life-os-shell').innerText());
@@ -152,12 +155,16 @@ try {
       assert.ok((await page.locator('.life-os-dependency').innerText()).includes('Build the fixture'));
       await page.screenshot({path:'/tmp/life-os-waiting.png',fullPage:true});
       await page.getByRole('button',{name:/^Edit: Review the contract/}).first().click();
-      await page.getByLabel('Task',{exact:true}).fill('Review the vendor contract');
-      await page.getByLabel('Due',{exact:true}).fill('2026-09-25');
-      await page.screenshot({path:'/tmp/life-os-task-editor.png'});
-      await page.locator('.modal-fixture').getByRole('button',{name:'Save'}).click();
-      await page.waitForFunction(()=>!document.querySelector('.modal-fixture'));
+      await page.waitForSelector('.life-os-task-panel');
+      await page.getByLabel('Task text',{exact:true}).fill('Review the vendor contract');
+      await page.getByLabel('Task text',{exact:true}).press('Tab');
       await page.waitForFunction(()=>document.querySelector('.life-os-waiting-person')?.innerText.includes('Review the vendor contract'));
+      await page.getByLabel('Due date',{exact:true}).fill('2026-09-25');
+      await page.getByLabel('Due date',{exact:true}).press('Tab');
+      await page.waitForFunction(()=>document.querySelector('.life-os-task-panel')?.innerText.includes('Created 2026-09-01'));
+      await page.screenshot({path:'/tmp/life-os-task-editor.png'});
+      await page.locator('.life-os-task-panel').press('Escape');
+      await page.waitForFunction(()=>!document.querySelector('.life-os-task-panel'));
     }
     if(screen==='docs'){
       await page.locator('.life-os-release-card .life-os-meeting-head').first().click();
@@ -176,7 +183,11 @@ try {
     }
     if(screen==='people'){
       await page.locator('.life-os-discussion-queue button').first().click();
-      assert.equal(await page.evaluate(()=>window.opened.at(-1).path),'05 People/Synthetic person.md');
+      await page.waitForSelector('.life-os-task-panel');
+      assert.equal(await page.evaluate(()=>window.view.activeTaskKey.path),'05 People/Synthetic person.md');
+      await page.locator('.life-os-task-panel').getByRole('button',{name:/^Person: Synthetic person/}).click();
+      assert.equal(await page.locator('.life-os-person-page').count(),1);
+      await page.getByRole('button',{name:'Close task details'}).click();
     }
     if(screen==='focus'){
       assert.ok(await page.locator('.life-os-workload-segment').count()>0);
@@ -309,7 +320,44 @@ try {
   await page.evaluate(()=>{window.view.activeScreen='projects';window.view.render();});
   await page.getByRole('button',{name:'Open Projects.base in Bases'}).click();
   assert.equal(await page.evaluate(()=>window.opened.at(-1)?.path),'00 Dashboards/Bases/Projects.base');
-  await page.evaluate(()=>{window.view.projectFilter='open';window.view.activeScreen='home';window.view.render();});
+  // 1.5: task panel from a task row, Tasks views, sprint tabs, projects by quarter, review cards.
+  await page.evaluate(()=>{window.view.activeScreen='focus';window.view.focusView='attention';window.view.render();});
+  await page.locator('.life-os-task-row .life-os-task-open').first().click();
+  await page.waitForSelector('.life-os-task-panel');
+  assert.ok(await page.evaluate(()=>window.opened.length>=0 && !!window.view.activeTaskKey));
+  await page.locator('.life-os-task-panel .life-os-segmented').getByRole('button',{name:'In progress',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('.life-os-task-panel .life-os-segmented button[aria-pressed="true"]')?.innerText==='In progress');
+  await page.screenshot({path:'/tmp/life-os-task-panel.png',fullPage:true});
+  for(const width of [900,390]){
+    await page.setViewportSize({width,height:900});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`task panel overflow at ${width}`);
+    if(width===390)await page.screenshot({path:'/tmp/life-os-task-panel-390.png'});
+  }
+  await page.setViewportSize({width:1440,height:1000});
+  await page.getByRole('button',{name:'Close task details'}).click();
+  await page.waitForFunction(()=>!document.querySelector('.life-os-task-panel'));
+  await page.getByRole('button',{name:/^To discuss ·/}).click();
+  assert.ok((await page.locator('.life-os-task-live').innerText()).includes('Discuss fixture'));
+  await page.getByRole('button',{name:/^Done this week ·/}).click();
+  await page.screenshot({path:'/tmp/life-os-tasks-views.png',fullPage:true});
+  await page.evaluate(()=>{window.view.focusView='attention';window.view.activeScreen='sprint';window.view.sprintTab='board';window.view.render();});
+  await page.getByRole('tab',{name:'All sprints'}).click();
+  assert.ok(await page.locator('.life-os-sprint-card').count()>=1);
+  await page.screenshot({path:'/tmp/life-os-sprint-all.png',fullPage:true});
+  await page.getByRole('tab',{name:'Across sprints'}).click();
+  assert.ok((await page.locator('.life-os-sprint-live').innerText()).includes('Blocked'));
+  await page.screenshot({path:'/tmp/life-os-sprint-across.png',fullPage:true});
+  await page.getByRole('tab',{name:'Board'}).click();
+  assert.equal(await page.locator('.life-os-board-column').count(),3);
+  await page.evaluate(()=>{window.view.activeScreen='projects';window.view.projectFilter='all';window.view.render();});
+  await page.getByRole('button',{name:'By quarter',exact:true}).click();
+  assert.ok(await page.locator('.life-os-quarter-group').count()>=1);
+  await page.evaluate(()=>{window.view.projectView='cards';window.view.activeScreen='review';window.view.render();});
+  assert.equal(await page.locator('.life-os-question-bars').count(),1);
+  assert.equal(await page.locator('.life-os-memento').count(),1);
+  await page.getByRole('button',{name:'8 weeks',exact:true}).click();
+  await page.screenshot({path:'/tmp/life-os-review-cards.png',fullPage:true});
+  await page.evaluate(()=>{window.view.analyticsDays=30;window.view.projectFilter='open';window.view.activeScreen='home';window.view.render();});
   await page.locator('.life-os-display-options summary').click();
   await page.getByRole('button',{name:'Use compact spacing',exact:true}).click();
   assert.equal(await page.locator('.life-os-app-frame.is-compact').count(),1);
@@ -343,5 +391,5 @@ try {
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.screenshot({path:'/tmp/life-os-home-light-candidate.png'});
   await page.evaluate(()=>window.view.onClose());
-  console.log('Dashboard browser checks passed: sixteen modules, Configure save and health check, project page tasks and minutes composer, sprint moves, inbox triage, roadmap bars and markers, waiting groups, task editor, release notes, project description, archive, unarchive and rename, person page, sprint details, doc property panel, prompt library, Bases button, Home spacing, preview/full Brain navigation, workload groups, project counts, discussion links, board previews, Library filters and remote-cover rejection, AI branches, per-module controls, narrow widths and light-theme smoke check. Synthetic fixture only.');
+  console.log('Dashboard browser checks passed: sixteen modules, Configure save and health check, project page tasks and minutes composer, sprint moves, inbox triage, roadmap bars and markers, waiting groups, task editor, release notes, project description, archive, unarchive and rename, person page, sprint details, doc property panel, prompt library, Bases button, task side panel, Tasks views, sprint tabs, projects by quarter, review cards, Home spacing, preview/full Brain navigation, workload groups, project counts, discussion links, board previews, Library filters and remote-cover rejection, AI branches, per-module controls, narrow widths and light-theme smoke check. Synthetic fixture only.');
 }finally{await browser.close();}
