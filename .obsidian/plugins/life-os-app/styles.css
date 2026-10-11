@@ -1925,3 +1925,37 @@
 .life-os-doc-table { overflow: visible; }
 .life-os-doc-row:first-child { border-radius: 14px 14px 0 0; }
 .life-os-doc-row:last-child { border-radius: 0 0 14px 14px; }
+
+/* Dev OS 1.4: property forms, people, prompts, books */
+.life-os-property-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 10px 0 12px; }
+.life-os-property-form .life-os-field { min-width: 0; }
+.life-os-property-form .life-os-field.is-wide { grid-column: 1 / -1; }
+.life-os-property-form .life-os-input, .life-os-property-form .life-os-select { width: 100%; }
+.life-os-property-people { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.life-os-property-people .life-os-select { width: auto; max-width: 100%; }
+.life-os-person-card .life-os-project-card-open > div > span:not(.life-os-record-metrics) { color: var(--text-muted); font-size: 0.74rem; overflow-wrap: anywhere; }
+.life-os-person-page .life-os-project-header .life-os-property-form { max-width: 980px; }
+.life-os-person-log { margin: 0 0 10px; padding-left: 18px; color: var(--text-muted); font-size: 0.76rem; }
+.life-os-person-log li { margin: 3px 0; overflow-wrap: anywhere; }
+.life-os-person-meetings { margin-top: 18px; }
+.life-os-person-meetings h3 { margin: 0; flex: 1 1 auto; }
+.life-os-sprint-details { margin: 6px 0 12px; padding: 8px 12px; border: 1px solid var(--life-os-line); border-radius: 12px; background: var(--background-primary); }
+.life-os-sprint-details > summary { cursor: pointer; color: var(--text-muted); font-size: 0.76rem; font-weight: 650; }
+.life-os-doc-actions { gap: 6px; }
+.life-os-doc-row { grid-template-columns: minmax(0, 2.4fr) auto minmax(110px, 0.8fr) minmax(0, 1fr) 92px 76px; }
+.life-os-doc-panel { padding: 4px 12px 8px; border-top: 1px dashed var(--life-os-line); background: var(--background-primary); }
+.life-os-doc-table > .life-os-doc-panel:last-child { border-radius: 0 0 14px 14px; }
+.life-os-prompt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.life-os-prompt-card { display: grid; gap: 6px; align-content: start; min-width: 0; padding: 14px; border: 1px solid var(--life-os-line); border-radius: 14px; background: var(--background-primary); }
+.life-os-prompt-card p { margin: 0; font-size: 0.78rem; }
+.life-os-prompt-card small { color: var(--text-muted); font-size: 0.7rem; overflow-wrap: anywhere; }
+.life-os-prompt-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.life-os-prompt-head strong { overflow-wrap: anywhere; }
+.life-os-chip.is-risk-read-only { color: var(--color-green); }
+.life-os-chip.is-risk-edit, .life-os-chip.is-risk-delete { color: var(--color-red); border-color: color-mix(in srgb, var(--color-red) 45%, var(--life-os-line)); }
+.life-os-book-details { margin-top: 14px; }
+@container (max-width: 700px) {
+  .life-os-doc-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .life-os-property-form { grid-template-columns: 1fr; }
+}
+.life-os-prompt-library { margin-top: 18px; }

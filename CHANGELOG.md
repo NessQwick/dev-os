@@ -4,6 +4,27 @@ Format: Added, Changed, Templates (manual merge notes), Plugins, Breaking. Semve
 
 ## Unreleased
 
+### Dev OS: application 1.4.0 candidate
+Added
+- **People screen and person page.** People shows cards with role, company, cadence, and open, to-discuss, and overdue counts, with filters. The person page has:
+  - editable properties: role, company, email, meets
+  - To discuss, with an input that adds a `#discuss #p/<slug>` task to the inbox
+  - open tasks, projects together, and a meeting log with an append input
+  - meetings with the person, and **Write 1:1 minutes**
+  - New person form and command; rename rewrites `#p/` tags
+- **Properties in the UI** for every note type, saved per field. Only changed keys are written.
+  - Sprint details on the board.
+  - A property panel per Docs row.
+  - Forms in expanded meetings and releases.
+  - Book details on Library (personal layer).
+  - A **Properties** dialog in the ⋯ menu.
+- **Prompt library** on the AI screen: purpose, when, writes, and risk for every prompt note; Copy instruction.
+- **Bases:** `00 Dashboards/Bases/` with Projects, People, Meetings, Decisions and docs, Releases, and Clip inbox tables. They are embedded in the Projects and Decisions dashboards and opened from Dev OS with **Open as table**.
+
+Templates (manual merge)
+- New folder `00 Dashboards/Bases/` (copy it into an existing vault).
+- `00 Dashboards/Projects Dashboard.md` and `00 Dashboards/Decisions.md` each gained a Bases section at the end.
+
 ### Dev OS: application 1.3.0 candidate
 Added
 - **Rename, archive, delete** from a ⋯ menu on projects, sprints, meetings, decision records, tech notes, postmortems, releases, and clips.

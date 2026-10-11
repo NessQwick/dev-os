@@ -1,0 +1,35 @@
+# Dev OS: Web Clipper notes. Bases syntax is evolving; verify on your Obsidian version.
+filters:
+  and:
+    - type == "clipping"
+    - '!file.hasTag("example")'
+properties:
+  file.name:
+    displayName: Clip
+  note.site:
+    displayName: Site
+  note.clipped:
+    displayName: Clipped
+views:
+  - type: table
+    name: Inbox
+    filters:
+      and:
+        - status == "inbox"
+    order:
+      - file.name
+      - site
+      - clipped
+      - project
+      - source
+    sort:
+      - property: clipped
+        direction: DESC
+  - type: table
+    name: All clips
+    order:
+      - file.name
+      - status
+      - project
+      - site
+      - clipped

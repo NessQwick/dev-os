@@ -33,3 +33,10 @@ FROM "06 Writing/Releases"
 WHERE type = "release"
 SORT date DESC
 ```
+
+## Tables (Bases)
+Editable tables over the same notes: `00 Dashboards/Bases/Decisions and docs.base` and `Releases.base`.
+
+![[Decisions and docs.base]]
+
+![[Releases.base]]

@@ -578,6 +578,7 @@ try {
     "focus",
     "review",
     "people",
+    "person",
     "library",
     "ai",
   ];
@@ -596,6 +597,7 @@ try {
     review: "life-os-review-live",
     projects: "life-os-collection-live",
     people: "life-os-collection-live",
+    person: "life-os-person-page",
     library: "life-os-collection-live",
     ai: "life-os-ai-live",
   };
@@ -614,6 +616,7 @@ try {
     element.children.some((child) => treeHasText(child, value));
   for (const screen of screens) {
     view.activeScreen = screen;
+    view.activePersonPath = "05 People/Person.md";
     view.render();
     if (!view.contentEl.children.length) {
       emptyScreens.push(screen);
@@ -1214,6 +1217,103 @@ try {
   check("delete moves the project and related notes to the trash",
     ["04 Projects/Payments.md", "04 Projects/Sprints/Payments Sprint 1.md", "06 Writing/Releases/Payments 1.0.md"].every((target) => trashed.includes(target)) && !trashed.includes(meetingPath), trashed.join(", "));
   check("delete removes the project tag from tasks elsewhere", fileContents.get(meetingPath).endsWith("- [ ] Follow up #sprint/payments-sprint-1"), fileContents.get(meetingPath));
+
+  // 1.4: property forms, people, sprint details, doc panels, prompts, Bases.
+  const schemas = vm.runInContext("PROPERTY_SCHEMAS", sandbox);
+  check("property patch writes only changed keys as links, lists, and numbers",
+    JSON.stringify(sandbox.propertyPatch(schemas.adr, { date: "2026-09-01", deciders: ["[[A]]"], project: "[[X]]" }, { date: "2026-09-01", deciders: ["A", "B", "A"], project: "Y", supersedes: "" })) === JSON.stringify({ project: "[[Y]]", deciders: ["[[A]]", "[[B]]"] }) &&
+    JSON.stringify(sandbox.propertyPatch(schemas.sprint, { number: 2 }, { number: "3", goal: " Ship " })) === JSON.stringify({ number: 3, goal: "Ship" }) &&
+    JSON.stringify(sandbox.propertyPatch(schemas["tech-note"], { sources: ["a"] }, { sources: "a, b" })) === JSON.stringify({ sources: ["a", "b"] }));
+  const personNote = sandbox.buildPersonNote({ title: "Jordan Lee", role: "Engineer", meets: "weekly", today });
+  check("new person notes carry properties and their tag", personNote.includes("type: person") && personNote.includes("role: Engineer") && personNote.includes("Tag: `#p/jordan-lee`") && personNote.includes("## Meeting log\n- 2026-09-09 Created."));
+  check("prompt instruction matches the template buttons", sandbox.promptInstruction("07 Meeting Prep") === "Read Prompts/07 Meeting Prep.md with vault_read and follow its Prompt section for the note I have open (or the current period if none applies).");
+  const baseViews = vm.runInContext("BASE_VIEWS", sandbox);
+  const baseProblems = Object.values(baseViews).filter((rel) => {
+    const file = path.join(root, rel);
+    if (!fs.existsSync(file)) return true;
+    const text = fs.readFileSync(file, "utf8");
+    return !text.includes("views:") || !/type == "/.test(text) || !text.includes("- type: table");
+  });
+  check("Bases files exist for every Open as table button", baseProblems.length === 0, baseProblems.join(", "));
+
+  const personPath = "05 People/Jordan Lee.md";
+  const syncPath = "10 Meetings/2026-09-12 Jordan sync.md";
+  const platformPath = "04 Projects/Platform.md";
+  const platformSprint = "04 Projects/Sprints/Platform Sprint 1.md";
+  const queuesAdr = "06 Writing/Decisions/ADR-0002 Use queues.md";
+  for (const filePath of [personPath, syncPath, platformPath, platformSprint, queuesAdr]) fakeFiles.push(new TFile(filePath));
+  metadata.set(personPath, { type: "person", role: "Engineer", meets: "weekly" });
+  fileContents.set(personPath, "Tag\n\n## Meeting log\n- 2026-09-01 Created.");
+  metadata.set(syncPath, { type: "meeting", kind: "one-on-one", date: "2026-09-12", attendees: ["[[Jordan Lee]]"] });
+  fileContents.set(syncPath, '---\nattendees:\n  - "[[Jordan Lee]]"\n---\n## Action items\n- [ ] Send notes #p/jordan-lee 📅 2026-09-01');
+  listItems.set(syncPath, [taskItem(" ", 5)]);
+  metadata.set(platformPath, { type: "project", status: "active", stakeholders: ["[[Jordan Lee]]"] });
+  metadata.set(platformSprint, { type: "sprint", project: "[[Platform]]", start: "2026-09-07", end: "2026-09-20", status: "active", goal: "Old goal" });
+  metadata.set(queuesAdr, { type: "adr", status: "proposed", project: "[[Platform]]", deciders: [] });
+  await view.refreshLiveData();
+  view.peopleFilter = "all";
+  view.activeScreen = "people";
+  view.render();
+  check("People shows person cards with role and counts", treeHasClass(view.contentEl, "life-os-person-card") && treeHasText(view.contentEl, "Engineer") && treeHasText(view.contentEl, "1 open · 0 to discuss · 1 overdue"));
+  view.openPerson(personPath);
+  check("person page shows properties, projects together, and meetings",
+    treeHasClass(view.contentEl, "life-os-person-page") && treeHasClass(view.contentEl, "life-os-property-form") && treeHasText(view.contentEl, "Platform") && treeHasText(view.contentEl, "Jordan sync") && treeHasText(view.contentEl, "Meetings · 1"));
+  const roleInput = findByLabel(view.contentEl, "Role of Jordan Lee");
+  roleInput.value = "Staff engineer";
+  roleInput.handlers.change();
+  await settle();
+  const meetsSelect = findByLabel(view.contentEl, "Meets of Jordan Lee");
+  meetsSelect.value = "monthly";
+  meetsSelect.handlers.change();
+  await settle();
+  check("person properties save from the page", metadata.get(personPath).role === "Staff engineer" && metadata.get(personPath).meets === "monthly", JSON.stringify(metadata.get(personPath)));
+  findByLabel(view.contentEl, "New topic for Jordan Lee").value = "Review the API";
+  findParentWithHandler(view.contentEl, "Add")?.handlers.click();
+  await settle();
+  check("a discussion topic lands in the task inbox", fileContents.get("08 Tasks/Tasks.md").includes("## Inbox\n- [ ] Review the API #discuss #p/jordan-lee ➕ 2026-09-09"), fileContents.get("08 Tasks/Tasks.md"));
+  findByLabel(view.contentEl, "Log entry for Jordan Lee").value = "Talked about onboarding";
+  findParentWithHandler(view.contentEl, "Log")?.handlers.click();
+  await settle();
+  check("meeting log entries append to the person note", fileContents.get(personPath).endsWith("- 2026-09-01 Created.\n- 2026-09-09 Talked about onboarding"), fileContents.get(personPath));
+  absentPaths.add("05 People/Jordan Li.md");
+  const personRename = view.openRenameDialog(fakeFiles.find((file) => file.path === personPath));
+  personRename.values.title = "Jordan Li";
+  await personRename.submit();
+  check("renaming a person rewrites #p/ tags and attendee links",
+    fileContents.get(syncPath).includes('"[[Jordan Li]]"') && fileContents.get(syncPath).includes("#p/jordan-li ") && view.activePersonPath === "05 People/Jordan Li.md", fileContents.get(syncPath));
+
+  view.activeScreen = "sprint";
+  view.activeSprintPath = platformSprint;
+  view.render();
+  const goalInput = findByLabel(view.contentEl, "Goal of Platform Sprint 1");
+  goalInput.value = "Ship auth";
+  goalInput.handlers.change();
+  await settle();
+  const endInput = findByLabel(view.contentEl, "End of Platform Sprint 1");
+  endInput.value = "2026-09-27";
+  endInput.handlers.change();
+  await settle();
+  check("sprint details save goal and dates", treeHasClass(view.contentEl, "life-os-sprint-details") && metadata.get(platformSprint).goal === "Ship auth" && metadata.get(platformSprint).end === "2026-09-27");
+
+  view.expandedDocs = new Set([queuesAdr]);
+  view.activeScreen = "docs";
+  view.render();
+  const addDecider = findByLabel(view.contentEl, "Add to Deciders of ADR-0002 Use queues");
+  addDecider.value = "Jordan Li";
+  addDecider.handlers.change();
+  await settle();
+  check("doc property panel writes deciders as links", treeHasClass(view.contentEl, "life-os-doc-panel") && JSON.stringify(metadata.get(queuesAdr).deciders) === JSON.stringify(["[[Jordan Li]]"]), JSON.stringify(metadata.get(queuesAdr)));
+  const propsDialog = view.openPropertiesDialog(fakeFiles.find((file) => file.path === queuesAdr));
+  Object.assign(propsDialog.values, { project: "", status: "accepted" });
+  await propsDialog.submit();
+  check("properties dialog saves several changed keys", metadata.get(queuesAdr).project === "" && metadata.get(queuesAdr).status === "accepted" && JSON.stringify(metadata.get(queuesAdr).deciders) === JSON.stringify(["[[Jordan Li]]"]));
+
+  fakeFiles.push(new TFile("Prompts/07 Meeting Prep.md"), new TFile("Prompts/15 Vault Health Check.md"));
+  metadata.set("Prompts/07 Meeting Prep.md", { type: "prompt", purpose: "Prepare a meeting.", risk: "read-only", writes: "none" });
+  metadata.set("Prompts/15 Vault Health Check.md", { type: "prompt", purpose: "Check the vault.", risk: "edit" });
+  view.activeScreen = "ai";
+  view.render();
+  check("AI screen lists the prompt library", treeHasClass(view.contentEl, "life-os-prompt-card") && treeHasText(view.contentEl, "Meeting Prep") && treeHasText(view.contentEl, "2 prompts"));
 
   if (process.env.LIFE_OS_PREVIEW) {
     // Generated visual-test artifact uses synthetic fixtures only.

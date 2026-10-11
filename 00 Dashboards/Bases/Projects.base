@@ -1,0 +1,54 @@
+# Dev OS: projects as an editable table. Bases syntax is evolving; verify on your Obsidian version.
+filters:
+  and:
+    - type == "project"
+    - '!file.hasTag("example")'
+properties:
+  file.name:
+    displayName: Project
+  note.status:
+    displayName: Status
+  note.priority:
+    displayName: Priority
+  note.due:
+    displayName: Target date
+  note.description:
+    displayName: Description
+views:
+  - type: table
+    name: Open
+    filters:
+      and:
+        - archived != true
+        - status != "done"
+    order:
+      - file.name
+      - status
+      - priority
+      - due
+      - description
+    sort:
+      - property: due
+        direction: ASC
+  - type: table
+    name: All
+    filters:
+      and:
+        - archived != true
+    order:
+      - file.name
+      - status
+      - priority
+      - started
+      - due
+      - description
+  - type: table
+    name: Archived
+    filters:
+      and:
+        - archived == true
+    order:
+      - file.name
+      - status
+      - due
+      - description
