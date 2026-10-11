@@ -4,6 +4,18 @@ Format: Added, Changed, Templates (manual merge notes), Plugins, Breaking. Semve
 
 ## Unreleased
 
+### Dev OS: application 1.3.0 candidate
+Added
+- **Rename, archive, delete** from a ⋯ menu on projects, sprints, meetings, decision records, tech notes, postmortems, releases, and clips.
+  - Rename rewrites `[[links]]` (aliases, headings, paths, properties) and `#project/`, `#sprint/`, `#release/` tags across the vault. A project rename can carry its sprints and releases along.
+  - Archive sets `archived: true` and hides the note, and its tasks, from dashboards, task lists, pickers, and the roadmap. Projects get an Archived filter; Meetings and Docs a Show archived toggle. A project can archive its related notes in one step.
+  - Delete asks for the exact name and moves the note to Obsidian's trash. For a project it can also trash related notes, clear `project` on clips, and remove the project tag from tasks elsewhere.
+- **Project description:** an editable field on the project page, shown on project cards and in the roadmap tooltip, and asked for in New project.
+
+Templates (manual merge)
+- `Templates/Project.md` has a new `description:` property. Add it to existing project notes if you want; the project page writes it on first edit anyway.
+- New optional property `archived: true` on any Dev OS note. Nothing to merge; Dev OS adds and removes it.
+
 ### Dev OS: application 1.2.0 candidate
 Added
 - **Configure screen** (rail and topbar gear) that edits `Meta/Dev OS Config.md` properties:

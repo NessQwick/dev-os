@@ -28,9 +28,9 @@ Notes tagged `example` are seed data; the Setup checklist (`00 Dashboards/Setup.
 | --- | --- | --- |
 | Home | See what needs attention, the active sprint, today's meetings, the clip inbox; quick-add a task | task lines |
 | Today | Standup drafted from tasks (done since last working day, due or in progress, `#blocked`); copy it or write it to the daily note | `## Standup` in the daily note, task lines |
-| Projects | Change status and priority on each card, see progress and overdue counts | project properties |
+| Projects | Change status and priority on each card, see progress, overdue counts, and the description; filter Open, Done, Archived | project properties |
 | Roadmap | Projects as bars from `started` to `due` with progress, sprints underneath, milestones and releases as markers, a today line; 3, 6, or 12 months | nothing (milestones are added on the project page) |
-| Project page | Edit status, priority, target date, repo, stakeholders; tabs for Tasks (add with due, scheduled, sprint, owner, priority, blocked), Meetings (minutes composer and timeline), Docs, Clips | project properties, task lines under `## Tasks`, new meeting notes, `## Notes` in a meeting |
+| Project page | Edit the description, status, priority, target date, repo, stakeholders; rename, archive, or delete from the ⋯ menu; tabs for Tasks (add with due, scheduled, sprint, owner, priority, blocked), Meetings (minutes composer and timeline), Docs, Clips | project properties, task lines under `## Tasks`, new meeting notes, `## Notes` in a meeting; on rename, links and tags across the vault; on delete, the note goes to Obsidian's trash |
 | Sprint | Board with To do, In progress, Done; start, finish, reopen; close the sprint and move open tasks to the next one (created for you) or the backlog | task status (`[ ]`, `[/]`, `[x]`), `#sprint/` tags, sprint status |
 | Meetings | Minutes composer, upcoming and recent meetings, open action items | new meeting notes, task lines |
 | Docs | ADRs, tech notes, postmortems, and releases with filters; status from a dropdown; auto-numbered new ADRs; release notes generated from `#release/` tasks and accepted ADRs, copied or written to the release note | doc properties, new notes, `## Release notes` |

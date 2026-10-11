@@ -161,11 +161,12 @@ const writerStart = source.indexOf("class LifeOSWriter {");
 const writerEnd = source.indexOf("\nclass ", writerStart + 1);
 const writerBlock = writerStart === -1 ? "" : source.slice(writerStart, writerEnd);
 const outsideWriter = writerStart === -1 ? source : source.slice(0, writerStart) + source.slice(writerEnd);
-const writeApis = ["vault.create", "vault.process", "vault.append", "processFrontMatter", "renameFile", "createFolder"];
+const writeApis = ["vault.create", "vault.process", "vault.append", "processFrontMatter", "renameFile", "trashFile", "createFolder"];
 const leakedWrites = writeApis.filter((term) => outsideWriter.includes(term));
 check("vault writes live only in LifeOSWriter", writerBlock && leakedWrites.length === 0, leakedWrites.join(", "));
 check("writer guards task lines against stale content", writerBlock.includes("lines[index] !== task.raw"));
-check("writer never overwrites an existing note", writerBlock.includes("already exists. Nothing was overwritten."));
+check("writer never overwrites an existing note", writerBlock.includes("already exists. Nothing was overwritten.") && writerBlock.includes("already exists. Nothing was renamed."));
+check("deletes go to the trash through the file manager", writerBlock.includes("fileManager.trashFile") && !source.includes("vault.delete") && !source.includes("vault.trash("));
 
 class FakeElement {
   constructor(tag = "div", options = {}) {
@@ -493,7 +494,23 @@ try {
         metadata.set(file.path, frontmatter);
         writes.push(["frontmatter", file.path, frontmatter]);
       },
-      renameFile: async (file, target) => { writes.push(["rename", file.path, target]); },
+      renameFile: async (file, target) => {
+        writes.push(["rename", file.path, target]);
+        const index = fakeFiles.findIndex((item) => item.path === file.path);
+        if (index === -1) return;
+        fakeFiles[index] = new TFile(target);
+        for (const store of [metadata, fileContents, listItems]) {
+          if (store.has(file.path)) { store.set(target, store.get(file.path)); store.delete(file.path); }
+        }
+        absentPaths.delete(target);
+        absentPaths.add(file.path);
+      },
+      trashFile: async (file) => {
+        writes.push(["trash", file.path]);
+        const index = fakeFiles.findIndex((item) => item.path === file.path);
+        if (index !== -1) fakeFiles.splice(index, 1);
+        absentPaths.add(file.path);
+      },
     },
     workspace: {
       getLeavesOfType: () => [],
@@ -1111,6 +1128,92 @@ try {
   await settle();
   view.render();
   check("health check renders a summary", Array.isArray(view.healthReport) && treeHasClass(view.contentEl, "life-os-health-live") && !treeHasText(view.contentEl, "Not run"));
+
+  // Rename, archive, delete, and the project description.
+  const linkSample = 'See [[Billing]], [[Billing|B]], [[Billing#Goals]], ![[04 Projects/Billing]], project: "[[Billing]]", [[Billing 1.0]], [[Billingx]].';
+  check("wikilink rewrite covers aliases, headings, paths, and properties but not longer names",
+    sandbox.replaceWikiLinks(linkSample, "Billing", "Payments") === 'See [[Payments]], [[Payments|B]], [[Payments#Goals]], ![[04 Projects/Payments]], project: "[[Payments]]", [[Billing 1.0]], [[Billingx]].',
+    sandbox.replaceWikiLinks(linkSample, "Billing", "Payments"));
+  check("tag rewrite renames and removes only the exact tag",
+    sandbox.replaceTag("- [ ] x #project/billing #project/billing-2 #project/billing/sub", "project", "billing", "payments") === "- [ ] x #project/payments #project/billing-2 #project/billing/sub" &&
+    sandbox.replaceTag("- [ ] x #project/billing ⏫", "project", "billing", "") === "- [ ] x ⏫");
+  const findByLabel = (element, label) => element.options?.attr?.["aria-label"] === label ? element :
+    element.children.map((child) => findByLabel(child, label)).find(Boolean);
+  const billing = () => fakeFiles.find((file) => file.path === projectPath);
+  view.activeScreen = "project";
+  view.activeProjectPath = projectPath;
+  view.render();
+  check("project page shows the actions menu and a description field", treeHasClass(view.contentEl, "life-os-item-actions") && Boolean(findByLabel(view.contentEl, "Project description")));
+  const descriptionInput = findByLabel(view.contentEl, "Project description");
+  descriptionInput.value = "Bill   customers monthly ";
+  descriptionInput.handlers.change();
+  await settle();
+  check("project description saves to the note's properties", metadata.get(projectPath).description === "Bill customers monthly", JSON.stringify(metadata.get(projectPath)));
+  check("new project notes carry a description", sandbox.buildProjectNote({ title: "X", description: "Line one\nline two", today, quarter: "2026-Q3" }).includes('description: "Line one line two"') || sandbox.buildProjectNote({ title: "X", description: "Line one\nline two", today, quarter: "2026-Q3" }).includes("description: Line one line two"));
+
+  // Archive with related items, then unarchive.
+  const archiver = view.openArchiveDialog(billing());
+  check("archive dialog offers related items", archiver && "related" in archiver.values);
+  await archiver.submit();
+  await view.refreshLiveData();
+  check("archiving hides the project and keeps its files",
+    metadata.get(projectPath).archived === true && metadata.get(releasePath).archived === true && metadata.get(projectPath).status === "active" &&
+    !view.data.projects().some((file) => file.path === projectPath) && view.data.projects({ includeArchived: true }).some((file) => file.path === projectPath) &&
+    !writes.some((write) => write[0] === "trash"));
+  check("archived project tasks leave task lists but stay on the project page",
+    !view.allTasks().some((task) => (task.projects || []).includes("billing")) && view.tasksForProject(billing()).length > 0);
+  view.projectFilter = "archived";
+  view.activeScreen = "projects";
+  view.render();
+  check("Archived filter lists archived projects", treeHasText(view.contentEl, "Billing") && treeHasText(view.contentEl, "Archived"));
+  view.projectFilter = "open";
+  const unarchiver = view.openArchiveDialog(billing());
+  await unarchiver.submit();
+  check("unarchive removes the flag from the project and related notes", !("archived" in metadata.get(projectPath)) && !("archived" in metadata.get(releasePath)));
+
+  // Rename with cascade to sprints and releases; links and tags follow.
+  const meetingPath = "10 Meetings/2026-09-10 Billing sync.md";
+  fakeFiles.push(new TFile(meetingPath));
+  metadata.set(meetingPath, { type: "meeting", date: "2026-09-10" });
+  fileContents.set(meetingPath, '---\nproject: "[[Billing]]"\n---\n## Action items\n- [ ] Follow up #project/billing #sprint/billing-sprint-1');
+  listItems.set(meetingPath, [taskItem(" ", 4)]);
+  for (const target of ["04 Projects/Payments.md", "04 Projects/Sprints/Payments Sprint 1.md", "06 Writing/Releases/Payments 1.0.md"]) absentPaths.add(target);
+  await view.refreshLiveData();
+  view.activeProjectPath = projectPath;
+  const renamer = view.openRenameDialog(billing(), (path) => { view.activeProjectPath = path; });
+  check("rename dialog offers to rename matching sprints and releases", renamer.values.cascade === true && renamer.values.title === "Billing");
+  renamer.values.title = "Payments";
+  await renamer.submit();
+  const renamedProject = "04 Projects/Payments.md";
+  check("rename moves the project, its sprint, and its release",
+    ["04 Projects/Payments.md", "04 Projects/Sprints/Payments Sprint 1.md", "06 Writing/Releases/Payments 1.0.md"].every((target) => fakeFiles.some((file) => file.path === target)) &&
+    view.activeProjectPath === renamedProject, fakeFiles.map((file) => file.path).join(", "));
+  check("rename rewrites links and tags across the vault",
+    fileContents.get(meetingPath).includes('project: "[[Payments]]"') && fileContents.get(meetingPath).includes("#project/payments #sprint/payments-sprint-1") &&
+    fileContents.get(renamedProject).includes("#project/payments #sprint/payments-sprint-1") && !fileContents.get(renamedProject).includes("#project/billing"),
+    fileContents.get(meetingPath));
+  absentPaths.delete("04 Projects/Billing.md");
+  const taken = await view.runWrite(() => view.writer.renameNote(renamedProject, "Billing"), "");
+  check("rename refuses an existing target", !taken);
+  absentPaths.add("04 Projects/Billing.md");
+
+  // Delete: the name must match; related notes and tags are optional.
+  metadata.set("04 Projects/Sprints/Payments Sprint 1.md", { ...metadata.get("04 Projects/Sprints/Payments Sprint 1.md"), project: "[[Payments]]" });
+  metadata.set("06 Writing/Releases/Payments 1.0.md", { ...metadata.get("06 Writing/Releases/Payments 1.0.md"), project: "[[Payments]]" });
+  listItems.set(renamedProject, [1, 2, 3, 4].map((line) => taskItem(fileContents.get(renamedProject).split("\n")[line].charAt(3), line)));
+  await view.refreshLiveData();
+  writes.length = 0;
+  const deleter = view.openDeleteDialog(fakeFiles.find((file) => file.path === renamedProject));
+  deleter.values.confirm = "payments";
+  await deleter.submit();
+  check("delete refuses a name that does not match", !writes.some((write) => write[0] === "trash") && fakeFiles.some((file) => file.path === renamedProject));
+  check("delete offers related notes and tag cleanup", "related" in deleter.values && "tags" in deleter.values);
+  Object.assign(deleter.values, { confirm: "Payments", related: true, tags: true });
+  await deleter.submit();
+  const trashed = writes.filter((write) => write[0] === "trash").map((write) => write[1]);
+  check("delete moves the project and related notes to the trash",
+    ["04 Projects/Payments.md", "04 Projects/Sprints/Payments Sprint 1.md", "06 Writing/Releases/Payments 1.0.md"].every((target) => trashed.includes(target)) && !trashed.includes(meetingPath), trashed.join(", "));
+  check("delete removes the project tag from tasks elsewhere", fileContents.get(meetingPath).endsWith("- [ ] Follow up #sprint/payments-sprint-1"), fileContents.get(meetingPath));
 
   if (process.env.LIFE_OS_PREVIEW) {
     // Generated visual-test artifact uses synthetic fixtures only.

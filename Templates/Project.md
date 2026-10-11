@@ -2,6 +2,7 @@
 type: project
 status: active
 priority: normal
+description: 
 area: 
 repo: 
 quarter: <% tp.date.now("YYYY-[Q]Q") %>
