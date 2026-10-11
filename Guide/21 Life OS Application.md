@@ -4,7 +4,7 @@ Dev OS is the interactive dashboard above the vault (plugin id `life-os-app`, ke
 
 ## Open it
 
-Dev OS opens automatically after Obsidian loads the vault. Use `Ctrl/Cmd+Shift+L`, the compass ribbon icon, or **Dev OS: Open Dev OS home**. `Ctrl/Cmd+Shift+C` opens Capture. Every screen has an **Open Dev OS ...** command, and every note type has a **New ...** command (project, sprint, meeting minutes, decision, tech note, postmortem). If the view is missing after an upgrade, run **Reload app without saving** once.
+Dev OS opens automatically after Obsidian loads the vault. Use `Ctrl/Cmd+Shift+L`, the compass ribbon icon, or **Dev OS: Open Dev OS home**. `Ctrl/Cmd+Shift+C` opens Capture. Every screen has an **Open Dev OS ...** command, and every note type has a **New ...** command (project, sprint, meeting minutes, decision, tech note, postmortem, release, person). If the view is missing after an upgrade, run **Reload app without saving** once.
 
 ## Screens
 
@@ -12,17 +12,19 @@ Dev OS opens automatically after Obsidian loads the vault. Use `Ctrl/Cmd+Shift+L
 | --- | --- | --- | --- |
 | Home | Attention tasks, active sprint, today's meetings, clip inbox count, projects, quick add | tasks, sprints, meetings, clippings | task lines |
 | Today | Standup (done since the last working day, due or in progress, `#blocked`), quick add, attention list; daily check-in when the personal layer is on | tasks, daily note | `## Standup` in today's note, task lines |
-| Sprint | Board for one sprint: To do, In progress, Done; Close sprint moves open tasks | `#sprint/<slug>` tasks, sprint notes | task status and `#sprint/` tags, sprint `status`, a new sprint note, project `current_sprint` |
+| Sprint | Board for one sprint: To do, In progress, Done; Sprint details (project, number, dates, goal); Close sprint moves open tasks | `#sprint/<slug>` tasks, sprint notes | task status and `#sprint/` tags, sprint properties, a new sprint note, project `current_sprint` |
 | Projects | Cards with status and priority selects, progress, overdue | project notes and `#project/<slug>` tasks | project `status`, `priority` |
 | Roadmap | Projects from `started` to `due` with progress, sprints, milestones (◆), releases (▲), today line | project, sprint, and release notes | nothing |
 | Project page | Header, stakeholders, tabs: Overview, Tasks, Meetings, Docs, Clips | project note, its tasks, linked sprints, meetings, docs, clips | project properties, task lines, new meeting notes, meeting `## Notes`, clip `project` |
 | Meetings | Minutes composer, upcoming, today, recent, open action items | `10 Meetings/` | new meeting notes, task lines |
-| Docs | ADRs, tech notes, postmortems, releases with type, status, and project filters; release notes | `06 Writing/`, `06 Writing/Releases/` | doc `status`, new notes, a release note's `## Release notes` section |
+| Docs | ADRs, tech notes, postmortems, releases with type, status, and project filters; a property panel per row; release notes | `06 Writing/`, `06 Writing/Releases/` | doc properties, new notes, a release note's `## Release notes` section |
 | Inbox | Web Clipper triage and template setup | `07 Library/Clippings/`, `Meta/Web Clipper/` | clip `project`, `status`, one move to Tech Notes |
 | Waiting | Delegated tasks by person (age from `➕`), tasks waiting on open tasks (`⛔`), `#blocked` | task index, `05 People/` | task lines |
 | Configure | Config form with change preview; vault health check | `Meta/Dev OS Config.md`, Templater, QuickAdd, Web Clipper templates (read only), all typed notes and tasks | config note properties only |
 | Tasks | Every open task grouped by urgency, with status and due date controls | task index | task lines |
-| People, Library, Brain, AI | Person notes and discussion queue; books and clips; link graph; AI readiness | as before | task lines (People) |
+| People | Person cards with role, cadence, and open, to-discuss, and overdue counts; filters; discussion queue | `05 People/`, task index | person properties, new person notes |
+| Person page | Properties, To discuss (add a topic), open tasks, projects together, meeting log, meetings with 1:1 minutes | person note, `#p/<slug>` tasks, projects, meetings | person properties, a `#discuss` task in `08 Tasks/Tasks.md`, `## Meeting log`, new meeting notes |
+| Library, Brain, AI | Books and clips with book details (personal layer); link graph; AI readiness and the prompt library | as before, `Prompts/` | book properties |
 | Plan, Review | Personal layer: horizons, calendar, effort and habit charts, life areas | periodic notes | nothing |
 
 Plan and Review, plus the daily check-in on Today, appear only when **Show personal modules** is on (Settings, Dev OS, or the View menu).
@@ -42,6 +44,40 @@ Plan and Review, plus the daily check-in on Today, appear only when **Show perso
   - The draft survives refreshes and is kept in plugin data until you save or discard it.
   - Past meetings form a timeline. Expand one to see attendees, decisions (each with an **ADR** button that prefills a decision record), action items with checkboxes, and a box that appends a note to its `## Notes`.
 - **Docs and Clips:** linked documents with status selects and New ADR, tech note, and postmortem buttons; clips assigned to the project, and a picker to assign one from the inbox.
+
+## People and the person page
+
+People shows a card per person note in `05 People` with role, company, meeting cadence (`meets`), and counts of open, to-discuss, and overdue tasks tagged `#p/<slug>`. Filters: All, To discuss, Meets weekly, Archived. **New person** creates a note with the same sections as `Templates/Person.md`.
+
+The person page has:
+- **Header:** the `#p/<slug>` tag, editable role, company or team, email (with a mail link), and meets, plus counts and the ⋯ menu.
+- **To discuss:** open `#discuss #p/<slug>` tasks. The input adds `- [ ] topic #discuss #p/<slug>` under `## Inbox` in `08 Tasks/Tasks.md`.
+- **Open tasks:** other open tasks tagged with the person, with status and due controls.
+- **Projects together:** projects that list the person in `people` or `stakeholders`.
+- **Meeting log:** the last entries of `## Meeting log`; the input appends `- YYYY-MM-DD text`.
+- **Meetings:** minutes that list the person in `attendees`. **Write 1:1 minutes** opens the composer prefilled with kind one-on-one and the person as attendee.
+
+Renaming a person rewrites `[[Name]]` links (attendees, stakeholders, deciders) and `#p/<slug>` tags.
+
+## Properties
+
+Every note type has its properties in the UI. They save when you leave the field, and only changed keys are written:
+- **Person:** role, company, email, meets.
+- **Sprint:** project, number, start, end, goal (Sprint details on the board).
+- **Meeting:** kind, date, time, project, attendees (an expanded meeting card).
+- **ADR:** status, date, project, supersedes, deciders. **Tech note:** status, project, topic, sources. **Postmortem:** status, project, incident date, severity (the slider button in each Docs row).
+- **Release:** version, date, project (an expanded release card).
+- **Book:** status, author, year, rating, started, finished (Book details on Library, personal layer only).
+
+The ⋯ menu also has **Properties**, a dialog with the same fields and one Save. People fields take people notes; lists such as `sources` are comma separated.
+
+## Prompt library
+
+The AI screen lists the notes in `Prompts/` with their purpose, when to use them, what they write, and the `risk` level, filtered by risk. **Copy instruction** copies the line the note's own button sends, for pasting into an agent chat. Dev OS never calls a model itself.
+
+## Bases tables
+
+`00 Dashboards/Bases/` holds Obsidian Bases tables over the same notes: Projects (Open, All, Archived), People, Meetings, Decisions and docs, Releases, and Clip inbox. They filter by `type`, so custom folders from Configure still work, and leave out sample notes. Projects, People, Meetings, Docs, Releases, and Inbox show **Open as table** when the file exists. The Projects and Decisions dashboards embed them. Editing a cell in Bases writes the note's property, the same data Dev OS reads.
 
 ## Rename, archive, delete
 
@@ -202,7 +238,8 @@ Run `node scripts/verify_life_os_app.mjs .` for static contracts and a mock runt
 - the project page task form and minutes composer
 - inbox filtering
 - rename with link and tag rewrites, archive and unarchive, delete to the trash, and the project description
+- the person page, property forms and the properties dialog, sprint details, the doc panel, the prompt library, and the Bases files
 
 `PLAYWRIGHT_MODULE=<path to playwright> node scripts/verify_dashboard_view.mjs` exercises the same flows in Chromium with a synthetic vault at 1440, 900, 620, and 390 px. Neither replaces checking the view inside Obsidian after a reload; see [[23 Native Acceptance]].
 
-The application version is 1.3.0.
+The application version is 1.4.0.

@@ -36,3 +36,8 @@ FROM "04 Projects"
 WHERE type = "project" AND status = "done"
 SORT file.mtime DESC
 ```
+
+## Table (Bases)
+The same projects as an editable table: `00 Dashboards/Bases/Projects.base`. Views: Open, All, Archived. Edits in the table write the note properties.
+
+![[Projects.base]]

@@ -6,7 +6,7 @@
 | **Obsidian Tasks** | `obsidian-tasks-plugin` | Inline tasks, `tasks` query blocks on dashboards, people, projects, and the Bible reading callout | `.obsidian/plugins/obsidian-tasks-plugin/data.json` |
 | **Dataview** (DataviewJS) | `dataview` | Habit dashboard, daily questions widget, wheel of life, projects dashboard (10:47, 18:49) | `.obsidian/plugins/dataview/data.json`, JS enabled |
 | **Kanban** | `obsidian-kanban` | One board per writing type | Boards in `06 Writing/*/… Board.md` |
-| **Bases** (core, Obsidian 1.9+) | built-in | Mike's "on this day" query in the daily note | This vault uses a DataviewJS block for "on this day" so the daily note works on any version; a Bases equivalent is in the guide below |
+| **Bases** (core, Obsidian 1.9+) | built-in | Editable tables in `00 Dashboards/Bases/` (Projects, People, Meetings, Decisions and docs, Releases, Clip inbox), embedded in the Projects and Decisions dashboards and opened from Dev OS with **Open as table**; optionally Mike's "on this day" query | `00 Dashboards/Bases/*.base`. "On this day" stays a DataviewJS block so the daily note works on any version; a Bases equivalent is in the guide below |
 
 ## Added for this vault
 | Plugin | ID | Used for | Guide |

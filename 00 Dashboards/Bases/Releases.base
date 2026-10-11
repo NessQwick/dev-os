@@ -1,0 +1,27 @@
+# Dev OS: releases as a table. Bases syntax is evolving; verify on your Obsidian version.
+filters:
+  and:
+    - type == "release"
+    - '!file.hasTag("example")'
+properties:
+  file.name:
+    displayName: Release
+  note.version:
+    displayName: Version
+  note.status:
+    displayName: Status
+views:
+  - type: table
+    name: Releases
+    filters:
+      and:
+        - archived != true
+    order:
+      - file.name
+      - version
+      - status
+      - date
+      - project
+    sort:
+      - property: date
+        direction: DESC

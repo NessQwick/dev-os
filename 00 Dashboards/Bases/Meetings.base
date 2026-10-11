@@ -1,0 +1,27 @@
+# Dev OS: meeting minutes as a table. Bases syntax is evolving; verify on your Obsidian version.
+filters:
+  and:
+    - type == "meeting"
+    - '!file.hasTag("example")'
+properties:
+  file.name:
+    displayName: Meeting
+  note.kind:
+    displayName: Kind
+  note.attendees:
+    displayName: Attendees
+views:
+  - type: table
+    name: Recent
+    filters:
+      and:
+        - archived != true
+    order:
+      - file.name
+      - date
+      - kind
+      - project
+      - attendees
+    sort:
+      - property: date
+        direction: DESC

@@ -1,0 +1,42 @@
+# Dev OS: decision records, tech notes, and postmortems. Bases syntax is evolving; verify on your Obsidian version.
+filters:
+  and:
+    - or:
+        - type == "adr"
+        - type == "tech-note"
+        - type == "postmortem"
+    - '!file.hasTag("example")'
+properties:
+  file.name:
+    displayName: Doc
+  note.type:
+    displayName: Type
+  note.status:
+    displayName: Status
+views:
+  - type: table
+    name: All docs
+    filters:
+      and:
+        - archived != true
+    order:
+      - file.name
+      - type
+      - status
+      - project
+      - date
+    sort:
+      - property: date
+        direction: DESC
+  - type: table
+    name: Proposed decisions
+    filters:
+      and:
+        - type == "adr"
+        - status == "proposed"
+    order:
+      - file.name
+      - adr_number
+      - project
+      - date
+      - deciders

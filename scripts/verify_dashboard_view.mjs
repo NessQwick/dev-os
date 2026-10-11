@@ -33,7 +33,9 @@ try {
     for(let i=0;i<20;i++){const d=new Date('2026-09-09T12:00:00Z');d.setUTCDate(d.getUTCDate()-i);add(`01 Journal/Daily/${d.toISOString().slice(0,10)}.md`,{dq_focus:4+i%7,habit_walk:i%3!==0,habit_read:i%2===0});}
     add('02 Retreats/2026-Q3 Personal Retreat.md',{wheel_health:7,wheel_work:6,wheel_relationships:8});
     add('08 Tasks/Tasks.md',{},'- [ ] Resolve fixture overdue task 📅 2026-09-08\n- [ ] Pick a focus ⏫');
-    add('05 People/Synthetic person.md',{type:'person'},'- [ ] Discuss fixture #p/synthetic-person #discuss');
+    add('Prompts/07 Meeting Prep.md',{type:'prompt',purpose:'Prepare a meeting from the attendees and open items.',when:'Before a meeting',writes:'none',risk:'read-only'});
+    add('00 Dashboards/Bases/Projects.base');
+    add('05 People/Synthetic person.md',{type:'person',role:'Fixture lead',meets:'weekly'},'- [ ] Discuss fixture #p/synthetic-person #discuss');
     add('07 Library/Book Notes/Synthetic book.md',{type:'book'});
     add('07 Library/Book Notes/Finished book.md',{type:'book',status:'completed'});
     add('07 Library/Book Notes/Sample book.md',{type:'book',status:'reading',tags:['example']});
@@ -232,10 +234,10 @@ try {
   await page.getByRole('button',{name:'Home',exact:true}).click();
   for(const width of [900,620,390]){
     await page.setViewportSize({width,height:900});
-    for (const screen of ['home','today','sprint','projects','meetings','docs','inbox','roadmap','waiting','config','plan','review','focus','people','library','ai','project']) {
-      await page.evaluate(s=>{window.view.activeScreen=s;window.view.activeProjectPath='04 Projects/Synthetic project.md';window.view.render();},screen);
+    for (const screen of ['home','today','sprint','projects','meetings','docs','inbox','roadmap','waiting','config','plan','review','focus','people','library','ai','project','person']) {
+      await page.evaluate(s=>{window.view.activeScreen=s;window.view.activeProjectPath='04 Projects/Synthetic project.md';window.view.activePersonPath='05 People/Synthetic person.md';window.view.render();},screen);
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`${screen} document overflow at ${width}`);
-      if(width===390&&['project','sprint','today','roadmap','config'].includes(screen))await page.screenshot({path:`/tmp/life-os-${screen}-390.png`,fullPage:true});
+      if(width===390&&['project','sprint','today','roadmap','config','person','people'].includes(screen))await page.screenshot({path:`/tmp/life-os-${screen}-390.png`,fullPage:true});
     }
   }
   await page.setViewportSize({width:1440,height:1000});
@@ -272,6 +274,41 @@ try {
   assert.equal(await page.locator('.life-os-project-headline .life-os-eyebrow').textContent(),'#project/fixture-platform');
   await page.getByRole('tab',{name:/^Tasks/}).click();
   assert.ok((await page.locator('.life-os-tab-panel').innerText()).includes('Build the fixture'));
+  // People: person page properties and a discussion topic; sprint details; doc panel; prompts; Bases button.
+  const fm=(p)=>page.evaluate(p=>window.view.getFrontmatter(window.view.app.vault.getAbstractFileByPath(p)),p);
+  await page.evaluate(()=>{window.view.projectFilter='open';window.view.activeScreen='people';window.view.render();});
+  assert.ok((await page.locator('.life-os-person-card').first().innerText()).includes('Fixture lead'));
+  await page.locator('.life-os-person-card .life-os-project-card-open').first().click();
+  assert.equal(await page.locator('.life-os-person-page').count(),1);
+  assert.equal(await page.locator('.life-os-nav-button[aria-current="page"]').innerText(),'People');
+  await page.getByLabel('Role of Synthetic person',{exact:true}).fill('Fixture principal');
+  await page.getByLabel('Role of Synthetic person',{exact:true}).press('Tab');
+  await page.waitForFunction(()=>window.writes.some(w=>w[0]==='frontmatter'&&w[1]==='05 People/Synthetic person.md'));
+  assert.equal((await fm('05 People/Synthetic person.md')).role,'Fixture principal');
+  await page.getByLabel('New topic for Synthetic person',{exact:true}).fill('Fixture topic');
+  await page.getByLabel('New topic for Synthetic person',{exact:true}).press('Enter');
+  await page.waitForFunction(()=>document.querySelector('.life-os-person-page')?.innerText.includes('Fixture topic'));
+  await page.screenshot({path:'/tmp/life-os-person.png',fullPage:true});
+  await page.evaluate(()=>{window.view.activeScreen='sprint';window.view.render();});
+  await page.locator('.life-os-sprint-details summary').click();
+  await page.getByLabel('Goal of Fixture platform Sprint 1',{exact:true}).fill('Fixture goal two');
+  await page.getByLabel('Goal of Fixture platform Sprint 1',{exact:true}).press('Tab');
+  await page.waitForFunction(()=>document.querySelector('.life-os-sprint-live')?.innerText.includes('Goal: Fixture goal two'));
+  assert.equal(await page.locator('.life-os-sprint-details[open]').count(),1);
+  await page.screenshot({path:'/tmp/life-os-sprint-details.png',fullPage:true});
+  await page.evaluate(()=>{window.view.activeScreen='docs';window.view.render();});
+  await page.getByRole('button',{name:'Edit properties of ADR-0001 Fixture decision'}).click();
+  assert.equal(await page.locator('.life-os-doc-panel').count(),1);
+  await page.getByLabel('Add to Deciders of ADR-0001 Fixture decision',{exact:true}).selectOption('Synthetic person');
+  await page.waitForFunction(()=>document.querySelector('.life-os-doc-panel')?.innerText.includes('Synthetic person'));
+  await page.screenshot({path:'/tmp/life-os-doc-panel.png',fullPage:true});
+  await page.evaluate(()=>{window.view.activeScreen='ai';window.view.render();});
+  assert.equal(await page.locator('.life-os-prompt-card').count(),1);
+  assert.ok((await page.locator('.life-os-prompt-card').innerText()).includes('Meeting Prep'));
+  await page.screenshot({path:'/tmp/life-os-prompts.png',fullPage:true});
+  await page.evaluate(()=>{window.view.activeScreen='projects';window.view.render();});
+  await page.getByRole('button',{name:'Open Projects.base in Bases'}).click();
+  assert.equal(await page.evaluate(()=>window.opened.at(-1)?.path),'00 Dashboards/Bases/Projects.base');
   await page.evaluate(()=>{window.view.projectFilter='open';window.view.activeScreen='home';window.view.render();});
   await page.locator('.life-os-display-options summary').click();
   await page.getByRole('button',{name:'Use compact spacing',exact:true}).click();
@@ -306,5 +343,5 @@ try {
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.screenshot({path:'/tmp/life-os-home-light-candidate.png'});
   await page.evaluate(()=>window.view.onClose());
-  console.log('Dashboard browser checks passed: sixteen modules, Configure save and health check, project page tasks and minutes composer, sprint moves, inbox triage, roadmap bars and markers, waiting groups, task editor, release notes, project description, archive, unarchive and rename, Home spacing, preview/full Brain navigation, workload groups, project counts, discussion links, board previews, Library filters and remote-cover rejection, AI branches, per-module controls, narrow widths and light-theme smoke check. Synthetic fixture only.');
+  console.log('Dashboard browser checks passed: sixteen modules, Configure save and health check, project page tasks and minutes composer, sprint moves, inbox triage, roadmap bars and markers, waiting groups, task editor, release notes, project description, archive, unarchive and rename, person page, sprint details, doc property panel, prompt library, Bases button, Home spacing, preview/full Brain navigation, workload groups, project counts, discussion links, board previews, Library filters and remote-cover rejection, AI branches, per-module controls, narrow widths and light-theme smoke check. Synthetic fixture only.');
 }finally{await browser.close();}

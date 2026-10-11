@@ -1,7 +1,7 @@
 {
   "id": "life-os-app",
   "name": "Dev OS",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "minAppVersion": "1.13.1",
   "description": "A local-first workspace for developers and IT project managers: projects, sprints, roadmap, meeting minutes, decisions, releases, and web clippings.",
   "author": "Dev OS",

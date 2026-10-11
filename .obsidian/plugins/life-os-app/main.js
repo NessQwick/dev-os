@@ -158,7 +158,7 @@ function isArchivedData(data = {}) {
   return data.archived === true || String(data.archived ?? "").toLowerCase() === "true";
 }
 
-const TAG_PREFIX_BY_TYPE = { project: "project", sprint: "sprint", release: "release" };
+const TAG_PREFIX_BY_TYPE = { project: "project", sprint: "sprint", release: "release", person: "p" };
 
 const ITEM_LABELS = {
   project: "Project",
@@ -169,6 +169,155 @@ const ITEM_LABELS = {
   postmortem: "Postmortem",
   release: "Release",
   clipping: "Clip",
+  person: "Person",
+  book: "Book",
+};
+
+// Properties the Dev OS view edits per note type. Only keys the templates
+// already define; an empty value is written as "" and never removes a key.
+const PROPERTY_SCHEMAS = {
+  person: [
+    { key: "role", label: "Role", kind: "text" },
+    { key: "company", label: "Company or team", kind: "text" },
+    { key: "email", label: "Email", kind: "email" },
+    { key: "meets", label: "Meets", kind: "select", options: ["", "weekly", "biweekly", "monthly", "quarterly", "ad hoc"] },
+  ],
+  sprint: [
+    { key: "project", label: "Project", kind: "project" },
+    { key: "number", label: "Number", kind: "number" },
+    { key: "start", label: "Start", kind: "date" },
+    { key: "end", label: "End", kind: "date" },
+    { key: "goal", label: "Goal", kind: "text", wide: true },
+  ],
+  meeting: [
+    { key: "kind", label: "Kind", kind: "select", options: ["meeting", "standup", "one-on-one", "review", "retro", "planning"] },
+    { key: "date", label: "Date", kind: "date" },
+    { key: "time", label: "Time", kind: "time" },
+    { key: "project", label: "Project", kind: "project" },
+    { key: "attendees", label: "Attendees", kind: "people", wide: true },
+  ],
+  adr: [
+    { key: "status", label: "Status", kind: "select", options: ["proposed", "accepted", "superseded", "deprecated", "rejected"] },
+    { key: "date", label: "Date", kind: "date" },
+    { key: "project", label: "Project", kind: "project" },
+    { key: "supersedes", label: "Supersedes", kind: "doc" },
+    { key: "deciders", label: "Deciders", kind: "people", wide: true },
+  ],
+  release: [
+    { key: "version", label: "Version", kind: "text" },
+    { key: "status", label: "Status", kind: "select", options: ["planned", "released", "cancelled"] },
+    { key: "date", label: "Date", kind: "date" },
+    { key: "project", label: "Project", kind: "project" },
+  ],
+  "tech-note": [
+    { key: "status", label: "Status", kind: "select", options: ["draft", "published", "archived"] },
+    { key: "project", label: "Project", kind: "project" },
+    { key: "topic", label: "Topic", kind: "text" },
+    { key: "sources", label: "Sources", kind: "list", wide: true },
+  ],
+  postmortem: [
+    { key: "status", label: "Status", kind: "select", options: ["draft", "in-review", "published"] },
+    { key: "project", label: "Project", kind: "project" },
+    { key: "incident_date", label: "Incident date", kind: "date" },
+    { key: "severity", label: "Severity", kind: "select", options: ["sev1", "sev2", "sev3", "sev4"] },
+  ],
+  book: [
+    { key: "status", label: "Status", kind: "select", options: ["to-read", "reading", "completed", "abandoned"] },
+    { key: "author", label: "Author", kind: "text" },
+    { key: "year", label: "Year", kind: "number" },
+    { key: "rating", label: "Rating", kind: "select", options: ["", "1", "2", "3", "4", "5"] },
+    { key: "started", label: "Started", kind: "date" },
+    { key: "finished", label: "Finished", kind: "date" },
+  ],
+};
+
+function splitList(value) {
+  const items = Array.isArray(value) ? value : String(value ?? "").split(",");
+  return items.map((item) => String(item ?? "").trim()).filter(Boolean);
+}
+
+// The value a form shows for a stored property.
+function propertyFormValue(field, raw) {
+  if (field.kind === "project" || field.kind === "doc") return linkTarget(raw);
+  if (field.kind === "people") return linkList(raw);
+  if (field.kind === "list") return splitList(raw).join(", ");
+  if (field.kind === "date") return isoDate(raw);
+  if (raw === null || raw === undefined) return "";
+  return String(raw).trim();
+}
+
+function normalizeFormValue(field, value) {
+  if (field.kind === "people") return [...new Set(splitList(value).map(linkTarget).filter(Boolean))];
+  return propertyFormValue({ ...field, kind: field.kind === "project" || field.kind === "doc" ? "text" : field.kind }, value);
+}
+
+// Turns form values into a frontmatter patch with only the keys that changed.
+function propertyPatch(fields, before = {}, values = {}) {
+  const patch = {};
+  for (const field of fields) {
+    if (!(field.key in values)) continue;
+    const next = normalizeFormValue(field, values[field.key]);
+    if (JSON.stringify(next) === JSON.stringify(propertyFormValue(field, before[field.key]))) continue;
+    if (field.kind === "project" || field.kind === "doc") patch[field.key] = next ? wikiLink(next) : "";
+    else if (field.kind === "people") patch[field.key] = next.map(wikiLink);
+    else if (field.kind === "list") patch[field.key] = splitList(next);
+    else if (field.kind === "number" || (field.key === "rating" && next !== "")) patch[field.key] = next === "" ? "" : Number.isFinite(Number(next)) ? Number(next) : next;
+    else patch[field.key] = next;
+  }
+  return patch;
+}
+
+function buildPersonNote({ title, role = "", company = "", email = "", meets = "", today }) {
+  const slug = slugify(title);
+  return `${frontmatterBlock({ type: "person", role, company, email, meets, tags: ["person"] })}
+Tag: \`#p/${slug}\`
+
+Capture "remember to talk to them about X" as a task with \`#discuss #p/${slug}\` anywhere in the vault. Open this note before the meeting.
+
+## To discuss
+\`\`\`tasks
+not done
+tags include #discuss
+tags include #p/${slug}
+sort by created
+\`\`\`
+
+## Open tasks involving them
+\`\`\`tasks
+not done
+tags include #p/${slug}
+tags do not include #discuss
+sort by due
+\`\`\`
+
+## Projects together
+\`\`\`dataview
+LIST
+FROM "04 Projects"
+WHERE contains(people, this.file.link) AND status != "done"
+\`\`\`
+
+## Notes
+
+
+## Meeting log
+- ${today} Created.
+`;
+}
+
+// The instruction a template button sends to the agent for one prompt note.
+function promptInstruction(title) {
+  return `Read Prompts/${title}.md with vault_read and follow its Prompt section for the note I have open (or the current period if none applies).`;
+}
+
+// Obsidian Bases tables shipped with the vault, opened from the matching screen.
+const BASE_VIEWS = {
+  projects: "00 Dashboards/Bases/Projects.base",
+  people: "00 Dashboards/Bases/People.base",
+  meetings: "00 Dashboards/Bases/Meetings.base",
+  docs: "00 Dashboards/Bases/Decisions and docs.base",
+  releases: "00 Dashboards/Bases/Releases.base",
+  inbox: "00 Dashboards/Bases/Clip inbox.base",
 };
 
 function isoAddDays(iso, days) {
@@ -1541,7 +1690,19 @@ class LifeOSData {
   }
 
   projects(options) { return this.typed("project", this.folders().projects, options); }
-  people() { return this.typed("person", "05 People"); }
+  people(options) { return this.typed("person", "05 People", options); }
+  prompts() { return this.typed("prompt", "Prompts"); }
+
+  // Projects and meetings that link a person in people, stakeholders, or attendees.
+  relatedToPerson(person) {
+    const title = this.title(person);
+    const links = (file, keys) => keys.some((key) => linkList(this.frontmatter(file)[key]).includes(title));
+    return {
+      projects: this.projects().filter((file) => links(file, ["people", "stakeholders"])),
+      meetings: this.meetings().filter((file) => links(file, ["attendees"]))
+        .sort((a, b) => String(this.frontmatter(b).date || "").localeCompare(String(this.frontmatter(a).date || ""))),
+    };
+  }
   sprints(options) { return this.typed("sprint", this.folders().sprints, options); }
   meetings(options) { return this.typed("meeting", this.folders().meetings, options); }
   docs(options) { return this.typed(["adr", "tech-note", "postmortem"], this.folders().docs, options); }
@@ -1607,6 +1768,17 @@ function openCreateForm(plugin, kind, preset = {}, done = () => {}) {
     return true;
   };
   const forms = {
+    person: {
+      title: "New person",
+      fields: [
+        { key: "title", label: "Name", required: true, value: preset.title || "" },
+        { key: "role", label: "Role", value: preset.role || "" },
+        { key: "company", label: "Company or team", value: preset.company || "" },
+        { key: "email", label: "Email", type: "email" },
+        { key: "meets", label: "Meets", type: "select", value: "", options: PROPERTY_SCHEMAS.person.find((field) => field.key === "meets").options.map((value) => ({ value, label: value || "Not set" })) },
+      ],
+      submit: async (values) => finish(await writer.createNote("05 People", values.title, buildPersonNote({ ...values, title: safeFileName(values.title), today })), "Person"),
+    },
     project: {
       title: "New project",
       fields: [
@@ -1725,6 +1897,7 @@ const CREATE_ACTIONS = [
   { kind: "release", icon: "package", label: "Release", description: "Version, date, and generated release notes." },
   { kind: "tech-note", icon: "file-code-2", label: "Tech note", description: "How-to, snippet, or reference." },
   { kind: "postmortem", icon: "siren", label: "Postmortem", description: "Blameless incident review." },
+  { kind: "person", icon: "user-plus", label: "Person", description: "Role, company, cadence, and a #p/ tag." },
 ];
 
 class LifeOSCaptureModal extends Modal {
@@ -1911,6 +2084,8 @@ class LifeOSHomeView extends ItemView {
       this.renderDevHome(shell);
     } else if (this.activeScreen === "project") {
       this.renderProjectPage(shell);
+    } else if (this.activeScreen === "person") {
+      this.renderPersonPage(shell);
     } else {
       this.renderModule(shell);
     }
@@ -2093,7 +2268,7 @@ class LifeOSHomeView extends ItemView {
     });
 
     const nav = rail.createEl("nav", { cls: "life-os-nav" });
-    const current = this.activeScreen === "project" ? "projects" : this.activeScreen;
+    const current = { project: "projects", person: "people" }[this.activeScreen] || this.activeScreen;
     for (const item of NAV_ITEMS) {
       if (item.personal && !this.showPersonal() && current !== item.id) continue;
       const badge = item.id === "inbox" ? this.inboxClips().length : 0;
@@ -2194,6 +2369,7 @@ class LifeOSHomeView extends ItemView {
 
   getScreenTitle() {
     if (this.activeScreen === "project") return "Project";
+    if (this.activeScreen === "person") return "Person";
     return NAV_ITEMS.find((item) => item.id === this.activeScreen)?.label || "Home";
   }
 
@@ -2444,6 +2620,7 @@ class LifeOSHomeView extends ItemView {
       roadmap: () => this.renderRoadmapScreen(parent),
       waiting: () => this.renderWaitingScreen(parent),
       config: () => this.renderConfigScreen(parent),
+      people: () => this.renderPeopleScreen(parent),
     };
     if (screens[this.activeScreen]) {
       screens[this.activeScreen]();
@@ -2452,6 +2629,7 @@ class LifeOSHomeView extends ItemView {
 
     if (this.activeScreen === "ai") {
       this.renderAiLive(parent);
+      this.renderPromptLibrary(parent);
       return;
     }
 
@@ -2469,13 +2647,6 @@ class LifeOSHomeView extends ItemView {
         types: ["project"],
         icon: "folder-kanban",
         empty: "No active project notes yet.",
-      },
-      people: {
-        title: "People directory",
-        description: "Relationship notes, kept local and opened in place.",
-        types: ["person"],
-        icon: "users",
-        empty: "No people notes yet.",
       },
       library: {
         title: "Library shelf",
@@ -2799,6 +2970,7 @@ class LifeOSHomeView extends ItemView {
       setIcon(arrow, "arrow-up-right");
       this.registerDomEvent(button, "click", () => void this.openPath(file.path));
     }
+    if (this.activeScreen === "library") this.renderBookDetails(section, visible.filter((file) => this.getFrontmatter(file).type === "book"));
     if (this.visualEnabled() && this.activeScreen === "people") {
       const discussion = section.createDiv({ cls: "life-os-discussion-queue" });
       discussion.createEl("h3", { text: "Open conversations" });
@@ -3459,6 +3631,10 @@ class LifeOSHomeView extends ItemView {
     this.go("project", { activeProjectPath: path });
   }
 
+  openPerson(path) {
+    this.go("person", { activePersonPath: path });
+  }
+
   allTasks() {
     const snapshot = this.taskSnapshot;
     return snapshot ? [...snapshot.tasks, ...(snapshot.closedTasks || [])] : [];
@@ -3708,6 +3884,7 @@ class LifeOSHomeView extends ItemView {
   async afterCreate(file, kind) {
     await this.refreshLiveData();
     if (kind === "project" && file?.path) this.openProject(file.path);
+    if (kind === "person" && file?.path) this.openPerson(file.path);
   }
 
   // ---------------------------------------------------------------------------
@@ -3782,6 +3959,7 @@ class LifeOSHomeView extends ItemView {
       this.registerDomEvent(button, "click", () => { this.projectFilter = id; this.render(); });
     }
     this.addSmallButton(toolbar, "New project", () => this.openForm("project"), { icon: "plus", primary: true });
+    this.addBaseButton(toolbar, "projects");
     const visible = projects.filter((file) => {
       const status = String(this.getFrontmatter(file).status || "active").toLowerCase();
       if (filter === "archived") return isArchivedData(this.getFrontmatter(file));
@@ -4225,12 +4403,7 @@ class LifeOSHomeView extends ItemView {
     });
     if (!expanded) return;
     const body = card.createDiv({ cls: "life-os-meeting-body" });
-    const attendees = linkList(data.attendees);
-    if (attendees.length) {
-      const row = body.createDiv({ cls: "life-os-people-row" });
-      row.createSpan({ cls: "life-os-field-label", text: "Attendees" });
-      for (const name of attendees) this.addChip(row, name, "is-person");
-    }
+    this.renderPropertyForm(body, meeting);
     const decisions = this.taskSnapshot?.sections?.[meeting.path]?.decisions || [];
     const decisionBox = body.createDiv({ cls: "life-os-composer-list" });
     decisionBox.createEl("h4", { text: "Decisions" });
@@ -4310,6 +4483,11 @@ class LifeOSHomeView extends ItemView {
     const left = daysBetween(this.today(), isoDate(data.end));
     this.renderLiveHeading(section, this.getFileTitle(sprint), `${data.goal ? `Goal: ${data.goal}. ` : ""}${isoDate(data.start) || "?"} to ${isoDate(data.end) || "?"}${left === null ? "" : left >= 0 ? ` · ${left} days left` : ` · ended ${-left} days ago`}. Tag: #sprint/${slug}`, `${progress.done} of ${progress.total} done`);
     this.addMeter(section, progress.ratio, "Sprint progress");
+    const details = section.createEl("details", { cls: "life-os-sprint-details" });
+    details.open = Boolean(this.sprintDetailsOpen);
+    details.createEl("summary", { text: "Sprint details: project, number, dates, goal" });
+    this.registerDomEvent(details, "toggle", () => { this.sprintDetailsOpen = details.open; });
+    this.renderPropertyForm(details, sprint);
     const status = String(data.status || "planned").toLowerCase();
     const controls = section.createDiv({ cls: "life-os-form-actions" });
     if (status === "planned") this.addSmallButton(controls, "Start sprint", () => this.runWrite(() => this.writer.setFrontmatter(sprint.path, { status: "active" }), "Sprint started."), { icon: "play", primary: true });
@@ -4376,6 +4554,7 @@ class LifeOSHomeView extends ItemView {
     const toolbar = section.createDiv({ cls: "life-os-toolbar" });
     this.addSmallButton(toolbar, this.composerOpen ? "Hide composer" : "New meeting minutes", () => { this.composerOpen = !this.composerOpen; this.render(); }, { icon: this.composerOpen ? "x" : "plus", primary: !this.composerOpen });
     this.renderArchivedToggle(toolbar);
+    this.addBaseButton(toolbar, "meetings");
     if (this.composerOpen) this.renderMeetingComposer(section, { key: "global" });
     if (openActions.length) {
       const box = section.createDiv({ cls: "life-os-panel-card" });
@@ -4415,6 +4594,7 @@ class LifeOSHomeView extends ItemView {
     this.addSmallButton(toolbar, "Tech note", () => this.openForm("tech-note"), { icon: "file-code-2" });
     this.addSmallButton(toolbar, "Postmortem", () => this.openForm("postmortem"), { icon: "siren" });
     this.renderArchivedToggle(toolbar);
+    this.addBaseButton(toolbar, "docs");
     const visible = docs.filter((file) => {
       const data = this.getFrontmatter(file);
       return (type === "all" || data.type === type) && (status === "all" || String(data.status || "draft") === status) && (project === "all" || linkTarget(data.project) === project);
@@ -4446,7 +4626,16 @@ class LifeOSHomeView extends ItemView {
       this.addSelect(row, `Status of ${this.getFileTitle(file)}`, statuses.includes(current) ? statuses : [current, ...statuses], current, (value) => this.runWrite(() => this.writer.setFrontmatter(file.path, { status: value }), `Status set to ${value}.`), `life-os-select is-${slugify(current)}`);
       row.createSpan({ text: linkTarget(data.project) || "None", attr: { role: "cell" } });
       row.createSpan({ text: isoDate(data.date || data.created || data.incident_date) || "", attr: { role: "cell" } });
-      this.renderItemActions(row.createDiv({ cls: "life-os-doc-actions", attr: { role: "cell" } }), file);
+      const cell = row.createDiv({ cls: "life-os-doc-actions", attr: { role: "cell" } });
+      const expanded = (this.expandedDocs ||= new Set()).has(file.path);
+      const toggle = this.addSmallButton(cell, "", () => {
+        if (expanded) this.expandedDocs.delete(file.path);
+        else this.expandedDocs.add(file.path);
+        this.render();
+      }, { icon: expanded ? "chevron-up" : "sliders-horizontal", title: `${expanded ? "Hide" : "Edit"} properties of ${this.getFileTitle(file)}` });
+      toggle.setAttribute("aria-expanded", String(expanded));
+      this.renderItemActions(cell, file);
+      if (expanded) this.renderPropertyForm(table.createDiv({ cls: "life-os-doc-panel", attr: { role: "row" } }), file);
     }
   }
 
@@ -4465,6 +4654,8 @@ class LifeOSHomeView extends ItemView {
     const clips = this.inboxClips();
     const all = this.data.clippings();
     this.renderLiveHeading(section, "Clipped inbox", `Pages saved by Obsidian Web Clipper into ${this.data.folders().clippings}. Assign each one to a project, keep it as a tech note, or archive it.`, `${clips.length} waiting · ${all.length - clips.length} triaged`);
+    const inboxTools = section.createDiv({ cls: "life-os-toolbar" });
+    if (!this.addBaseButton(inboxTools, "inbox")) inboxTools.remove?.();
     if (!clips.length) section.createDiv({ cls: "life-os-live-empty", text: "Inbox zero. New clips with status: inbox appear here." });
     else this.renderClipList(section, clips);
     this.renderClipperSetup(parent);
@@ -4617,6 +4808,322 @@ class LifeOSHomeView extends ItemView {
   }
 
   // ---------------------------------------------------------------------------
+  // Property forms: one editor for the properties each note type carries
+
+  propertyFields(file) {
+    return PROPERTY_SCHEMAS[String(this.getFrontmatter(file).type || "")] || [];
+  }
+
+  propertyOptions(field, file, current) {
+    let options = field.options || [];
+    if (field.kind === "project") options = ["", ...this.data.projects({ includeArchived: true }).map((item) => this.getFileTitle(item))];
+    if (field.kind === "doc") options = ["", ...this.data.docs({ includeArchived: true }).filter((item) => item.path !== file.path && this.getFrontmatter(item).type === "adr").map((item) => this.getFileTitle(item))];
+    if (current && !options.includes(current)) options = [...options, current];
+    return options.map((value) => ({ value, label: value || (field.kind === "select" ? "Not set" : "None") }));
+  }
+
+  // Inline fields that save on change, one property per write.
+  renderPropertyForm(parent, file, { only = null } = {}) {
+    const data = this.getFrontmatter(file);
+    const title = this.getFileTitle(file);
+    const fields = this.propertyFields(file).filter((field) => !only || only.includes(field.key));
+    const form = parent.createDiv({ cls: "life-os-property-form" });
+    const save = (field, value) => {
+      const patch = propertyPatch([field], data, { [field.key]: value });
+      if (!Object.keys(patch).length) return false;
+      return this.runWrite(() => this.writer.setFrontmatter(file.path, patch), `${field.label} saved.`);
+    };
+    for (const field of fields) {
+      const current = propertyFormValue(field, data[field.key]);
+      const wrap = form.createEl(field.kind === "people" ? "div" : "label", { cls: `life-os-field${field.wide ? " is-wide" : ""}` });
+      wrap.createSpan({ cls: "life-os-field-label", text: field.label });
+      const label = `${field.label} of ${title}`;
+      if (field.kind === "people") {
+        const row = wrap.createDiv({ cls: "life-os-property-people" });
+        for (const name of current) {
+          const chip = row.createSpan({ cls: "life-os-chip is-person" });
+          chip.createSpan({ text: name });
+          const remove = chip.createEl("button", { cls: "life-os-chip-remove", text: "×", attr: { "aria-label": `Remove ${name} from ${field.label.toLowerCase()}` } });
+          remove.type = "button";
+          this.registerDomEvent(remove, "click", () => void save(field, current.filter((item) => item !== name)));
+        }
+        const candidates = this.data.people().map((person) => this.getFileTitle(person)).filter((name) => !current.includes(name));
+        if (candidates.length) {
+          this.addSelect(row, `Add to ${label}`, [{ value: "", label: "+ Add person" }, ...candidates], "", (value) => (value ? save(field, [...current, value]) : null));
+        }
+        if (!current.length && !candidates.length) row.createSpan({ cls: "life-os-field-hint", text: "No people notes yet." });
+      } else if (["select", "project", "doc"].includes(field.kind)) {
+        this.addSelect(wrap, label, this.propertyOptions(field, file, current), current, (value) => save(field, value));
+      } else {
+        const type = { email: "email", date: "date", time: "time", number: "number" }[field.kind] || "text";
+        const input = wrap.createEl("input", { cls: "life-os-input", attr: { type, "aria-label": label, placeholder: field.kind === "list" ? "Comma separated" : "" } });
+        input.value = current;
+        this.registerDomEvent(input, "change", () => void save(field, input.value));
+      }
+    }
+    return form;
+  }
+
+  // The same fields in a dialog with one Save.
+  openPropertiesDialog(file) {
+    const data = this.getFrontmatter(file);
+    const fields = this.propertyFields(file);
+    const modal = new LifeOSFormModal(this.app, {
+      title: `Properties of ${this.getFileTitle(file)}`,
+      description: "Only changed properties are written. People and lists are comma separated.",
+      fields: fields.map((field) => {
+        const current = propertyFormValue(field, data[field.key]);
+        const value = Array.isArray(current) ? current.join(", ") : current;
+        if (["select", "project", "doc"].includes(field.kind)) return { key: field.key, label: field.label, type: "select", value, options: this.propertyOptions(field, file, value) };
+        return { key: field.key, label: field.label, type: { email: "email", date: "date", time: "time", number: "number" }[field.kind] || "text", value, wide: field.wide };
+      }),
+      submitLabel: "Save",
+      onSubmit: async (values) => {
+        const patch = propertyPatch(fields, data, values);
+        if (Object.keys(patch).length) await this.writer.setFrontmatter(file.path, patch);
+        new Notice(Object.keys(patch).length ? "Properties saved." : "No changes.");
+        await this.refreshLiveData();
+        return true;
+      },
+    });
+    modal.open();
+    return modal;
+  }
+
+  addBaseButton(parent, key) {
+    const path = BASE_VIEWS[key];
+    if (!path || !(this.app.vault.getAbstractFileByPath(path) instanceof TFile)) return null;
+    return this.addSmallButton(parent, "Open as table", () => this.openPath(path), { icon: "table", title: `Open ${path.split("/").pop()} in Bases` });
+  }
+
+  // ---------------------------------------------------------------------------
+  // People
+
+  tasksForPerson(file) {
+    const slug = slugify(this.getFileTitle(file));
+    return this.tasksFor(file).filter((task) => task.path === file.path || (task.owners || []).includes(slug));
+  }
+
+  renderPeopleScreen(parent) {
+    const people = this.data.people({ includeArchived: this.peopleFilter === "archived" });
+    const section = parent.createEl("section", { cls: "life-os-collection-live" });
+    this.renderLiveHeading(section, "People", "Teammates and stakeholders. Role, company, and cadence change here; open a card for the person page.", `${people.length} ${people.length === 1 ? "person" : "people"}`);
+    const toolbar = section.createDiv({ cls: "life-os-toolbar" });
+    const filter = this.peopleFilter || "all";
+    const stats = new Map(people.map((file) => {
+      const tasks = this.tasksForPerson(file).filter((task) => !task.closed);
+      return [file.path, { open: tasks.length, discuss: tasks.filter((task) => task.discuss).length, overdue: tasks.filter((task) => task.overdue).length }];
+    }));
+    for (const [id, label] of [["all", "All"], ["discuss", "To discuss"], ["weekly", "Meets weekly"], ["archived", "Archived"]]) {
+      const button = toolbar.createEl("button", { cls: "life-os-filter", text: label, attr: { "aria-pressed": String(filter === id) } });
+      button.type = "button";
+      this.registerDomEvent(button, "click", () => { this.peopleFilter = id; this.render(); });
+    }
+    this.addSmallButton(toolbar, "New person", () => this.openForm("person"), { icon: "user-plus", primary: true });
+    this.addBaseButton(toolbar, "people");
+    const visible = people.filter((file) => {
+      const data = this.getFrontmatter(file);
+      if (filter === "archived") return isArchivedData(data);
+      if (filter === "discuss") return stats.get(file.path).discuss > 0;
+      if (filter === "weekly") return String(data.meets || "").toLowerCase() === "weekly";
+      return true;
+    });
+    if (!visible.length) {
+      section.createDiv({ cls: "life-os-live-empty", text: people.length ? "Nobody matches this filter." : "No people notes yet. Add a teammate or stakeholder." });
+    } else {
+      const grid = section.createDiv({ cls: "life-os-project-grid" });
+      for (const file of visible) {
+        const data = this.getFrontmatter(file);
+        const count = stats.get(file.path);
+        const card = grid.createDiv({ cls: "life-os-project-card life-os-person-card" });
+        const open = card.createEl("button", { cls: "life-os-project-card-open" });
+        open.type = "button";
+        setIcon(open.createSpan({ cls: "life-os-record-icon" }), "user-round");
+        const copy = open.createDiv();
+        copy.createEl("strong", { text: this.getFileTitle(file) });
+        copy.createSpan({ text: [data.role, data.company].map((value) => String(value || "").trim()).filter(Boolean).join(" · ") || "Role not set" });
+        copy.createSpan({ cls: "life-os-record-metrics", text: !this.taskSnapshot ? "Loading tasks" : `${count.open} open · ${count.discuss} to discuss${count.overdue ? ` · ${count.overdue} overdue` : ""}` });
+        this.registerDomEvent(open, "click", () => this.openPerson(file.path));
+        const controls = card.createDiv({ cls: "life-os-project-controls" });
+        if (data.meets) this.addChip(controls, `Meets ${data.meets}`);
+        if (isArchivedData(data)) this.addChip(controls, "Archived", "is-archived");
+        this.renderItemActions(controls, file);
+      }
+    }
+    const entries = visible.flatMap((file) => this.tasksForPerson(file).filter((task) => task.discuss && !task.closed).map((task) => ({ file, task })));
+    const discussion = section.createDiv({ cls: "life-os-discussion-queue" });
+    discussion.createEl("h3", { text: "Open conversations" });
+    discussion.createEl("p", { text: this.taskSnapshot && !this.taskSnapshot.error ? `${entries.length} open #discuss ${entries.length === 1 ? "item" : "items"}. Explicit person tags only.` : "Task index unavailable." });
+    for (const { file, task } of entries.slice(0, this.itemLimit)) {
+      const button = discussion.createEl("button", { text: `${this.getFileTitle(file)} · ${task.display || task.text}` });
+      button.type = "button";
+      this.registerDomEvent(button, "click", () => void this.openPath(task.path, task.line));
+    }
+  }
+
+  renderPersonPage(shell) {
+    const file = this.app.vault.getAbstractFileByPath(this.activePersonPath || "");
+    if (!(file instanceof TFile)) {
+      this.activeScreen = "people";
+      this.render();
+      return;
+    }
+    const data = this.getFrontmatter(file);
+    const title = this.getFileTitle(file);
+    const slug = slugify(title);
+    const tasks = this.tasksForPerson(file);
+    const open = tasks.filter((task) => !task.closed);
+    const discuss = open.filter((task) => task.discuss);
+    const related = this.data.relatedToPerson(file);
+    const page = shell.createDiv({ cls: "life-os-project-page life-os-person-page" });
+
+    const crumbs = page.createDiv({ cls: "life-os-breadcrumb" });
+    this.addSmallButton(crumbs, "People", () => this.go("people"), { icon: "arrow-left" });
+    crumbs.createSpan({ text: "/" });
+    crumbs.createSpan({ text: title });
+
+    const header = page.createEl("header", { cls: "life-os-project-header" });
+    const headline = header.createDiv({ cls: "life-os-project-headline" });
+    headline.createSpan({ cls: "life-os-eyebrow", text: `#p/${slug}` });
+    headline.createEl("h1", { text: title });
+    if (isArchivedData(data)) {
+      const banner = headline.createDiv({ cls: "life-os-archived-banner" });
+      this.addChip(banner, "Archived", "is-archived");
+      banner.createSpan({ text: "Hidden from People and pickers." });
+      this.addSmallButton(banner, "Unarchive", () => this.openArchiveDialog(file), { icon: "archive-restore" });
+    }
+    this.renderPropertyForm(header, file);
+    const stats = header.createDiv({ cls: "life-os-project-stats" });
+    for (const [value, label] of [
+      [String(discuss.length), "to discuss"],
+      [String(open.length), "open tasks"],
+      [String(open.filter((task) => task.overdue).length), "overdue"],
+      [String(related.projects.length), "projects together"],
+    ]) {
+      const stat = stats.createDiv({ cls: "life-os-project-stat" });
+      stat.createEl("strong", { text: value });
+      stat.createSpan({ text: label });
+    }
+    const links = header.createDiv({ cls: "life-os-form-actions" });
+    const email = String(data.email || "").trim();
+    if (/^[^\s@]+@[^\s@]+$/.test(email)) links.createEl("a", { cls: "life-os-external", text: `Email ${email}`, attr: { href: `mailto:${email}` } });
+    this.addSmallButton(links, "Open note", () => this.openPath(file.path), { icon: "file-text" });
+    this.renderItemActions(links, file, { onRenamed: (path) => this.openPerson(path), onDeleted: () => this.go("people") });
+
+    const grid = page.createDiv({ cls: "life-os-overview-grid" });
+    const talk = grid.createEl("section", { cls: "life-os-panel-card" });
+    talk.createEl("h3", { text: "To discuss" });
+    if (!discuss.length) talk.createEl("p", { text: "Nothing queued. Add a topic for your next conversation." });
+    else this.renderTaskList(talk, discuss, { context: true });
+    const add = talk.createDiv({ cls: "life-os-form-row" });
+    const topic = add.createEl("input", { cls: "life-os-input is-grow", attr: { type: "text", placeholder: `Talk to ${title} about...`, "aria-label": `New topic for ${title}` } });
+    const addTopic = async () => {
+      const line = buildTaskLine({ text: topic.value, owner: slug, created: this.today() });
+      if (!line) return;
+      const ok = await this.runWrite(() => this.writer.appendUnderHeading("08 Tasks/Tasks.md", "## Inbox", line.replace(` #p/${slug}`, ` #discuss #p/${slug}`)), "Topic added.");
+      if (ok) topic.value = "";
+    };
+    this.addSmallButton(add, "Add", addTopic, { icon: "plus", primary: true });
+    this.registerDomEvent(topic, "keydown", (event) => { if (event.key === "Enter") { event.preventDefault?.(); void addTopic(); } });
+
+    const work = grid.createEl("section", { cls: "life-os-panel-card" });
+    work.createEl("h3", { text: "Open tasks" });
+    const others = open.filter((task) => !task.discuss);
+    if (!others.length) work.createEl("p", { text: `No open tasks tagged #p/${slug}.` });
+    else this.renderTaskList(work, others.slice(0, this.itemLimit * 2), { context: true, statusControl: true, dueControl: true });
+
+    const projects = grid.createEl("section", { cls: "life-os-panel-card" });
+    projects.createEl("h3", { text: "Projects together" });
+    if (!related.projects.length) projects.createEl("p", { text: "Not listed in any project's people or stakeholders." });
+    for (const project of related.projects) {
+      const button = projects.createEl("button", { cls: "life-os-link-row", text: this.getFileTitle(project) });
+      button.type = "button";
+      this.registerDomEvent(button, "click", () => this.openProject(project.path));
+    }
+
+    const log = grid.createEl("section", { cls: "life-os-panel-card" });
+    log.createEl("h3", { text: "Meeting log" });
+    const lines = log.createEl("ul", { cls: "life-os-person-log" });
+    void this.app.vault.cachedRead(file).then((text) => {
+      const items = extractSection(text, "## Meeting log").filter(Boolean).slice(-6).reverse();
+      if (!items.length) lines.createEl("li", { text: "No entries yet." });
+      for (const item of items) lines.createEl("li", { text: item });
+    }).catch(() => lines.createEl("li", { text: "Could not read the note." }));
+    const entry = log.createDiv({ cls: "life-os-form-row" });
+    const note = entry.createEl("input", { cls: "life-os-input is-grow", attr: { type: "text", placeholder: "What you talked about", "aria-label": `Log entry for ${title}` } });
+    const addEntry = async () => {
+      const text = String(note.value || "").replace(/\s+/g, " ").trim();
+      if (!text) return;
+      const ok = await this.runWrite(() => this.writer.appendUnderHeading(file.path, "## Meeting log", `- ${this.today()} ${text}`), "Log entry added.");
+      if (ok) note.value = "";
+    };
+    this.addSmallButton(entry, "Log", addEntry, { icon: "plus" });
+    this.registerDomEvent(note, "keydown", (event) => { if (event.key === "Enter") { event.preventDefault?.(); void addEntry(); } });
+
+    const meetings = page.createEl("section", { cls: "life-os-person-meetings" });
+    const head = meetings.createDiv({ cls: "life-os-toolbar" });
+    head.createEl("h3", { text: `Meetings · ${related.meetings.length}` });
+    const key = `person:${file.path}`;
+    this.addSmallButton(head, this.composerOpen ? "Hide composer" : "Write 1:1 minutes", () => {
+      const draft = this.meetingDraft(key);
+      if (!draft.title && !draft.attendees.length) Object.assign(draft, { title: `1:1 ${title}`, kind: "one-on-one", attendees: [title] });
+      this.composerOpen = !this.composerOpen;
+      this.render();
+    }, { icon: this.composerOpen ? "x" : "plus", primary: !this.composerOpen });
+    if (this.composerOpen) this.renderMeetingComposer(meetings, { key });
+    if (!related.meetings.length) meetings.createDiv({ cls: "life-os-live-empty", text: `No meeting minutes list ${title} as an attendee.` });
+    else {
+      const timeline = meetings.createDiv({ cls: "life-os-timeline" });
+      for (const meeting of related.meetings.slice(0, this.itemLimit * 2)) this.renderMeetingCard(timeline, meeting);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Prompt library and book details
+
+  renderPromptLibrary(parent) {
+    const prompts = this.data.prompts();
+    const section = parent.createEl("section", { cls: "life-os-prompt-library" });
+    this.renderLiveHeading(section, "Prompt library", "Recurring jobs for an agent, one note each in Prompts. Copy the instruction into your agent chat; Dev OS itself never calls a model.", `${prompts.length} ${prompts.length === 1 ? "prompt" : "prompts"}`);
+    if (!prompts.length) { section.createDiv({ cls: "life-os-live-empty", text: "No notes with type: prompt in Prompts." }); return; }
+    const risks = [...new Set(prompts.map((file) => String(this.getFrontmatter(file).risk || "unknown")))].sort();
+    const filter = risks.includes(this.promptRisk) ? this.promptRisk : "all";
+    const toolbar = section.createDiv({ cls: "life-os-toolbar" });
+    this.addSelect(toolbar, "Prompt risk", [{ value: "all", label: "Any risk" }, ...risks], filter, (value) => { this.promptRisk = value; this.render(); });
+    const grid = section.createDiv({ cls: "life-os-prompt-grid" });
+    for (const file of prompts.filter((item) => filter === "all" || String(this.getFrontmatter(item).risk || "unknown") === filter)) {
+      const data = this.getFrontmatter(file);
+      const title = this.getFileTitle(file);
+      const card = grid.createDiv({ cls: "life-os-prompt-card" });
+      const head = card.createDiv({ cls: "life-os-prompt-head" });
+      head.createEl("strong", { text: title.replace(/^\d+\s+/, "") });
+      this.addChip(head, String(data.risk || "unknown"), `is-risk-${slugify(data.risk || "unknown")}`);
+      if (data.purpose) card.createEl("p", { text: String(data.purpose) });
+      if (data.when) card.createEl("small", { text: `When: ${data.when}` });
+      if (data.writes) card.createEl("small", { text: `Writes: ${data.writes}` });
+      const actions = card.createDiv({ cls: "life-os-form-actions" });
+      this.addSmallButton(actions, "Copy instruction", async () => {
+        try {
+          await globalThis.navigator?.clipboard?.writeText(promptInstruction(title));
+          new Notice("Instruction copied. Paste it into your agent chat.");
+        } catch (error) {
+          new Notice("Clipboard unavailable.");
+        }
+      }, { icon: "copy", primary: true });
+      this.addSmallButton(actions, "Open note", () => this.openPath(file.path), { icon: "file-text" });
+    }
+  }
+
+  renderBookDetails(parent, books) {
+    if (!books.length || !this.showPersonal()) return;
+    const box = parent.createDiv({ cls: "life-os-panel-card life-os-book-details" });
+    box.createEl("h3", { text: "Book details" });
+    const current = books.find((file) => file.path === this.activeBookPath) || books[0];
+    this.addSelect(box, "Book", books.map((file) => ({ value: file.path, label: this.getFileTitle(file) })), current.path, (value) => { this.activeBookPath = value; this.render(); });
+    this.renderPropertyForm(box, current);
+  }
+
+  // ---------------------------------------------------------------------------
   // Item actions: rename, archive, delete
 
   renderArchivedToggle(parent) {
@@ -4641,6 +5148,7 @@ class LifeOSHomeView extends ItemView {
     menu.createEl("summary", { cls: "life-os-item-actions-toggle", text: "⋯", attr: { "aria-label": `Actions for ${title}`, title: "Rename, archive, or delete" } });
     const list = menu.createDiv({ cls: "life-os-item-actions-menu" });
     const close = () => { menu.open = false; };
+    if (this.propertyFields(file).length) this.addSmallButton(list, "Properties", () => { close(); return this.openPropertiesDialog(file); }, { icon: "sliders-horizontal" });
     this.addSmallButton(list, "Rename", () => { close(); return this.openRenameDialog(file, onRenamed); }, { icon: "pencil-line" });
     if (this.itemKind(file) !== "clipping") {
       this.addSmallButton(list, archived ? "Unarchive" : "Archive", () => { close(); return this.openArchiveDialog(file); }, { icon: archived ? "archive-restore" : "archive" });
@@ -4709,6 +5217,7 @@ class LifeOSHomeView extends ItemView {
           if (this.itemKind(rename.file) === "clipping" && String(data.title || "") === rename.oldTitle) await this.writer.setFrontmatter(target, { title: rename.newTitle });
           if (this.activeSprintPath === oldPath) this.activeSprintPath = target;
           if (this.activeProjectPath === oldPath) this.activeProjectPath = target;
+          if (this.activePersonPath === oldPath) this.activePersonPath = target;
         }
         const updated = await this.rewriteReferences(renames.map((rename) => ({ ...rename, oldSlug: slugify(rename.oldTitle), newSlug: slugify(rename.newTitle) })));
         new Notice(`Renamed to ${newTitle}. Updated ${updated} ${updated === 1 ? "note" : "notes"}.`);
@@ -4767,7 +5276,7 @@ class LifeOSHomeView extends ItemView {
     const related = kind === "project" ? this.data.relatedItems(file) : null;
     const notes = related ? [...related.sprints, ...related.meetings, ...related.docs, ...related.releases] : [];
     const tagged = (paths) => (prefix ? [...this.allTasks(), ...(this.taskSnapshot?.archivedTasks || [])] : [])
-      .filter((task) => !paths.has(task.path) && (task[{ project: "projects", sprint: "sprints", release: "releases" }[kind]] || []).includes(slug));
+      .filter((task) => !paths.has(task.path) && (task[{ project: "projects", sprint: "sprints", release: "releases", person: "owners" }[kind]] || []).includes(slug));
     const fields = [{ key: "confirm", label: `Type "${title}" to confirm`, required: true, wide: true, value: "" }];
     if (notes.length) fields.push({ key: "related", label: `Also move ${notes.length} related ${notes.length === 1 ? "note" : "notes"} to the trash (sprints, meetings, docs, releases)`, type: "checkbox", value: false });
     if (related?.clips.length) fields.push({ key: "clips", label: `Clear the project on ${related.clips.length} ${related.clips.length === 1 ? "clip" : "clips"}`, type: "checkbox", value: true });
@@ -4793,6 +5302,7 @@ class LifeOSHomeView extends ItemView {
         const left = values.tags ? removed.stale : tagged(paths).length;
         new Notice(`Deleted ${trash.length} ${trash.length === 1 ? "note" : "notes"}.${left ? ` ${left} ${left === 1 ? "task still carries" : "tasks still carry"} #${prefix}/${slug}.` : ""}`);
         if (paths.has(this.activeSprintPath)) this.activeSprintPath = null;
+        if (paths.has(this.activePersonPath) && this.activeScreen === "person") { this.activePersonPath = null; this.activeScreen = "people"; }
         if (paths.has(this.activeProjectPath) && this.activeScreen === "project") { this.activeProjectPath = null; this.activeScreen = "projects"; }
         await this.refreshLiveData();
         onDeleted?.();
@@ -5117,6 +5627,7 @@ class LifeOSHomeView extends ItemView {
     copy.createEl("h2", { text: "Releases" });
     copy.createEl("p", { text: "Tag tasks #release/<release-note-slug>. Notes group done tasks by #fix, #change, #security, #remove (else Added) and add accepted ADRs since the previous release." });
     this.addSmallButton(head, "New release", () => this.openForm("release"), { icon: "package", primary: true });
+    this.addBaseButton(head, "releases");
     if (!releases.length) { section.createDiv({ cls: "life-os-live-empty", text: "No release notes yet." }); return; }
     for (const file of releases) {
       const model = this.releaseModel(file);
@@ -5133,6 +5644,7 @@ class LifeOSHomeView extends ItemView {
       if (!expanded) continue;
       const body = card.createDiv({ cls: "life-os-meeting-body" });
       this.addMeter(body, model.tasks.length ? model.done.length / model.tasks.length : 0, `${this.getFileTitle(file)} progress`);
+      this.renderPropertyForm(body, file, { only: ["version", "date", "project"] });
       body.createEl("pre", { cls: "life-os-release-preview", text: model.notes });
       const actions = body.createDiv({ cls: "life-os-form-actions" });
       this.addSmallButton(actions, "Copy", async () => {
@@ -6035,9 +6547,9 @@ module.exports = class LifeOSPlugin extends Plugin {
 
   async afterCreate(file) {
     for (const view of this.homeViews()) await view.refreshLiveData();
-    if (file instanceof TFile && String(this.data.frontmatter(file).type) === "project") {
-      await this.activateView("project", { activeProjectPath: file.path });
-    }
+    const type = file instanceof TFile ? String(this.data.frontmatter(file).type) : "";
+    if (type === "project") await this.activateView("project", { activeProjectPath: file.path });
+    if (type === "person") await this.activateView("person", { activePersonPath: file.path });
   }
 
   // Adds one task line to the inbox or a project note. Returns true on success.

@@ -1,0 +1,29 @@
+# Dev OS: people as an editable table. Bases syntax is evolving; verify on your Obsidian version.
+filters:
+  and:
+    - type == "person"
+    - '!file.hasTag("example")'
+properties:
+  file.name:
+    displayName: Person
+  note.role:
+    displayName: Role
+  note.company:
+    displayName: Company or team
+  note.meets:
+    displayName: Meets
+views:
+  - type: table
+    name: People
+    filters:
+      and:
+        - archived != true
+    order:
+      - file.name
+      - role
+      - company
+      - email
+      - meets
+    sort:
+      - property: file.name
+        direction: ASC
