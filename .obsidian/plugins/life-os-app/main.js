@@ -182,6 +182,7 @@ const PROPERTY_SCHEMAS = {
     { key: "company", label: "Company or team", kind: "text", suggest: true },
     { key: "email", label: "Email", kind: "email" },
     { key: "meets", label: "Meets", kind: "select", options: ["", "weekly", "biweekly", "monthly", "quarterly", "ad hoc"] },
+    { key: "supervisor", label: "Supervisor", kind: "supervisor" },
   ],
   sprint: [
     { key: "project", label: "Project", kind: "project" },
@@ -239,7 +240,7 @@ function splitList(value) {
 
 // The value a form shows for a stored property.
 function propertyFormValue(field, raw) {
-  if (field.kind === "project" || field.kind === "doc") return linkTarget(raw);
+  if (field.kind === "project" || field.kind === "doc" || field.kind === "supervisor") return linkTarget(raw);
   if (field.kind === "people") return linkList(raw);
   if (field.kind === "list") return splitList(raw).join(", ");
   if (field.kind === "date") return isoDate(raw);
@@ -249,7 +250,7 @@ function propertyFormValue(field, raw) {
 
 function normalizeFormValue(field, value) {
   if (field.kind === "people") return [...new Set(splitList(value).map(linkTarget).filter(Boolean))];
-  return propertyFormValue({ ...field, kind: field.kind === "project" || field.kind === "doc" ? "text" : field.kind }, value);
+  return propertyFormValue({ ...field, kind: ["project", "doc", "supervisor"].includes(field.kind) ? "text" : field.kind }, value);
 }
 
 // Turns form values into a frontmatter patch with only the keys that changed.
@@ -259,7 +260,7 @@ function propertyPatch(fields, before = {}, values = {}) {
     if (!(field.key in values)) continue;
     const next = normalizeFormValue(field, values[field.key]);
     if (JSON.stringify(next) === JSON.stringify(propertyFormValue(field, before[field.key]))) continue;
-    if (field.kind === "project" || field.kind === "doc") patch[field.key] = next ? wikiLink(next) : "";
+    if (["project", "doc", "supervisor"].includes(field.kind)) patch[field.key] = next ? wikiLink(next) : "";
     else if (field.kind === "people") patch[field.key] = next.map(wikiLink);
     else if (field.kind === "list") patch[field.key] = splitList(next);
     else if (field.kind === "number" || (field.key === "rating" && next !== "")) patch[field.key] = next === "" ? "" : Number.isFinite(Number(next)) ? Number(next) : next;
@@ -268,9 +269,9 @@ function propertyPatch(fields, before = {}, values = {}) {
   return patch;
 }
 
-function buildPersonNote({ title, role = "", company = "", email = "", meets = "", today }) {
+function buildPersonNote({ title, role = "", company = "", email = "", meets = "", supervisor = "", today }) {
   const slug = slugify(title);
-  return `${frontmatterBlock({ type: "person", role, company, email, meets, tags: ["person"] })}
+  return `${frontmatterBlock({ type: "person", role, company, email, meets, supervisor: supervisor ? wikiLink(supervisor) : "", tags: ["person"] })}
 Tag: \`#p/${slug}\`
 
 Capture "remember to talk to them about X" as a task with \`#discuss #p/${slug}\` anywhere in the vault. Open this note before the meeting.
@@ -844,6 +845,61 @@ function knownValues(records = [], key) {
   return [...new Set(records.map((data) => String(data?.[key] ?? "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 }
 
+// Reporting lines from each person's `supervisor` link. Unknown supervisors
+// and cycles are reported, never followed, so a bad link cannot loop.
+function orgChart(people = []) {
+  const titles = new Set(people.map((person) => person.title));
+  const supervisorOf = new Map();
+  const missing = [];
+  for (const person of people) {
+    const boss = linkTarget(person.supervisor);
+    if (!boss || boss === person.title) continue;
+    if (!titles.has(boss)) { missing.push({ title: person.title, supervisor: boss }); continue; }
+    supervisorOf.set(person.title, boss);
+  }
+  const cycles = [];
+  const inCycle = new Set();
+  for (const person of people) {
+    const seen = [];
+    let current = person.title;
+    while (supervisorOf.has(current) && !seen.includes(current)) {
+      seen.push(current);
+      current = supervisorOf.get(current);
+    }
+    if (seen.includes(current) && !inCycle.has(current)) {
+      const loop = seen.slice(seen.indexOf(current));
+      loop.forEach((title) => inCycle.add(title));
+      cycles.push(loop);
+    }
+  }
+  for (const title of inCycle) supervisorOf.delete(title);
+  const reportsOf = new Map();
+  for (const [title, boss] of supervisorOf) {
+    if (!reportsOf.has(boss)) reportsOf.set(boss, []);
+    reportsOf.get(boss).push(title);
+  }
+  for (const list of reportsOf.values()) list.sort((a, b) => a.localeCompare(b));
+  const chain = (title) => {
+    const out = [];
+    let current = supervisorOf.get(title);
+    while (current && !out.includes(current)) { out.push(current); current = supervisorOf.get(current); }
+    return out;
+  };
+  const descendants = (title) => {
+    const out = [];
+    const stack = [...(reportsOf.get(title) || [])];
+    while (stack.length) {
+      const next = stack.shift();
+      if (out.includes(next)) continue;
+      out.push(next);
+      stack.push(...(reportsOf.get(next) || []));
+    }
+    return out;
+  };
+  const roots = people.map((person) => person.title).filter((title) => !supervisorOf.has(title)).sort((a, b) => a.localeCompare(b));
+  return { supervisorOf, reportsOf, roots, chain, descendants, missing, cycles };
+}
+
 function newTaskId(existing = new Set()) {
   for (let attempt = 0; attempt < 50; attempt += 1) {
     const id = Math.random().toString(36).slice(2, 8);
@@ -1137,6 +1193,11 @@ function runHealthCheck({ today = "", folders = [], pathWarnings = [], notes = [
       else adrNumbers.set(number, adr.title);
     }
   }
+
+  const org = orgChart(byType("person").map((note) => ({ title: note.title, supervisor: note.supervisor })));
+  const personPath = (title) => byType("person").find((note) => note.title === title)?.path || "";
+  for (const item of org.missing) add("warn", "supervisor-missing", `${item.title}: supervisor "${item.supervisor}" has no person note.`, personPath(item.title));
+  for (const loop of org.cycles) add("error", "supervisor-cycle", `Supervisor cycle: ${[...loop, loop[0]].join(" reports to ")}.`, personPath(loop[0]));
 
   for (const release of byType("release").filter((note) => note.status === "released")) {
     const open = tasks.filter((task) => !task.closed && (task.releases || []).includes(slugify(release.title)));
@@ -1890,8 +1951,14 @@ function openCreateForm(plugin, kind, preset = {}, done = () => {}) {
         { key: "company", label: "Company or team", value: preset.company || "", suggestions: knownValues(data.people({ includeArchived: true }).map((file) => data.frontmatter(file)), "company") },
         { key: "email", label: "Email", type: "email" },
         { key: "meets", label: "Meets", type: "select", value: "", options: PROPERTY_SCHEMAS.person.find((field) => field.key === "meets").options.map((value) => ({ value, label: value || "Not set" })) },
+        { key: "supervisor", label: "Supervisor", value: preset.supervisor || "", placeholder: "Search people", hint: "The person this one reports to. Leave empty for the top of a team.", suggestions: data.people().map((file) => data.title(file)) },
       ],
-      submit: async (values) => finish(await writer.createNote("05 People", values.title, buildPersonNote({ ...values, title: safeFileName(values.title), today })), "Person"),
+      submit: async (values) => {
+        const supervisor = String(values.supervisor || "").trim();
+        const match = supervisor ? data.people().map((file) => data.title(file)).find((name) => name.toLowerCase() === supervisor.toLowerCase()) : "";
+        if (supervisor && !match) throw new Error(`No person note called "${supervisor}". Pick a supervisor from the list or leave it empty.`);
+        return finish(await writer.createNote("05 People", values.title, buildPersonNote({ ...values, supervisor: match || "", title: safeFileName(values.title), today })), "Person");
+      },
     },
     project: {
       title: "New project",
@@ -5065,6 +5132,7 @@ class LifeOSHomeView extends ItemView {
     let options = field.options || [];
     if (field.kind === "project") options = ["", ...this.data.projects({ includeArchived: true }).map((item) => this.getFileTitle(item))];
     if (field.kind === "doc") options = ["", ...this.data.docs({ includeArchived: true }).filter((item) => item.path !== file.path && this.getFrontmatter(item).type === "adr").map((item) => this.getFileTitle(item))];
+    if (field.kind === "supervisor") options = ["", ...this.supervisorOptions(file)];
     if (current && !options.includes(current)) options = [...options, current];
     return options.map((value) => ({ value, label: value || (field.kind === "select" ? "Not set" : "None") }));
   }
@@ -5087,6 +5155,24 @@ class LifeOSHomeView extends ItemView {
       const label = `${field.label} of ${title}`;
       if (field.kind === "people") {
         this.renderPeoplePicker(wrap, { label, noun: field.label.toLowerCase(), selected: current, onChange: (next) => save(field, next) });
+      } else if (field.kind === "supervisor") {
+        const options = this.supervisorOptions(file);
+        const id = `devos-supervisor-${slugify(title)}`;
+        const input = wrap.createEl("input", { cls: "life-os-input", attr: { type: "search", list: id, placeholder: "Search people", "aria-label": label, autocomplete: "off" } });
+        input.value = current;
+        const list = wrap.createEl("datalist", { attr: { id } });
+        for (const name of options) list.createEl("option", { attr: { value: name } });
+        this.registerDomEvent(input, "change", () => {
+          const value = String(input.value || "").trim();
+          const match = options.find((name) => name.toLowerCase() === value.toLowerCase());
+          if (value && !match) {
+            new Notice(value === title || this.data.people({ includeArchived: true }).some((person) => this.getFileTitle(person).toLowerCase() === value.toLowerCase())
+              ? `${value} cannot supervise ${title}: that would make a loop.` : `No person note called "${value}".`);
+            input.value = current;
+            return;
+          }
+          void save(field, match || "");
+        });
       } else if (["select", "project", "doc"].includes(field.kind)) {
         this.addSelect(wrap, label, this.propertyOptions(field, file, current), current, (value) => save(field, value));
       } else {
@@ -5118,7 +5204,7 @@ class LifeOSHomeView extends ItemView {
       fields: fields.map((field) => {
         const current = propertyFormValue(field, data[field.key]);
         const value = Array.isArray(current) ? current.join(", ") : current;
-        if (["select", "project", "doc"].includes(field.kind)) return { key: field.key, label: field.label, type: "select", value, options: this.propertyOptions(field, file, value) };
+        if (["select", "project", "doc", "supervisor"].includes(field.kind)) return { key: field.key, label: field.label, type: "select", value, options: this.propertyOptions(field, file, value) };
         return { key: field.key, label: field.label, type: { email: "email", date: "date", time: "time", number: "number" }[field.kind] || "text", value, wide: field.wide };
       }),
       submitLabel: "Save",
@@ -5163,8 +5249,19 @@ class LifeOSHomeView extends ItemView {
       button.type = "button";
       this.registerDomEvent(button, "click", () => { this.peopleFilter = id; this.peoplePage = 0; this.render(); });
     }
+    const layout = this.peopleLayout === "org" ? "org" : "cards";
+    const toggle = toolbar.createDiv({ cls: "life-os-segmented", attr: { role: "group", "aria-label": "People layout" } });
+    for (const [id, label] of [["cards", "Cards"], ["org", "Org chart"]]) {
+      const button = toggle.createEl("button", { text: label, attr: { "aria-pressed": String(layout === id) } });
+      button.type = "button";
+      this.registerDomEvent(button, "click", () => { this.peopleLayout = id; this.render(); });
+    }
     this.addSmallButton(toolbar, "New person", () => this.openForm("person"), { icon: "user-plus", primary: true });
     this.addBaseButton(toolbar, "people");
+    if (layout === "org") {
+      this.renderOrgChart(section);
+      return;
+    }
     const query = String(this.peopleQuery || "").trim().toLowerCase();
     const search = section.createEl("input", { cls: "life-os-input life-os-people-search", attr: { type: "search", placeholder: "Search by name, role, company, email, or cadence", "aria-label": "Search people", value: this.peopleQuery || "" } });
     search.value = this.peopleQuery || "";
@@ -5196,6 +5293,7 @@ class LifeOSHomeView extends ItemView {
         const copy = open.createDiv();
         copy.createEl("strong", { text: this.getFileTitle(file) });
         copy.createSpan({ text: [data.role, data.company].map((value) => String(value || "").trim()).filter(Boolean).join(" · ") || "Role not set" });
+        if (linkTarget(data.supervisor)) copy.createSpan({ text: `Reports to ${linkTarget(data.supervisor)}` });
         copy.createSpan({ cls: "life-os-record-metrics", text: !this.taskSnapshot ? "Loading tasks" : `${count.open} open · ${count.discuss} to discuss${count.overdue ? ` · ${count.overdue} overdue` : ""}` });
         this.registerDomEvent(open, "click", () => this.openPerson(file.path));
         const controls = card.createDiv({ cls: "life-os-project-controls" });
@@ -5272,6 +5370,7 @@ class LifeOSHomeView extends ItemView {
     this.addSmallButton(links, "Open note", () => this.openPath(file.path), { icon: "file-text" });
     this.renderItemActions(links, file, { onRenamed: (path) => this.openPerson(path), onDeleted: () => this.go("people") });
 
+    this.renderPersonOrg(page, file);
     const grid = page.createDiv({ cls: "life-os-overview-grid" });
     const talk = grid.createEl("section", { cls: "life-os-panel-card" });
     talk.createEl("h3", { text: "To discuss" });
@@ -5794,6 +5893,113 @@ class LifeOSHomeView extends ItemView {
   }
 
   // ---------------------------------------------------------------------------
+  // People hierarchy: supervisor links, org chart, a person's reporting lines
+
+  org(includeArchived = false) {
+    const people = this.data.people({ includeArchived });
+    return orgChart(people.map((file) => ({ title: this.getFileTitle(file), supervisor: this.getFrontmatter(file).supervisor, file })));
+  }
+
+  // People who can supervise this person: anyone except them and their reports.
+  supervisorOptions(file) {
+    const title = this.getFileTitle(file);
+    const blocked = new Set([title, ...this.org(true).descendants(title)]);
+    return this.data.people().map((person) => this.getFileTitle(person)).filter((name) => !blocked.has(name));
+  }
+
+  renderOrgNode(parent, title, chart, { depth = 0, files, current = "" } = {}) {
+    const file = files.get(title);
+    const data = file ? this.getFrontmatter(file) : {};
+    const reports = chart.reportsOf.get(title) || [];
+    const collapsed = (this.orgCollapsed ||= new Set()).has(title) || (depth >= 3 && !this.orgExpanded?.has(title));
+    const item = parent.createEl("li", { cls: `life-os-org-item${reports.length ? " has-reports" : ""}` });
+    const node = item.createDiv({ cls: `life-os-org-node${title === current ? " is-current" : ""}` });
+    const open = node.createEl("button", { cls: "life-os-org-open", attr: { title: `Open ${title}` } });
+    open.type = "button";
+    open.createEl("strong", { text: title });
+    const meta = [data.role, data.company].map((value) => String(value || "").trim()).filter(Boolean).join(" · ");
+    if (meta) open.createSpan({ text: meta });
+    if (file) this.registerDomEvent(open, "click", () => this.openPerson(file.path));
+    if (reports.length) {
+      const toggle = node.createEl("button", { cls: "life-os-org-toggle", text: collapsed ? `+${chart.descendants(title).length}` : "−", attr: { "aria-label": `${collapsed ? "Show" : "Hide"} the ${reports.length} direct ${reports.length === 1 ? "report" : "reports"} of ${title}`, "aria-expanded": String(!collapsed) } });
+      toggle.type = "button";
+      this.registerDomEvent(toggle, "click", () => {
+        if (collapsed) { this.orgCollapsed.delete(title); (this.orgExpanded ||= new Set()).add(title); }
+        else { this.orgCollapsed.add(title); this.orgExpanded?.delete(title); }
+        this.render();
+      });
+    }
+    if (reports.length && !collapsed) {
+      const children = item.createEl("ul", { cls: "life-os-org-tree" });
+      for (const report of reports) this.renderOrgNode(children, report, chart, { depth: depth + 1, files, current });
+    }
+  }
+
+  renderOrgChart(parent) {
+    const chart = this.org();
+    const files = new Map(this.data.people().map((file) => [this.getFileTitle(file), file]));
+    const section = parent.createEl("section", { cls: "life-os-org-section" });
+    const teams = chart.roots.filter((root) => (chart.reportsOf.get(root) || []).length);
+    const solo = chart.roots.filter((root) => !(chart.reportsOf.get(root) || []).length);
+    if (!teams.length) {
+      section.createDiv({ cls: "life-os-live-empty", text: "No reporting lines yet. Set a Supervisor on a person (person page or New person) to build the chart." });
+    } else {
+      const scroller = section.createDiv({ cls: "life-os-org-scroll" });
+      const tree = scroller.createEl("ul", { cls: "life-os-org-tree is-root" });
+      for (const root of teams) this.renderOrgNode(tree, root, chart, { files });
+    }
+    if (chart.cycles.length || chart.missing.length) {
+      section.createEl("p", { cls: "life-os-field-hint", text: `${chart.cycles.length ? `${chart.cycles.length} supervisor ${chart.cycles.length === 1 ? "loop is" : "loops are"} left out. ` : ""}${chart.missing.length ? `${chart.missing.length} ${chart.missing.length === 1 ? "supervisor link points" : "supervisor links point"} at no person note. ` : ""}Run the vault health check on Configure for details.` });
+    }
+    if (solo.length) {
+      section.createEl("h3", { cls: "life-os-subheading", text: `Not in a reporting line · ${solo.length}` });
+      const row = section.createDiv({ cls: "life-os-people-row" });
+      for (const title of solo) {
+        const button = row.createEl("button", { cls: "life-os-chip is-person", text: title });
+        button.type = "button";
+        const file = files.get(title);
+        if (file) this.registerDomEvent(button, "click", () => this.openPerson(file.path));
+      }
+    }
+  }
+
+  // The person's place: their chain of supervisors above, their reports below.
+  renderPersonOrg(parent, file) {
+    const title = this.getFileTitle(file);
+    const chart = this.org(true);
+    const files = new Map(this.data.people({ includeArchived: true }).map((item) => [this.getFileTitle(item), item]));
+    const chain = chart.chain(title).reverse();
+    const reports = chart.reportsOf.get(title) || [];
+    const box = parent.createEl("section", { cls: "life-os-panel-card life-os-person-org" });
+    const head = box.createDiv({ cls: "life-os-toolbar" });
+    head.createEl("h3", { text: "Reporting line" });
+    this.addSmallButton(head, "Add direct report", () => this.openForm("person", { supervisor: title }), { icon: "user-plus" });
+    this.addSmallButton(head, "Org chart", () => this.go("people", { peopleLayout: "org" }), { icon: "network" });
+    const tree = box.createDiv({ cls: "life-os-org-scroll" });
+    let level = tree.createEl("ul", { cls: "life-os-org-tree is-root" });
+    const node = (list, name, extra = "") => {
+      const item = list.createEl("li", { cls: "life-os-org-item" });
+      const card = item.createDiv({ cls: `life-os-org-node${extra}` });
+      const open = card.createEl("button", { cls: "life-os-org-open" });
+      open.type = "button";
+      open.createEl("strong", { text: name });
+      const data = files.get(name) ? this.getFrontmatter(files.get(name)) : {};
+      const meta = [data.role, data.company].map((value) => String(value || "").trim()).filter(Boolean).join(" · ");
+      const count = (chart.reportsOf.get(name) || []).length;
+      if (meta || (count && name !== title)) open.createSpan({ text: [meta, count && name !== title ? `${count} ${count === 1 ? "report" : "reports"}` : ""].filter(Boolean).join(" · ") });
+      if (name !== title && files.get(name)) this.registerDomEvent(open, "click", () => this.openPerson(files.get(name).path));
+      return item;
+    };
+    for (const boss of chain) level = node(level, boss).createEl("ul", { cls: "life-os-org-tree" });
+    const me = node(level, title, " is-current");
+    if (reports.length) {
+      const below = me.createEl("ul", { cls: "life-os-org-tree" });
+      for (const report of reports) node(below, report);
+    }
+    if (!chain.length && !reports.length) box.createEl("p", { cls: "life-os-field-hint", text: "No supervisor and no direct reports. Set Supervisor above, or add a direct report." });
+  }
+
+  // ---------------------------------------------------------------------------
   // Item actions: rename, archive, delete
 
   renderArchivedToggle(parent) {
@@ -5950,6 +6156,9 @@ class LifeOSHomeView extends ItemView {
     const fields = [{ key: "confirm", label: `Type "${title}" to confirm`, required: true, wide: true, value: "" }];
     if (notes.length) fields.push({ key: "related", label: `Also move ${notes.length} related ${notes.length === 1 ? "note" : "notes"} to the trash (sprints, meetings, docs, releases)`, type: "checkbox", value: false });
     if (related?.clips.length) fields.push({ key: "clips", label: `Clear the project on ${related.clips.length} ${related.clips.length === 1 ? "clip" : "clips"}`, type: "checkbox", value: true });
+    const directReports = kind === "person" ? (this.org(true).reportsOf.get(title) || []) : [];
+    const nextSupervisor = kind === "person" ? linkTarget(data.supervisor) : "";
+    if (directReports.length) fields.push({ key: "reassign", label: `Move ${directReports.length} direct ${directReports.length === 1 ? "report" : "reports"} to ${nextSupervisor || "no supervisor"}`, type: "checkbox", value: true });
     const outside = tagged(new Set([file.path]));
     if (outside.length) fields.push({ key: "tags", label: `Remove #${prefix}/${slug} from ${outside.length} ${outside.length === 1 ? "task" : "tasks"} in other notes`, type: "checkbox", value: false });
     const warnings = [];
@@ -5967,6 +6176,13 @@ class LifeOSHomeView extends ItemView {
         if (values.tags) removed = await this.writer.updateTaskLines(tagged(paths), (line) => replaceTag(line, prefix, slug, ""));
         if (values.clips) {
           for (const clip of related.clips) await this.writer.setFrontmatter(clip.path, { project: "" });
+        }
+        if (values.reassign) {
+          const people = this.data.people({ includeArchived: true });
+          for (const name of directReports) {
+            const report = people.find((person) => this.getFileTitle(person) === name);
+            if (report) await this.writer.setFrontmatter(report.path, { supervisor: nextSupervisor ? wikiLink(nextSupervisor) : "" });
+          }
         }
         for (const item of trash) await this.writer.trashNote(item.path);
         const left = values.tags ? removed.stale : tagged(paths).length;
@@ -6622,7 +6838,7 @@ class LifeOSHomeView extends ItemView {
       .map(({ file, data }) => ({
         path: file.path, title: this.getFileTitle(file), type: data.type, status: String(data.status || "").toLowerCase(),
         project: linkTarget(data.project), currentSprint: linkTarget(data.current_sprint), supersedes: linkTarget(data.supersedes),
-        adrNumber: data.adr_number, end: isoDate(data.end), example: this.isExample(data),
+        adrNumber: data.adr_number, end: isoDate(data.end), example: this.isExample(data), supervisor: linkTarget(data.supervisor),
       }));
     return {
       today: this.today(),

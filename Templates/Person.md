@@ -4,6 +4,7 @@ role:
 company: 
 email: 
 meets: 
+supervisor: 
 tags:
   - person
 ---

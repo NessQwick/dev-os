@@ -5,7 +5,7 @@ This separates reproducible development evidence from native acceptance. A local
 ## Identify the candidate
 
 - Template version: 1.1.0 candidate
-- Dev OS plugin (`life-os-app`) version: 1.6.0
+- Dev OS plugin (`life-os-app`) version: 1.7.0
 - Archive SHA256: use the exact candidate's external `.sha256` sidecar; not embedded here to avoid self-referential hashes
 - Operating system and Obsidian version: not recorded
 - Test date and reviewer: not recorded
@@ -37,6 +37,27 @@ Provider authentication, an actual AI request, external calendar integration, an
 ## Evidence rules
 
 Bind screenshots and results to the exact candidate checksum. Label synthetic fixtures visibly. Record failures and skipped checks. A passing static, mock-runtime, or browser test does not mark this record complete.
+
+## Development checks, 2026-10-12 (Dev OS 1.7.0)
+
+Dev OS application 1.7.0 passed 188 static and mock-runtime checks.
+
+New mock-runtime coverage:
+- the org chart helper: reports, chains, descendants, missing links, and loops
+- supervisor links on new notes and in patches
+- the health check codes for supervisors
+- the reporting line on the person page
+- refusing a looping supervisor, and saving a valid one
+- the People org chart
+- New person with a supervisor
+- moving reports up when a supervisor is deleted
+
+The browser fixture added:
+- a four-person hierarchy with a branch
+- the org chart and opening a person from it
+- clearing and setting a supervisor on the person page
+
+Native check still required: how the org chart connectors and horizontal scrolling render inside an Obsidian pane.
 
 ## Development checks, 2026-10-12 (Dev OS 1.6.0)
 

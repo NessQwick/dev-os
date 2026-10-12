@@ -12,6 +12,8 @@ properties:
     displayName: Company or team
   note.meets:
     displayName: Meets
+  note.supervisor:
+    displayName: Supervisor
 views:
   - type: table
     name: People
@@ -22,6 +24,7 @@ views:
       - file.name
       - role
       - company
+      - supervisor
       - email
       - meets
     sort:

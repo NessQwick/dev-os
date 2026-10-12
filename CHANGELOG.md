@@ -4,6 +4,20 @@ Format: Added, Changed, Templates (manual merge notes), Plugins, Breaking. Semve
 
 ## Unreleased
 
+### Dev OS: application 1.7.0 candidate
+Added
+- **People hierarchy:** a `supervisor` link on person notes.
+  - Set it in New person or on the person page. Loops are refused.
+  - The person page shows the reporting line (supervisors above, direct reports below) and has an Add direct report button.
+  - People gains an **Org chart** layout with collapsible teams.
+  - Deleting a supervisor can move their reports up.
+  - Vault health reports missing supervisors and loops.
+- `.gitattributes` keeps line endings LF in every checkout. Windows clones with `core.autocrlf` no longer see unchanged files as modified, which blocked `git pull`.
+
+Templates (manual merge)
+- `Templates/Person.md` has a new `supervisor:` property. Existing person notes work without it; Dev OS adds it on first edit.
+- `00 Dashboards/Bases/People.base` shows a Supervisor column.
+
 ### Dev OS: application 1.6.0 candidate
 Added
 - **Edit minutes:** a saved meeting reopens in the composer, prefilled. Saving rewrites its properties and the Agenda, Notes, Decisions, and Action items sections. Unchanged action items keep their exact line. A title or date change renames the note and updates links.

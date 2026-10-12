@@ -35,7 +35,10 @@ try {
     add('08 Tasks/Tasks.md',{},'- [ ] Resolve fixture overdue task 📅 2026-09-08\n- [ ] Pick a focus ⏫');
     add('Prompts/07 Meeting Prep.md',{type:'prompt',purpose:'Prepare a meeting from the attendees and open items.',when:'Before a meeting',writes:'none',risk:'read-only'});
     add('00 Dashboards/Bases/Projects.base');
-    add('05 People/Synthetic person.md',{type:'person',role:'Fixture lead',meets:'weekly'},'- [ ] Discuss fixture #p/synthetic-person #discuss');
+    add('05 People/Synthetic manager.md',{type:'person',role:'Fixture director'});
+    add('05 People/Synthetic peer.md',{type:'person',role:'Fixture architect',supervisor:'[[Synthetic manager]]'});
+    add('05 People/Synthetic report.md',{type:'person',role:'Fixture engineer',supervisor:'[[Synthetic person]]'});
+    add('05 People/Synthetic person.md',{type:'person',role:'Fixture lead',meets:'weekly',supervisor:'[[Synthetic manager]]'},'- [ ] Discuss fixture #p/synthetic-person #discuss');
     add('07 Library/Book Notes/Synthetic book.md',{type:'book'});
     add('07 Library/Book Notes/Finished book.md',{type:'book',status:'completed'});
     add('07 Library/Book Notes/Sample book.md',{type:'book',status:'reading',tags:['example']});
@@ -209,7 +212,17 @@ try {
       await page.getByLabel('Search people',{exact:true}).fill('nobody here');
       await page.waitForFunction(()=>document.querySelectorAll('.life-os-person-card').length===0);
       await page.getByLabel('Search people',{exact:true}).fill('');
-      await page.waitForFunction(()=>document.querySelectorAll('.life-os-person-card').length===1);
+      await page.waitForFunction(()=>document.querySelectorAll('.life-os-person-card').length===4);
+      await page.getByRole('button',{name:'Org chart',exact:true}).click();
+      await page.waitForSelector('.life-os-org-tree');
+      assert.equal(await page.locator('.life-os-org-node').count(),4);
+      await page.screenshot({path:'/tmp/life-os-org-chart.png',fullPage:true});
+      await page.locator('.life-os-org-open').filter({has:page.locator('strong',{hasText:/^Synthetic person$/})}).click();
+      await page.waitForSelector('.life-os-person-org');
+      assert.ok((await page.locator('.life-os-person-org').innerText()).includes('Synthetic manager'));
+      assert.ok((await page.locator('.life-os-person-org').innerText()).includes('Synthetic report'));
+      await page.screenshot({path:'/tmp/life-os-person-org.png',fullPage:true});
+      await page.evaluate(()=>{window.view.peopleLayout='cards';window.view.activeScreen='people';window.view.render();});
       await page.locator('.life-os-discussion-queue button').first().click();
       await page.waitForSelector('.life-os-task-panel');
       assert.equal(await page.evaluate(()=>window.view.activeTaskKey.path),'05 People/Synthetic person.md');
@@ -323,10 +336,17 @@ try {
   // People: person page properties and a discussion topic; sprint details; doc panel; prompts; Bases button.
   const fm=(p)=>page.evaluate(p=>window.view.getFrontmatter(window.view.app.vault.getAbstractFileByPath(p)),p);
   await page.evaluate(()=>{window.view.projectFilter='open';window.view.activeScreen='people';window.view.render();});
-  assert.ok((await page.locator('.life-os-person-card').first().innerText()).includes('Fixture lead'));
-  await page.locator('.life-os-person-card .life-os-project-card-open').first().click();
+  assert.ok((await page.locator('.life-os-person-card').filter({has:page.locator('strong',{hasText:/^Synthetic person$/})}).innerText()).includes('Fixture lead'));
+  assert.ok((await page.locator('.life-os-person-card').filter({has:page.locator('strong',{hasText:/^Synthetic person$/})}).innerText()).includes('Reports to Synthetic manager'));
+  await page.locator('.life-os-person-card').filter({has:page.locator('strong',{hasText:/^Synthetic person$/})}).locator('.life-os-project-card-open').click();
   assert.equal(await page.locator('.life-os-person-page').count(),1);
   assert.equal(await page.locator('.life-os-nav-button[aria-current="page"]').innerText(),'People');
+  await page.getByLabel('Supervisor of Synthetic person',{exact:true}).fill('');
+  await page.getByLabel('Supervisor of Synthetic person',{exact:true}).press('Tab');
+  await page.waitForFunction(()=>!document.querySelector('.life-os-person-org')?.innerText.includes('Synthetic manager'));
+  await page.getByLabel('Supervisor of Synthetic person',{exact:true}).fill('Synthetic manager');
+  await page.getByLabel('Supervisor of Synthetic person',{exact:true}).press('Tab');
+  await page.waitForFunction(()=>document.querySelector('.life-os-person-org')?.innerText.includes('Synthetic manager'));
   await page.getByLabel('Role of Synthetic person',{exact:true}).fill('Fixture principal');
   await page.getByLabel('Role of Synthetic person',{exact:true}).press('Tab');
   await page.waitForFunction(()=>window.writes.some(w=>w[0]==='frontmatter'&&w[1]==='05 People/Synthetic person.md'));
@@ -427,5 +447,5 @@ try {
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.screenshot({path:'/tmp/life-os-home-light-candidate.png'});
   await page.evaluate(()=>window.view.onClose());
-  console.log('Dashboard browser checks passed: sixteen modules, Configure save and health check, project page tasks and minutes composer, sprint moves, inbox triage, roadmap bars and markers, waiting groups, task editor, release notes, project description, archive, unarchive and rename, person page, sprint details, doc property panel, prompt library, Bases button, task side panel, Tasks views, meeting edit and discard, attendee picker, People search, New task, sprint tabs, projects by quarter, review cards, Home spacing, preview/full Brain navigation, workload groups, project counts, discussion links, board previews, Library filters and remote-cover rejection, AI branches, per-module controls, narrow widths and light-theme smoke check. Synthetic fixture only.');
+  console.log('Dashboard browser checks passed: sixteen modules, Configure save and health check, project page tasks and minutes composer, sprint moves, inbox triage, roadmap bars and markers, waiting groups, task editor, release notes, project description, archive, unarchive and rename, person page, sprint details, doc property panel, prompt library, Bases button, task side panel, Tasks views, meeting edit and discard, attendee picker, People search, New task, org chart and reporting line, sprint tabs, projects by quarter, review cards, Home spacing, preview/full Brain navigation, workload groups, project counts, discussion links, board previews, Library filters and remote-cover rejection, AI branches, per-module controls, narrow widths and light-theme smoke check. Synthetic fixture only.');
 }finally{await browser.close();}
