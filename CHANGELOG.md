@@ -4,6 +4,18 @@ Format: Added, Changed, Templates (manual merge notes), Plugins, Breaking. Semve
 
 ## Unreleased
 
+### Dev OS: application 1.6.0 candidate
+Added
+- **Edit minutes:** a saved meeting reopens in the composer, prefilled. Saving rewrites its properties and the Agenda, Notes, Decisions, and Action items sections. Unchanged action items keep their exact line. A title or date change renames the note and updates links.
+- **Searchable people picker** for meeting attendees (free-text guests too), deciders, and project stakeholders.
+- **People:** a search over name, role, company, email, and cadence, and paging at 12 per page.
+- **Remembered values:** Role and Company or team suggest values already used, in New person and on the person page.
+- **New task** on the Tasks screen (full form, then the task panel), plus Quick add.
+
+Fixed
+- **Discard draft** in the minutes composer now deletes the draft and closes the composer.
+- **Active commitments** on Tasks opens the project page instead of the project note. Home's "Meetings today" opens the meeting in Dev OS. Dependency chains on Waiting open the task panel.
+
 ### Dev OS: application 1.5.0 candidate
 Added
 - **Task side panel:** clicking a task in Dev OS shows its details instead of opening the note. You can edit:

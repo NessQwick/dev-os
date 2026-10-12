@@ -1298,7 +1298,7 @@ try {
   view.expandedDocs = new Set([queuesAdr]);
   view.activeScreen = "docs";
   view.render();
-  const addDecider = findByLabel(view.contentEl, "Add to Deciders of ADR-0002 Use queues");
+  const addDecider = findByLabel(view.contentEl, "Deciders of ADR-0002 Use queues");
   addDecider.value = "Jordan Li";
   addDecider.handlers.change();
   await settle();
@@ -1346,7 +1346,7 @@ try {
   view.focusView = "attention";
   view.openTaskTarget(view.allTasks().find((task) => task.display === "Write spec"));
   check("clicking a task opens the side panel", treeHasClass(view.contentEl, "life-os-task-panel") && findByLabel(view.contentEl, "Task text")?.value === "Write spec");
-  const dueField = findByLabel(view.contentEl, "Due date");
+  const dueField = findByLabel(view.contentEl, "Task due date");
   dueField.value = "2026-09-20";
   dueField.handlers.change();
   await settle();
@@ -1420,6 +1420,97 @@ try {
   const sprintRoute = view.activeScreen === "sprint" && view.activeSprintPath === platformSprint;
   await view.afterCreate(new TFile(queuesAdr), "adr");
   check("new notes open in their Dev OS screen", sprintRoute && view.activeScreen === "docs" && view.expandedDocs.has(queuesAdr));
+
+  // 1.6: meeting edit, people picker, discard, active commitments, people search and paging, new task.
+  const editNote = sandbox.buildMeetingNote({ title: "Planning", date: "2026-09-20", time: "", project: "Platform", projectSlug: "platform", attendees: ["Jordan Li", "Guest"], agenda: "Scope", notes: "", decisions: ["Use queues"], actions: [{ text: "Draft plan", owner: "", due: "2026-09-25" }, { text: "Book room", owner: "", due: "" }], today })
+    .replace("- [ ] Draft plan #project/platform 📅 2026-09-25 ➕ 2026-09-09", "- [x] Draft plan #project/platform 📅 2026-09-25 ➕ 2026-09-09 ✅ 2026-09-10");
+  const parsedMeeting = sandbox.parseMeetingNote(editNote, { date: "2026-09-20", kind: "planning", project: "[[Platform]]", attendees: ["[[Jordan Li]]", "[[Guest]]"] }, "2026-09-20 Planning", ["Jordan Li"]);
+  check("saved minutes parse back into a composer draft",
+    parsedMeeting.title === "Planning" && parsedMeeting.project === "Platform" && parsedMeeting.kind === "planning" && JSON.stringify(parsedMeeting.attendees) === JSON.stringify(["Jordan Li"]) && parsedMeeting.others === "Guest" &&
+    parsedMeeting.agenda === "- Scope" && JSON.stringify(parsedMeeting.decisions) === JSON.stringify(["Use queues"]) &&
+    parsedMeeting.actions.length === 2 && parsedMeeting.actions[0].due === "2026-09-25" && parsedMeeting.actions[0].text === "Draft plan", JSON.stringify(parsedMeeting));
+  parsedMeeting.actions[1].owner = "jordan-li";
+  parsedMeeting.actions.push({ text: "Send notes", owner: "", due: "" });
+  parsedMeeting.decisions = ["Use queues", "Ship on Friday"];
+  const sectionsOut = sandbox.meetingSectionText(parsedMeeting, "platform", "2026-09-21");
+  check("editing minutes keeps unchanged action lines and edits the rest",
+    sectionsOut.actions === "- [x] Draft plan #project/platform 📅 2026-09-25 ➕ 2026-09-09 ✅ 2026-09-10\n- [ ] Book room #project/platform #p/jordan-li ➕ 2026-09-09\n- [ ] Send notes #project/platform ➕ 2026-09-21" &&
+    sectionsOut.decisions === "- Use queues\n- Ship on Friday" && sectionsOut.agenda === "- Scope", JSON.stringify(sectionsOut));
+  check("known values list each value once, sorted", JSON.stringify(sandbox.knownValues([{ company: "Beta" }, { company: "Acme" }, { company: " Acme " }, {}], "company")) === JSON.stringify(["Acme", "Beta"]));
+
+  const minutesPath = "10 Meetings/2026-09-20 Planning.md";
+  fakeFiles.push(new TFile(minutesPath));
+  metadata.set(minutesPath, { type: "meeting", kind: "planning", date: "2026-09-20", project: "[[Platform]]", attendees: ["[[Jordan Li]]"] });
+  fileContents.set(minutesPath, editNote);
+  view.activeScreen = "meetings";
+  view.expandedMeetings = new Set([minutesPath]);
+  view.render();
+  findParentWithHandler(view.contentEl, "Edit minutes")?.handlers.click();
+  await settle();
+  check("Edit minutes opens the composer prefilled", view.editingMeeting === minutesPath && treeHasClass(view.contentEl, "is-editing") && findByLabel(view.contentEl, "Decision 1")?.value === "Use queues");
+  const editDraft = view.meetingDraft(`edit:${minutesPath}`);
+  editDraft.decisions[0] = "Use a queue per tenant";
+  editDraft.actions[1].owner = "jordan-li";
+  await view.saveMeetingEdit(`edit:${minutesPath}`);
+  const editedMinutes = fileContents.get(minutesPath);
+  check("saving edited minutes rewrites decisions and actions and keeps the rest",
+    editedMinutes.includes("## Decisions\n- Use a queue per tenant\n") && editedMinutes.includes("- [x] Draft plan #project/platform 📅 2026-09-25 ➕ 2026-09-09 ✅ 2026-09-10") &&
+    editedMinutes.includes("- [ ] Book room #project/platform #p/jordan-li ➕ 2026-09-09") && editedMinutes.includes("# Planning") && editedMinutes.includes("## Agenda\n- Scope") && !view.editingMeeting, editedMinutes);
+
+  view.composerOpen = true;
+  const freshDraft = view.meetingDraft("global");
+  freshDraft.title = "Throwaway";
+  view.render();
+  const attendeeInput = findByLabel(view.contentEl, "Add attendee");
+  attendeeInput.value = "jordan li";
+  attendeeInput.handlers.change();
+  findByLabel(view.contentEl, "Add attendee").value = "Guest Speaker";
+  findByLabel(view.contentEl, "Add attendee").handlers.keydown({ key: "Enter", preventDefault() {} });
+  check("the attendee picker adds people and free-text guests", JSON.stringify(view.meetingDraft("global").attendees) === JSON.stringify(["Jordan Li"]) && view.meetingDraft("global").others === "Guest Speaker" && !treeHasClass(view.contentEl, "is-toggle"));
+  findParentWithHandler(view.contentEl, "Discard draft")?.handlers.click();
+  await settle();
+  const drafts = plugin.settings.meetingDrafts || {};
+  check("Discard draft deletes the draft and closes the composer", !view.composerOpen && !drafts.global && !treeHasClass(view.contentEl, "life-os-composer"));
+
+  view.activeScreen = "focus";
+  view.focusView = "attention";
+  view.render();
+  const findCard = (element) => (String(element.options?.cls || "").includes("life-os-record-card") && treeHasText(element, "Platform") ? element : element.children.map(findCard).find(Boolean));
+  findCard(view.contentEl)?.handlers.click();
+  check("Active commitments opens the project page", view.activeScreen === "project" && view.activeProjectPath === platformPath);
+
+  for (let index = 1; index <= 14; index += 1) {
+    const personFile = `05 People/Person ${String(index).padStart(2, "0")}.md`;
+    fakeFiles.push(new TFile(personFile));
+    metadata.set(personFile, { type: "person", company: index % 2 ? "Acme" : "Beta", role: "Engineer" });
+  }
+  view.activeScreen = "people";
+  view.peopleFilter = "all";
+  view.peopleQuery = "";
+  view.peoplePage = 0;
+  view.render();
+  const peopleTotal = view.data.people().length;
+  check("People pages through long lists", treeHasClass(view.contentEl, "life-os-pager") && treeHasText(view.contentEl, `1-12 of ${peopleTotal}`));
+  view.peoplePage = 1;
+  view.render();
+  check("People shows the next page", treeHasText(view.contentEl, `13-${peopleTotal} of ${peopleTotal}`));
+  const searchBox = findByLabel(view.contentEl, "Search people");
+  searchBox.value = "acme";
+  searchBox.handlers.input();
+  check("People search filters by metadata", !treeHasClass(view.contentEl, "life-os-pager") && treeHasText(view.contentEl, "Person 01") && !treeHasText(view.contentEl, "Person 02"));
+  view.peopleQuery = "";
+  view.openPerson("05 People/Person 01.md");
+  const companyInput = findByLabel(view.contentEl, "Company or team of Person 01");
+  check("Company or team suggests values already used", companyInput?.options.attr.list === "devos-suggest-company" && treeHasText(view.contentEl, "") !== null);
+
+  const taskForm = view.openNewTaskForm();
+  Object.assign(taskForm.values, { text: "Ship docs", discuss: true, high: true });
+  await taskForm.submit();
+  const taskForm2 = view.openNewTaskForm();
+  Object.assign(taskForm2.values, { text: "Plan launch", project: "Platform", due: "2026-09-30" });
+  await taskForm2.submit();
+  check("New task writes to the inbox or the chosen project",
+    fileContents.get("08 Tasks/Tasks.md").includes("- [ ] Ship docs #discuss ⏫ ➕ 2026-09-09") && fileContents.get(platformPath).includes("- [ ] Plan launch #project/platform 📅 2026-09-30 ➕ 2026-09-09"), fileContents.get(platformPath));
 
   if (process.env.LIFE_OS_PREVIEW) {
     // Generated visual-test artifact uses synthetic fixtures only.

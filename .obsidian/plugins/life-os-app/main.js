@@ -178,8 +178,8 @@ const ITEM_LABELS = {
 // already define; an empty value is written as "" and never removes a key.
 const PROPERTY_SCHEMAS = {
   person: [
-    { key: "role", label: "Role", kind: "text" },
-    { key: "company", label: "Company or team", kind: "text" },
+    { key: "role", label: "Role", kind: "text", suggest: true },
+    { key: "company", label: "Company or team", kind: "text", suggest: true },
     { key: "email", label: "Email", kind: "email" },
     { key: "meets", label: "Meets", kind: "select", options: ["", "weekly", "biweekly", "monthly", "quarterly", "ad hoc"] },
   ],
@@ -767,6 +767,81 @@ function mementoModel(birthdate, lifeExpectancy, today) {
 // The recurrence rule a task carries after 🔁, or "".
 function taskRecurrence(raw) {
   return String(raw || "").match(/🔁\s*([^📅⏳➕✅🆔⛔⏫🔺🔼🔽⏬#]+)/u)?.[1].trim() || "";
+}
+
+// All lines of one section (not just bullets), without trailing blanks.
+function sectionLines(content, heading) {
+  const lines = String(content || "").split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim().toLowerCase() === heading.toLowerCase());
+  if (start === -1) return [];
+  const own = lines[start].match(/^(#{1,6})\s/)?.[1].length || 2;
+  const out = [];
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const level = lines[index].match(/^(#{1,6})\s/)?.[1].length || 0;
+    if (level && level <= own) break;
+    out.push(lines[index]);
+  }
+  while (out.length && !out[out.length - 1].trim()) out.pop();
+  while (out.length && !out[0].trim()) out.shift();
+  return out;
+}
+
+// Reads saved minutes back into a composer draft. Agenda and notes keep
+// their raw lines; action items keep their raw task line for later edits.
+function parseMeetingNote(content, frontmatter = {}, title = "", peopleTitles = []) {
+  const people = new Set(peopleTitles);
+  const attendees = linkList(frontmatter.attendees);
+  const isBullet = (line) => /^\s*[-*+]\s+(?!\[.\])\S/.test(line);
+  const decisionLines = sectionLines(content, "## Decisions");
+  const actionLines = sectionLines(content, "## Action items");
+  return {
+    title: String(title || "").replace(/^\d{4}-\d{2}-\d{2}\s+/, ""),
+    date: isoDate(frontmatter.date),
+    time: String(frontmatter.time || ""),
+    kind: String(frontmatter.kind || "meeting"),
+    project: linkTarget(frontmatter.project),
+    attendees: attendees.filter((name) => people.has(name)),
+    others: attendees.filter((name) => !people.has(name)).join(", "),
+    agenda: sectionLines(content, "## Agenda").filter((line) => line.trim() !== "-").join("\n"),
+    notes: sectionLines(content, "## Notes").filter((line) => line.trim() !== "-").join("\n"),
+    rawText: true,
+    decisions: decisionLines.filter(isBullet).map((line) => line.replace(/^\s*[-*+]\s+/, "").trim()),
+    decisionsExtra: decisionLines.filter((line) => line.trim() && line.trim() !== "-" && !isBullet(line)),
+    actions: actionLines.filter((line) => TASK_LINE.test(line)).map((raw) => {
+      const parts = splitTaskBody(raw.match(TASK_LINE)[4]);
+      const owner = (parts.tags.find((tag) => tag.toLowerCase().startsWith("#p/")) || "").slice(3);
+      const due = String(parts.fields.due || "").replace(/^📅\s*/u, "");
+      return { text: parts.text, owner, due, raw, orig: { text: parts.text, owner, due } };
+    }),
+    actionsExtra: actionLines.filter((line) => line.trim() && !TASK_LINE.test(line)),
+  };
+}
+
+// The four section bodies for saving a draft. Unchanged action items keep
+// their exact line; changed ones are edited in place; new ones are built.
+function meetingSectionText(draft, projectSlug = "", today = "") {
+  const bullets = (text) => String(text || "").split("\n").map((line) => line.trim()).filter(Boolean)
+    .map((line) => (/^[-*+]\s/.test(line) ? line : `- ${line}`));
+  const free = (text) => (draft.rawText ? String(text || "").split("\n").map((line) => line.replace(/\s+$/, "")).join("\n").trim() : bullets(text).join("\n"));
+  const decisions = [...(draft.decisionsExtra || []), ...(draft.decisions || []).map((item) => String(item || "").trim()).filter(Boolean).map((item) => `- ${item}`)];
+  const actions = (draft.actions || []).filter((action) => String(action.text || "").trim()).map((action) => {
+    const value = { text: String(action.text).trim(), owner: action.owner || "", due: action.due || "" };
+    if (!action.raw) return buildTaskLine({ ...value, project: projectSlug, created: today });
+    const orig = action.orig || {};
+    if (orig.text === value.text && orig.owner === value.owner && orig.due === value.due) return action.raw;
+    return editTaskLine(action.raw, value) || action.raw;
+  }).filter(Boolean);
+  return {
+    agenda: free(draft.agenda) || "- ",
+    notes: free(draft.notes),
+    decisions: decisions.length ? decisions.join("\n") : "- ",
+    actions: [...(draft.actionsExtra || []), ...actions].join("\n"),
+  };
+}
+
+// Distinct non-empty values of one property, for suggestion lists.
+function knownValues(records = [], key) {
+  return [...new Set(records.map((data) => String(data?.[key] ?? "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 }
 
 function newTaskId(existing = new Set()) {
@@ -1621,6 +1696,12 @@ class LifeOSFormModal extends Modal {
         input = row.createEl("textarea", { attr: { "aria-label": field.label, rows: "3", placeholder: field.placeholder || "" } });
       } else {
         input = row.createEl("input", { attr: { "aria-label": field.label, type: field.type || "text", placeholder: field.placeholder || "" } });
+        if (field.suggestions?.length) {
+          const id = `devos-suggest-${field.key}-${Math.random().toString(36).slice(2, 8)}`;
+          const list = row.createEl("datalist", { attr: { id } });
+          for (const value of field.suggestions) list.createEl("option", { attr: { value } });
+          input.setAttribute("list", id);
+        }
       }
       if (field.type === "checkbox") input.checked = Boolean(this.values[field.key]);
       else input.value = String(this.values[field.key]);
@@ -1805,8 +1886,8 @@ function openCreateForm(plugin, kind, preset = {}, done = () => {}) {
       title: "New person",
       fields: [
         { key: "title", label: "Name", required: true, value: preset.title || "" },
-        { key: "role", label: "Role", value: preset.role || "" },
-        { key: "company", label: "Company or team", value: preset.company || "" },
+        { key: "role", label: "Role", value: preset.role || "", suggestions: knownValues(data.people({ includeArchived: true }).map((file) => data.frontmatter(file)), "role") },
+        { key: "company", label: "Company or team", value: preset.company || "", suggestions: knownValues(data.people({ includeArchived: true }).map((file) => data.frontmatter(file)), "company") },
         { key: "email", label: "Email", type: "email" },
         { key: "meets", label: "Meets", type: "select", value: "", options: PROPERTY_SCHEMAS.person.find((field) => field.key === "meets").options.map((value) => ({ value, label: value || "Not set" })) },
       ],
@@ -3029,7 +3110,7 @@ class LifeOSHomeView extends ItemView {
       }
       const arrow = button.createSpan({ cls: "life-os-record-arrow" });
       setIcon(arrow, "arrow-up-right");
-      this.registerDomEvent(button, "click", () => void this.openPath(file.path));
+      this.registerDomEvent(button, "click", () => void this.openRecord(file));
     }
     if (this.activeScreen === "library") this.renderBookDetails(section, visible.filter((file) => this.getFrontmatter(file).type === "book"));
     if (this.visualEnabled() && this.activeScreen === "people") {
@@ -3692,6 +3773,14 @@ class LifeOSHomeView extends ItemView {
     this.go("project", { activeProjectPath: path });
   }
 
+  // Opens a note's Dev OS page when it has one, otherwise the note.
+  openRecord(file) {
+    const type = String(this.getFrontmatter(file).type || "");
+    if (type === "project") return this.openProject(file.path);
+    if (type === "person") return this.openPerson(file.path);
+    return this.openPath(file.path);
+  }
+
   openPerson(path) {
     this.go("person", { activePersonPath: path });
   }
@@ -3886,7 +3975,7 @@ class LifeOSHomeView extends ItemView {
     for (const file of today.slice(0, 3)) {
       const button = card.createEl("button", { cls: "life-os-link-row", text: this.getFileTitle(file) });
       button.type = "button";
-      this.registerDomEvent(button, "click", () => void this.openPath(file.path));
+      this.registerDomEvent(button, "click", () => { (this.expandedMeetings ||= new Set()).add(file.path); this.go("meetings"); });
     }
     const actions = this.allTasks().filter((task) => !task.closed && task.path.startsWith(`${this.data.folders().meetings}/`));
     card.createEl("small", { text: `${actions.length} open action ${actions.length === 1 ? "item" : "items"} across meetings` });
@@ -4158,20 +4247,8 @@ class LifeOSHomeView extends ItemView {
     const people = header.createDiv({ cls: "life-os-people-row" });
     people.createSpan({ cls: "life-os-field-label", text: "Stakeholders" });
     const stakeholders = linkList(data.stakeholders);
-    for (const name of stakeholders) {
-      const chip = people.createSpan({ cls: "life-os-chip is-person" });
-      chip.createSpan({ text: name });
-      const remove = chip.createEl("button", { cls: "life-os-chip-remove", text: "×", attr: { "aria-label": `Remove ${name}` } });
-      remove.type = "button";
-      this.registerDomEvent(remove, "click", () => void this.runWrite(() => this.writer.setFrontmatter(file.path, { stakeholders: stakeholders.filter((item) => item !== name).map(wikiLink) }), `${name} removed.`));
-    }
-    const candidates = this.data.people().map((person) => this.getFileTitle(person)).filter((name) => !stakeholders.includes(name));
-    if (candidates.length) {
-      this.addSelect(people, "Add stakeholder", [{ value: "", label: "+ Add person" }, ...candidates], "", (value) => {
-        if (!value) return;
-        return this.runWrite(() => this.writer.setFrontmatter(file.path, { stakeholders: [...stakeholders, value].map(wikiLink) }), `${value} added.`);
-      });
-    }
+    this.renderPeoplePicker(people, { label: "Add stakeholder", noun: "stakeholders", selected: stakeholders,
+      onChange: (next) => this.runWrite(() => this.writer.setFrontmatter(file.path, { stakeholders: next.map(wikiLink) }), "Stakeholders saved.") });
     const links = header.createDiv({ cls: "life-os-form-actions" });
     this.externalLink(links, data.repo, "Open repository");
     this.addSmallButton(links, "Open note", () => this.openPath(file.path), { icon: "file-text" });
@@ -4366,8 +4443,9 @@ class LifeOSHomeView extends ItemView {
 
   renderMeetingComposer(parent, { key, project = "", projectSlug = "" }) {
     const draft = this.meetingDraft(key);
-    const box = parent.createEl("section", { cls: "life-os-composer" });
-    box.createEl("h3", { text: "Meeting minutes" });
+    const editing = Boolean(draft.editPath);
+    const box = parent.createEl("section", { cls: `life-os-composer${editing ? " is-editing" : ""}` });
+    box.createEl("h3", { text: editing ? "Edit minutes" : "Meeting minutes" });
     const input = (wrap, label, prop, type = "text", placeholder = "") => {
       const field = wrap.createEl("label", { cls: "life-os-field" });
       field.createSpan({ cls: "life-os-field-label", text: label });
@@ -4385,28 +4463,26 @@ class LifeOSHomeView extends ItemView {
     kindField.createSpan({ cls: "life-os-field-label", text: "Kind" });
     this.addSelect(kindField, "Meeting kind", MEETING_KINDS, draft.kind, (value) => { draft.kind = value; });
     let projectChoice = project;
-    if (!project) {
+    if (!project || editing) {
       const projectField = top.createEl("label", { cls: "life-os-field" });
       projectField.createSpan({ cls: "life-os-field-label", text: "Project" });
       projectChoice = draft.project || "";
       this.addSelect(projectField, "Meeting project", projectOptions(this.data), projectChoice, (value) => { draft.project = value; projectChoice = value; });
     }
 
-    const attendees = box.createDiv({ cls: "life-os-people-row" });
+    const attendees = box.createDiv({ cls: "life-os-field is-wide" });
     attendees.createSpan({ cls: "life-os-field-label", text: "Attendees" });
-    for (const person of this.data.people()) {
-      const name = this.getFileTitle(person);
-      const selected = draft.attendees.includes(name);
-      const chip = attendees.createEl("button", { cls: "life-os-chip is-person is-toggle", text: name, attr: { "aria-pressed": String(selected) } });
-      chip.type = "button";
-      this.registerDomEvent(chip, "click", () => {
-        draft.attendees = selected ? draft.attendees.filter((item) => item !== name) : [...draft.attendees, name];
+    const others = splitList(draft.others);
+    this.renderPeoplePicker(attendees, {
+      label: "Add attendee", noun: "attendees", selected: [...draft.attendees, ...others], allowFree: true,
+      onChange: (next) => {
+        const names = new Set(this.data.people().map((person) => this.getFileTitle(person)));
+        draft.attendees = next.filter((name) => names.has(name));
+        draft.others = next.filter((name) => !names.has(name)).join(", ");
+        this.saveDrafts();
         this.render();
-      });
-    }
-    const others = attendees.createEl("input", { cls: "life-os-input", attr: { type: "text", placeholder: "Others, comma separated", "aria-label": "Other attendees" } });
-    others.value = draft.others || "";
-    this.registerDomEvent(others, "input", () => { draft.others = others.value; });
+      },
+    });
 
     const areas = box.createDiv({ cls: "life-os-composer-grid" });
     for (const [prop, label, placeholder] of [["agenda", "Agenda", "One item per line"], ["notes", "Notes", "What was said, one point per line"]]) {
@@ -4445,15 +4521,83 @@ class LifeOSHomeView extends ItemView {
     this.addSmallButton(actions, "Action item", () => { draft.actions.push({ text: "", owner: "", due: "" }); this.render(); }, { icon: "plus" });
 
     const footer = box.createDiv({ cls: "life-os-form-actions" });
+    if (editing) {
+      footer.createSpan({ cls: "life-os-form-hint", text: "Rewrites the frontmatter and the Agenda, Notes, Decisions, and Action items sections. Unchanged action items keep their exact line, including done state and ids." });
+      this.addSmallButton(footer, "Cancel edit", () => this.closeComposer(key, "Edit cancelled."), { icon: "x" });
+      this.addSmallButton(footer, "Save changes", () => this.saveMeetingEdit(key), { icon: "save", primary: true });
+      return;
+    }
     footer.createSpan({ cls: "life-os-form-hint", text: `Saves to ${this.data.folders().meetings}/${draft.date || "date"} ${draft.title || "title"}.md. Action items become tasks${project || projectChoice ? ` tagged #project/${projectSlug || slugify(projectChoice)}` : ""}.` });
-    this.addSmallButton(footer, "Discard draft", () => { this.discardMeetingDraft(key); this.render(); }, { icon: "x" });
+    this.addSmallButton(footer, "Discard draft", () => this.closeComposer(key, "Draft discarded."), { icon: "trash-2" });
     this.addSmallButton(footer, "Save minutes", () => this.saveMeetingDraft(key, { project: project || projectChoice }), { icon: "save", primary: true });
   }
 
   discardMeetingDraft(key) {
-    const store = this.plugin?.settings ? this.plugin.settings.meetingDrafts || {} : this.localDrafts || {};
+    const store = this.plugin?.settings ? (this.plugin.settings.meetingDrafts ||= {}) : (this.localDrafts ||= {});
     delete store[key];
     this.saveDrafts();
+  }
+
+  // Drops the draft and closes the composer (or leaves edit mode).
+  closeComposer(key, message = "") {
+    const editing = this.meetingDraft(key).editPath;
+    this.discardMeetingDraft(key);
+    if (editing) this.editingMeeting = null;
+    else this.composerOpen = false;
+    if (message) new Notice(message);
+    this.forceRender = true;
+    try { this.render(); } finally { this.forceRender = false; }
+  }
+
+  // Loads saved minutes into the composer for editing.
+  async startMeetingEdit(meeting) {
+    let content = "";
+    try {
+      content = await this.app.vault.cachedRead(meeting);
+    } catch (error) {
+      new Notice("Could not read these minutes.");
+      return false;
+    }
+    const key = `edit:${meeting.path}`;
+    const store = this.plugin?.settings ? (this.plugin.settings.meetingDrafts ||= {}) : (this.localDrafts ||= {});
+    const people = this.data.people({ includeArchived: true }).map((person) => this.getFileTitle(person));
+    const draft = parseMeetingNote(content, this.getFrontmatter(meeting), this.getFileTitle(meeting), people);
+    if (!draft.decisions.length) draft.decisions = [""];
+    if (!draft.actions.length) draft.actions = [{ text: "", owner: "", due: "" }];
+    store[key] = { ...draft, editPath: meeting.path, originalTitle: this.getFileTitle(meeting) };
+    (this.expandedMeetings ||= new Set()).add(meeting.path);
+    this.editingMeeting = meeting.path;
+    this.render();
+    return true;
+  }
+
+  async saveMeetingEdit(key) {
+    const draft = this.meetingDraft(key);
+    const path = draft.editPath;
+    if (!draft.title.trim()) { new Notice("Give the meeting a title."); return false; }
+    if (!isoDate(draft.date)) { new Notice("Pick a meeting date."); return false; }
+    const project = draft.project || "";
+    const sections = meetingSectionText(draft, slugify(project), this.today());
+    const attendees = [...draft.attendees, ...splitList(draft.others)];
+    let target = path;
+    const ok = await this.runWrite(async () => {
+      await this.writer.setFrontmatter(path, { kind: draft.kind, date: draft.date, time: draft.time || "", project: project ? wikiLink(project) : "", attendees: attendees.map(wikiLink) });
+      for (const [heading, text] of [["## Agenda", sections.agenda], ["## Notes", sections.notes], ["## Decisions", sections.decisions], ["## Action items", sections.actions]]) {
+        await this.writer.replaceSection(path, heading, text);
+      }
+      const newTitle = safeFileName(`${draft.date} ${draft.title.trim()}`);
+      if (newTitle !== draft.originalTitle) {
+        target = await this.writer.renameNote(path, newTitle);
+        await this.rewriteReferences([{ oldTitle: draft.originalTitle, newTitle, prefix: "" }]);
+      }
+    }, "Meeting minutes updated.");
+    if (ok) {
+      this.discardMeetingDraft(key);
+      this.editingMeeting = null;
+      (this.expandedMeetings ||= new Set()).add(target);
+      this.render();
+    }
+    return ok;
   }
 
   async saveMeetingDraft(key, { project = "" } = {}) {
@@ -4497,6 +4641,10 @@ class LifeOSHomeView extends ItemView {
       this.render();
     });
     if (!expanded) return;
+    if (this.editingMeeting === meeting.path) {
+      this.renderMeetingComposer(card, { key: `edit:${meeting.path}` });
+      return;
+    }
     const body = card.createDiv({ cls: "life-os-meeting-body" });
     this.renderPropertyForm(body, meeting);
     const decisions = this.taskSnapshot?.sections?.[meeting.path]?.decisions || [];
@@ -4523,6 +4671,7 @@ class LifeOSHomeView extends ItemView {
       const ok = await this.runWrite(() => this.writer.appendUnderHeading(meeting.path, "## Notes", lines.join("\n")), "Note added to the minutes.");
       if (ok) { delete drafts[meeting.path]; this.render(); }
     }, { icon: "plus", primary: true });
+    this.addSmallButton(note, "Edit minutes", () => this.startMeetingEdit(meeting), { icon: "pencil", title: `Edit minutes of ${this.getFileTitle(meeting)}` });
     this.addSmallButton(note, "Open", () => this.openPath(meeting.path), { icon: "file-text" });
     this.renderItemActions(note, meeting);
   }
@@ -4937,25 +5086,22 @@ class LifeOSHomeView extends ItemView {
       wrap.createSpan({ cls: "life-os-field-label", text: field.label });
       const label = `${field.label} of ${title}`;
       if (field.kind === "people") {
-        const row = wrap.createDiv({ cls: "life-os-property-people" });
-        for (const name of current) {
-          const chip = row.createSpan({ cls: "life-os-chip is-person" });
-          chip.createSpan({ text: name });
-          const remove = chip.createEl("button", { cls: "life-os-chip-remove", text: "×", attr: { "aria-label": `Remove ${name} from ${field.label.toLowerCase()}` } });
-          remove.type = "button";
-          this.registerDomEvent(remove, "click", () => void save(field, current.filter((item) => item !== name)));
-        }
-        const candidates = this.data.people().map((person) => this.getFileTitle(person)).filter((name) => !current.includes(name));
-        if (candidates.length) {
-          this.addSelect(row, `Add to ${label}`, [{ value: "", label: "+ Add person" }, ...candidates], "", (value) => (value ? save(field, [...current, value]) : null));
-        }
-        if (!current.length && !candidates.length) row.createSpan({ cls: "life-os-field-hint", text: "No people notes yet." });
+        this.renderPeoplePicker(wrap, { label, noun: field.label.toLowerCase(), selected: current, onChange: (next) => save(field, next) });
       } else if (["select", "project", "doc"].includes(field.kind)) {
         this.addSelect(wrap, label, this.propertyOptions(field, file, current), current, (value) => save(field, value));
       } else {
         const type = { email: "email", date: "date", time: "time", number: "number" }[field.kind] || "text";
         const input = wrap.createEl("input", { cls: "life-os-input", attr: { type, "aria-label": label, placeholder: field.kind === "list" ? "Comma separated" : "" } });
         input.value = current;
+        if (field.suggest) {
+          const values = knownValues(this.data.typed(String(data.type), null, { includeArchived: true }).map((item) => this.getFrontmatter(item)), field.key);
+          if (values.length) {
+            const id = `devos-suggest-${field.key}`;
+            const list = wrap.createEl("datalist", { attr: { id } });
+            for (const value of values) list.createEl("option", { attr: { value } });
+            input.setAttribute("list", id);
+          }
+        }
         this.registerDomEvent(input, "change", () => void save(field, input.value));
       }
     }
@@ -5015,22 +5161,32 @@ class LifeOSHomeView extends ItemView {
     for (const [id, label] of [["all", "All"], ["discuss", "To discuss"], ["weekly", "Meets weekly"], ["archived", "Archived"]]) {
       const button = toolbar.createEl("button", { cls: "life-os-filter", text: label, attr: { "aria-pressed": String(filter === id) } });
       button.type = "button";
-      this.registerDomEvent(button, "click", () => { this.peopleFilter = id; this.render(); });
+      this.registerDomEvent(button, "click", () => { this.peopleFilter = id; this.peoplePage = 0; this.render(); });
     }
     this.addSmallButton(toolbar, "New person", () => this.openForm("person"), { icon: "user-plus", primary: true });
     this.addBaseButton(toolbar, "people");
+    const query = String(this.peopleQuery || "").trim().toLowerCase();
+    const search = section.createEl("input", { cls: "life-os-input life-os-people-search", attr: { type: "search", placeholder: "Search by name, role, company, email, or cadence", "aria-label": "Search people", value: this.peopleQuery || "" } });
+    search.value = this.peopleQuery || "";
+    this.refocusIf(search, "Search people");
+    this.registerDomEvent(search, "input", () => { this.peopleQuery = search.value; this.peoplePage = 0; this.refocusLabel = "Search people"; this.forceRender = true; try { this.render(); } finally { this.forceRender = false; } });
     const visible = people.filter((file) => {
       const data = this.getFrontmatter(file);
+      if (query && ![this.getFileTitle(file), data.role, data.company, data.email, data.meets].some((value) => String(value || "").toLowerCase().includes(query))) return false;
       if (filter === "archived") return isArchivedData(data);
       if (filter === "discuss") return stats.get(file.path).discuss > 0;
       if (filter === "weekly") return String(data.meets || "").toLowerCase() === "weekly";
       return true;
     });
+    const pageSize = 12;
+    const pages = Math.max(1, Math.ceil(visible.length / pageSize));
+    const page = Math.min(Math.max(0, this.peoplePage || 0), pages - 1);
+    const shown = visible.slice(page * pageSize, page * pageSize + pageSize);
     if (!visible.length) {
-      section.createDiv({ cls: "life-os-live-empty", text: people.length ? "Nobody matches this filter." : "No people notes yet. Add a teammate or stakeholder." });
+      section.createDiv({ cls: "life-os-live-empty", text: people.length ? "Nobody matches this search or filter." : "No people notes yet. Add a teammate or stakeholder." });
     } else {
       const grid = section.createDiv({ cls: "life-os-project-grid" });
-      for (const file of visible) {
+      for (const file of shown) {
         const data = this.getFrontmatter(file);
         const count = stats.get(file.path);
         const card = grid.createDiv({ cls: "life-os-project-card life-os-person-card" });
@@ -5046,6 +5202,14 @@ class LifeOSHomeView extends ItemView {
         if (data.meets) this.addChip(controls, `Meets ${data.meets}`);
         if (isArchivedData(data)) this.addChip(controls, "Archived", "is-archived");
         this.renderItemActions(controls, file);
+      }
+      if (pages > 1) {
+        const pager = section.createDiv({ cls: "life-os-pager" });
+        const previous = this.addSmallButton(pager, "Previous", () => { this.peoplePage = page - 1; this.render(); }, { icon: "chevron-left" });
+        previous.disabled = page === 0;
+        pager.createSpan({ text: `${page * pageSize + 1}-${page * pageSize + shown.length} of ${visible.length}` });
+        const next = this.addSmallButton(pager, "Next", () => { this.peoplePage = page + 1; this.render(); }, { icon: "chevron-right" });
+        next.disabled = page >= pages - 1;
       }
     }
     const entries = visible.flatMap((file) => this.tasksForPerson(file).filter((task) => task.discuss && !task.closed).map((task) => ({ file, task })));
@@ -5296,7 +5460,7 @@ class LifeOSHomeView extends ItemView {
       return wrap;
     };
     for (const [key, text] of [["due", "Due"], ["scheduled", "Scheduled"]]) {
-      const input = field(text).createEl("input", { cls: "life-os-input", attr: { type: "date", "aria-label": `${text} date` } });
+      const input = field(text).createEl("input", { cls: "life-os-input", attr: { type: "date", "aria-label": `Task ${text.toLowerCase()} date` } });
       input.value = task[key] || "";
       this.registerDomEvent(input, "change", () => void save({ [key]: input.value }, input.value ? `${text} ${input.value}.` : `${text} date cleared.`));
     }
@@ -5402,6 +5566,9 @@ class LifeOSHomeView extends ItemView {
     const titles = Object.fromEntries(this.data.people({ includeArchived: true }).map((file) => [slugify(this.getFileTitle(file)), this.getFileTitle(file)]));
     const views = taskViews(open, this.taskSnapshot?.closedTasks || [], this.today(), titles);
     const count = (groups) => groups.reduce((sum, group) => sum + group.tasks.length, 0);
+    const create = parent.createDiv({ cls: "life-os-toolbar" });
+    this.addSmallButton(create, "New task", () => this.openNewTaskForm(), { icon: "plus", primary: true });
+    this.renderQuickAdd(parent, { heading: "Quick add" });
     const bar = parent.createDiv({ cls: "life-os-toolbar life-os-focus-views" });
     for (const [id, label] of [["attention", "By urgency"], ["next7", "Next 7 days"], ["discuss", "To discuss"], ["high", "High, no date"], ["inbox", "Inbox"], ["done", "Done this week"]]) {
       const text = id === "attention" ? label : `${label} · ${this.taskSnapshot ? count(views[id]) : "..."}`;
@@ -5530,6 +5697,100 @@ class LifeOSHomeView extends ItemView {
         this.renderTaskList(group, items, { context: true, statusControl: label !== "Done in the last 14 days" });
       }
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Searchable people picker: chips for the chosen, one input with suggestions
+
+  renderPeoplePicker(parent, { label, noun = "people", selected = [], onChange, allowFree = false }) {
+    const picker = parent.createDiv({ cls: "life-os-people-picker" });
+    const chips = picker.createDiv({ cls: "life-os-property-people" });
+    const people = this.data.people().map((person) => this.getFileTitle(person));
+    const known = new Set(people);
+    for (const name of selected) {
+      const chip = chips.createSpan({ cls: `life-os-chip is-person${known.has(name) ? "" : " is-free"}` });
+      chip.createSpan({ text: name });
+      const remove = chip.createEl("button", { cls: "life-os-chip-remove", text: "×", attr: { "aria-label": `Remove ${name} from ${noun}` } });
+      remove.type = "button";
+      this.registerDomEvent(remove, "click", () => void onChange(selected.filter((item) => item !== name)));
+    }
+    const candidates = people.filter((name) => !selected.includes(name));
+    if (!candidates.length && !allowFree) {
+      if (!selected.length) chips.createSpan({ cls: "life-os-field-hint", text: "No people notes yet." });
+      return picker;
+    }
+    const id = `devos-people-${slugify(label)}-${Math.random().toString(36).slice(2, 7)}`;
+    const input = picker.createEl("input", { cls: "life-os-input", attr: { type: "search", list: id, placeholder: allowFree ? `Search ${people.length} people or type a name` : `Search ${people.length} people`, "aria-label": label, autocomplete: "off" } });
+    const list = picker.createEl("datalist", { attr: { id } });
+    for (const name of candidates) list.createEl("option", { attr: { value: name } });
+    this.refocusIf(input, label);
+    const add = (commit) => {
+      const value = String(input.value || "").replace(/\s+/g, " ").trim();
+      if (!value) return;
+      const match = people.find((name) => name.toLowerCase() === value.toLowerCase());
+      if (!match && !(allowFree && commit)) return;
+      const name = match || value;
+      input.value = "";
+      if (selected.includes(name)) return;
+      this.refocusLabel = label;
+      void onChange([...selected, name]);
+    };
+    this.registerDomEvent(input, "change", () => add(false));
+    this.registerDomEvent(input, "keydown", (event) => {
+      if (event.key === "Enter") { event.preventDefault?.(); add(true); }
+    });
+    return picker;
+  }
+
+  // Puts focus back into an input that caused a re-render.
+  refocusIf(input, label) {
+    if (this.refocusLabel !== label) return;
+    this.refocusLabel = null;
+    globalThis.setTimeout?.(() => {
+      input.focus?.();
+      const end = String(input.value || "").length;
+      try { input.setSelectionRange?.(end, end); } catch (error) { /* type=search may not support it */ }
+    }, 0);
+  }
+
+  // ---------------------------------------------------------------------------
+  // New task from the Tasks screen
+
+  openNewTaskForm(preset = {}) {
+    const projects = projectOptions(this.data);
+    const sprints = [{ value: "", label: "Backlog" }, ...this.data.sprints().filter((file) => String(this.getFrontmatter(file).status || "") !== "closed").map((file) => ({ value: slugify(this.getFileTitle(file)), label: this.getFileTitle(file) }))];
+    const modal = new LifeOSFormModal(this.app, {
+      title: "New task",
+      description: "With a project it goes under the project's task heading; without one, into the Inbox of 08 Tasks/Tasks.md.",
+      fields: [
+        { key: "text", label: "Task", required: true, wide: true, value: preset.text || "" },
+        { key: "project", label: "Project", type: "select", options: projects, value: preset.project || this.settingsSnapshot().defaultProject || "" },
+        { key: "sprint", label: "Sprint", type: "select", options: sprints, value: preset.sprint || "" },
+        { key: "owner", label: "Owner", type: "select", options: personOptions(this.data, "Me"), value: preset.owner || "" },
+        { key: "due", label: "Due", type: "date", value: preset.due || "" },
+        { key: "scheduled", label: "Scheduled", type: "date", value: preset.scheduled || "" },
+        { key: "high", label: "High priority", type: "checkbox", value: Boolean(preset.high) },
+        { key: "discuss", label: "To discuss", type: "checkbox", value: Boolean(preset.discuss) },
+        { key: "blocked", label: "Blocked", type: "checkbox", value: false },
+      ],
+      submitLabel: "Add task",
+      onSubmit: async (values) => {
+        const project = values.project ? this.data.fileByTitle(values.project, this.data.projects()) : null;
+        const text = `${values.text}${values.discuss && !/(^|\s)#discuss(\s|$)/.test(values.text) ? " #discuss" : ""}`;
+        const line = buildTaskLine({ ...values, text, project: project ? slugify(this.getFileTitle(project)) : "", created: this.today() });
+        if (!line) throw new Error("Write the task first.");
+        const path = project ? project.path : "08 Tasks/Tasks.md";
+        if (project) await this.writer.appendUnderHeading(path, this.settingsSnapshot().taskHeading || "## Tasks", line, ["## Tasks", "## Inline tasks"]);
+        else await this.writer.appendUnderHeading(path, "## Inbox", line);
+        new Notice(project ? `Task added to ${this.getFileTitle(project)}.` : "Task added to the inbox.");
+        await this.refreshLiveData();
+        const created = this.allTasks().find((task) => task.path === path && task.raw === line);
+        if (created) this.openTask(created);
+        return true;
+      },
+    });
+    modal.open();
+    return modal;
   }
 
   // ---------------------------------------------------------------------------
@@ -5852,7 +6113,7 @@ class LifeOSHomeView extends ItemView {
       for (const dep of this.openDependencies(task, byId)) {
         const button = chain.createEl("button", { cls: "life-os-link-row", text: `${dep.display}${dep.owners?.length ? ` · #p/${dep.owners[0]}` : ""}${dep.due ? ` · due ${dep.due}` : ""}` });
         button.type = "button";
-        this.registerDomEvent(button, "click", () => void this.openPath(dep.path, dep.line));
+        this.registerDomEvent(button, "click", () => void this.openTaskTarget(dep));
       }
     }
 

@@ -2006,3 +2006,12 @@
 }
 .life-os-task-panel .life-os-flags { justify-content: flex-start; }
 .life-os-question-bars .life-os-wheel-row strong { white-space: nowrap; font-size: 0.72rem; }
+
+/* Dev OS 1.6: people picker, people search and paging, meeting edit */
+.life-os-people-picker { display: grid; gap: 6px; min-width: 0; }
+.life-os-people-picker .life-os-input { width: 100%; max-width: 360px; }
+.life-os-chip.is-free { border-style: dashed; }
+.life-os-home .life-os-people-search { width: 100%; max-width: 460px; margin: 4px 0 12px; }
+.life-os-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; margin: 14px 0 4px; color: var(--text-muted); font-size: 0.76rem; }
+.life-os-composer.is-editing { margin: 10px; border-color: color-mix(in srgb, var(--life-os-accent) 45%, var(--life-os-line)); }
+.life-os-people-row > .life-os-people-picker { flex: 1 1 260px; }
