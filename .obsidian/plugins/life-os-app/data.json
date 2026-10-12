@@ -1,0 +1,57 @@
+{
+  "showPersonal": false,
+  "includeSamples": false,
+  "showVisuals": true,
+  "compactLayout": false,
+  "itemLimit": 6,
+  "defaultProject": "",
+  "me": "",
+  "taskHeading": "## Tasks",
+  "taskClick": "panel",
+  "projectTabs": {
+    "04 Projects/CQM Agent.md": "tasks",
+    "04 Projects/eKiosk.md": "overview"
+  },
+  "meetingDrafts": {
+    "person:05 People/Štěpán Holík.md": {
+      "title": "",
+      "date": "2026-10-11",
+      "time": "",
+      "kind": "meeting",
+      "attendees": [],
+      "others": "",
+      "agenda": "",
+      "notes": "",
+      "decisions": [
+        ""
+      ],
+      "actions": [
+        {
+          "text": "",
+          "owner": "",
+          "due": ""
+        }
+      ]
+    },
+    "person:05 People/Adam Farník.md": {
+      "title": "",
+      "date": "2026-10-12",
+      "time": "",
+      "kind": "meeting",
+      "attendees": [],
+      "others": "",
+      "agenda": "",
+      "notes": "",
+      "decisions": [
+        ""
+      ],
+      "actions": [
+        {
+          "text": "",
+          "owner": "",
+          "due": ""
+        }
+      ]
+    }
+  }
+}
