@@ -1,6 +1,7 @@
 const {
   Component,
   ItemView,
+  MarkdownRenderer,
   Modal,
   Notice,
   Plugin,
@@ -898,6 +899,39 @@ function orgChart(people = []) {
   };
   const roots = people.map((person) => person.title).filter((title) => !supervisorOf.has(title)).sort((a, b) => a.localeCompare(b));
   return { supervisorOf, reportsOf, roots, chain, descendants, missing, cycles };
+}
+
+// GitHub: Dev OS only parses links and writes `github-query` blocks. The
+// GitHub Link plugin (id github-link) renders them and talks to GitHub.
+const GITHUB_ITEM = /https?:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/(issues|pull)\/(\d+)(?:\/[^\s)\]]*)?/gi;
+
+function parseGithubRepo(value) {
+  const text = String(value || "").trim();
+  const match = text.match(/^(?:https?:\/\/github\.com\/|git@github\.com:)?([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:[/?#].*)?$/i);
+  if (!match || (!/github\.com/i.test(text) && text.includes(":"))) return null;
+  if (!/github\.com/i.test(text) && text.split("/").length !== 2) return null;
+  return { owner: match[1], repo: match[2], url: `https://github.com/${match[1]}/${match[2]}` };
+}
+
+function githubLinks(text) {
+  const out = [];
+  for (const match of String(text || "").matchAll(GITHUB_ITEM)) {
+    const url = `https://github.com/${match[1]}/${match[2]}/${match[3].toLowerCase()}/${match[4]}`;
+    if (out.some((item) => item.url === url)) continue;
+    out.push({ url, raw: match[0], owner: match[1], repo: match[2], kind: match[3].toLowerCase() === "pull" ? "pull" : "issue", number: Number(match[4]) });
+  }
+  return out;
+}
+
+function withoutGithubLinks(text) {
+  return String(text || "").replace(GITHUB_ITEM, " ").replace(/\s+/g, " ").trim();
+}
+
+function githubQueryBlock({ queryType = "issue", owner, repo, state = "open", columns = [], perPage = 20, sort = "updated" }) {
+  const lines = ["```github-query", "outputType: table", `queryType: ${queryType}`, `org: ${owner}`, `repo: ${repo}`, `state: ${state}`, `sort: ${sort}`, "direction: desc", `per_page: ${perPage}`];
+  if (columns.length) lines.push(`columns: [${columns.join(", ")}]`);
+  lines.push("```");
+  return lines.join("\n");
 }
 
 function newTaskId(existing = new Set()) {
@@ -2243,6 +2277,8 @@ class LifeOSHomeView extends ItemView {
 
   render(force = false) {
     if (!force && this.activeScreen === "brain" && this.embeddedBrain) return;
+    for (const observer of this.githubObservers || []) observer.disconnect();
+    this.githubObservers = [];
     this.closeBrain();
     const root = this.contentEl;
     root.empty();
@@ -3927,10 +3963,11 @@ class LifeOSHomeView extends ItemView {
     this.registerDomEvent(check, "change", () => void this.runWrite(() => this.writer.toggleTask(task), task.closed ? "Task reopened." : "Task completed."));
     const open = row.createEl("button", { cls: "life-os-task-open", attr: { title: "Show task details" } });
     open.type = "button";
-    open.createEl("strong", { text: task.display || task.text });
+    open.createEl("strong", { text: withoutGithubLinks(task.display || task.text) || task.display || task.text });
     if (context) open.createSpan({ text: this.getTaskContext(task) });
     this.registerDomEvent(open, "click", () => void this.openTaskTarget(task));
     const meta = row.createDiv({ cls: "life-os-task-meta" });
+    this.renderGithubChips(meta, task.raw);
     if (task.blocked && !task.closed) meta.createSpan({ cls: "life-os-task-badge is-blocked", text: "Blocked" });
     if (task.inProgress) meta.createSpan({ cls: "life-os-task-badge is-progress", text: "In progress" });
     if (task.high && !task.closed) meta.createSpan({ cls: "life-os-task-priority", text: "High" });
@@ -4327,7 +4364,7 @@ class LifeOSHomeView extends ItemView {
     const meetings = this.data.forProject(this.data.meetings(scope), file).sort((a, b) => String(this.getFrontmatter(b).date || "").localeCompare(String(this.getFrontmatter(a).date || "")));
     const docs = [...this.data.forProject(this.data.docs(scope), file), ...this.data.forProject(this.data.releases(scope), file)];
     const clips = this.data.forProject(this.data.clippings(scope), file);
-    for (const [id, label, count] of [["overview", "Overview", null], ["tasks", "Tasks", progress.open], ["meetings", "Meetings", meetings.length], ["docs", "Docs", docs.length], ["clips", "Clips", clips.length]]) {
+    for (const [id, label, count] of [["overview", "Overview", null], ["tasks", "Tasks", progress.open], ["meetings", "Meetings", meetings.length], ["docs", "Docs", docs.length], ["clips", "Clips", clips.length], ...(parseGithubRepo(data.repo) ? [["github", "GitHub", null]] : [])]) {
       const button = tabs.createEl("button", { cls: "life-os-tab", text: count === null ? label : `${label} · ${count}`, attr: { role: "tab", "aria-selected": String(tab === id) } });
       button.type = "button";
       this.registerDomEvent(button, "click", () => { this.setProjectTab(file.path, id); this.render(); });
@@ -4338,6 +4375,7 @@ class LifeOSHomeView extends ItemView {
     else if (tab === "meetings") this.renderProjectMeetings(panel, context);
     else if (tab === "docs") this.renderProjectDocs(panel, context);
     else if (tab === "clips") this.renderProjectClips(panel, context);
+    else if (tab === "github") this.renderProjectGithub(panel, context);
     else this.renderProjectOverview(panel, context);
   }
 
@@ -4839,10 +4877,11 @@ class LifeOSHomeView extends ItemView {
         const card = column.createDiv({ cls: `life-os-board-card${task.blocked && !task.closed ? " is-blocked" : ""}` });
         const open = card.createEl("button", { cls: "life-os-task-open" });
         open.type = "button";
-        open.createEl("strong", { text: task.display });
+        open.createEl("strong", { text: withoutGithubLinks(task.display) || task.display });
         open.createSpan({ text: this.getTaskContext(task) });
         this.registerDomEvent(open, "click", () => void this.openTaskTarget(task));
         const meta = card.createDiv({ cls: "life-os-task-meta" });
+        this.renderGithubChips(meta, task.raw);
         if (task.blocked && !task.closed) meta.createSpan({ cls: "life-os-task-badge is-blocked", text: "Blocked" });
         if (task.high && !task.closed) meta.createSpan({ cls: "life-os-task-priority", text: "High" });
         const waits = task.closed ? [] : this.openDependencies(task);
@@ -5536,10 +5575,15 @@ class LifeOSHomeView extends ItemView {
     }
     const save = (patch, message) => this.runWrite(() => this.writer.editTask(task, patch), message);
     const title = aside.createEl("textarea", { cls: "life-os-textarea life-os-task-panel-title", attr: { rows: "2", "aria-label": "Task text" } });
-    title.value = task.display || task.text;
+    // The line's own text, without tags and fields; GitHub URLs stay out of
+    // the title field and are kept when the title changes.
+    const plainText = splitTaskBody((String(task.raw).match(TASK_LINE) || [])[4] || "").text;
+    const titleLinks = githubLinks(plainText);
+    const titleText = withoutGithubLinks(plainText) || plainText;
+    title.value = titleText;
     this.registerDomEvent(title, "change", () => {
       const text = title.value.replace(/\s+/g, " ").trim();
-      if (text && text !== (task.display || task.text)) void save({ text }, "Task renamed.");
+      if (text && text !== titleText) void save({ text: [text, ...titleLinks.map((link) => link.url)].join(" ") }, "Task renamed.");
     });
 
     const status = aside.createDiv({ cls: "life-os-segmented", attr: { role: "group", "aria-label": "Task status" } });
@@ -5626,6 +5670,25 @@ class LifeOSHomeView extends ItemView {
         this.registerDomEvent(button, "click", () => this.openTask(other));
       }
     }
+
+    const github = aside.createDiv({ cls: "life-os-task-panel-section" });
+    github.createEl("h4", { text: "GitHub" });
+    const links = titleLinks;
+    const baseText = plainText;
+    if (!links.length) github.createEl("p", { cls: "life-os-field-hint", text: "No issue or pull request linked." });
+    for (const link of links) {
+      const row = github.createDiv({ cls: "life-os-task-panel-link" });
+      if (this.githubLinkReady()) this.renderGithubMarkdown(row, link.url, task.path);
+      else this.externalLink(row, link.url, `${link.owner}/${link.repo} ${link.kind === "pull" ? "PR" : "issue"} #${link.number}`);
+      this.addSmallButton(row, "", () => save({ text: baseText.replace(link.raw, " ").replace(/\s+/g, " ").trim() }, "GitHub link removed."), { icon: "x", title: `Unlink ${link.kind === "pull" ? "PR" : "issue"} #${link.number}` });
+    }
+    const paste = github.createEl("input", { cls: "life-os-input", attr: { type: "url", placeholder: "Paste an issue or PR URL", "aria-label": "Link a GitHub issue or PR" } });
+    this.registerDomEvent(paste, "change", () => {
+      const link = githubLinks(paste.value)[0];
+      if (!link) { new Notice("Paste a GitHub issue or pull request URL."); return; }
+      if (links.some((item) => item.url === link.url)) { paste.value = ""; return; }
+      void save({ text: `${baseText} ${link.url}` }, `${link.kind === "pull" ? "PR" : "Issue"} #${link.number} linked.`);
+    });
 
     const context = aside.createDiv({ cls: "life-os-task-panel-section" });
     context.createEl("h4", { text: "Context" });
@@ -5863,6 +5926,7 @@ class LifeOSHomeView extends ItemView {
       description: "With a project it goes under the project's task heading; without one, into the Inbox of 08 Tasks/Tasks.md.",
       fields: [
         { key: "text", label: "Task", required: true, wide: true, value: preset.text || "" },
+        { key: "github", label: "GitHub issue or PR URL", type: "url", wide: true, value: preset.github || "", placeholder: "https://github.com/owner/repo/issues/12" },
         { key: "project", label: "Project", type: "select", options: projects, value: preset.project || this.settingsSnapshot().defaultProject || "" },
         { key: "sprint", label: "Sprint", type: "select", options: sprints, value: preset.sprint || "" },
         { key: "owner", label: "Owner", type: "select", options: personOptions(this.data, "Me"), value: preset.owner || "" },
@@ -5875,7 +5939,10 @@ class LifeOSHomeView extends ItemView {
       submitLabel: "Add task",
       onSubmit: async (values) => {
         const project = values.project ? this.data.fileByTitle(values.project, this.data.projects()) : null;
-        const text = `${values.text}${values.discuss && !/(^|\s)#discuss(\s|$)/.test(values.text) ? " #discuss" : ""}`;
+        const github = String(values.github || "").trim();
+        if (github && !githubLinks(github).length) throw new Error("The GitHub field takes an issue or pull request URL.");
+        const githubUrl = github ? githubLinks(github)[0].url : "";
+        const text = `${values.text}${githubUrl && !values.text.includes(githubUrl) ? ` ${githubUrl}` : ""}${values.discuss && !/(^|\s)#discuss(\s|$)/.test(values.text) ? " #discuss" : ""}`;
         const line = buildTaskLine({ ...values, text, project: project ? slugify(this.getFileTitle(project)) : "", created: this.today() });
         if (!line) throw new Error("Write the task first.");
         const path = project ? project.path : "08 Tasks/Tasks.md";
@@ -5997,6 +6064,115 @@ class LifeOSHomeView extends ItemView {
       for (const report of reports) node(below, report);
     }
     if (!chain.length && !reports.length) box.createEl("p", { cls: "life-os-field-hint", text: "No supervisor and no direct reports. Set Supervisor above, or add a direct report." });
+  }
+
+  // ---------------------------------------------------------------------------
+  // GitHub, rendered by the GitHub Link plugin; Dev OS makes no network calls
+
+  githubLinkReady() {
+    return Boolean(this.app.plugins?.getPlugin?.("github-link"));
+  }
+
+  // Renders Markdown with Obsidian's renderer so GitHub Link's code block
+  // processor and link tags run inside Dev OS.
+  renderGithubMarkdown(parent, markdown, sourcePath = "") {
+    const host = parent.createDiv({ cls: "life-os-github-render" });
+    if (typeof MarkdownRenderer?.render === "function") {
+      Promise.resolve(MarkdownRenderer.render(this.app, markdown, host, sourcePath, this)).catch(() => {
+        host.createEl("p", { cls: "life-os-field-hint", text: "GitHub Link could not render this view." });
+      });
+    } else {
+      host.createEl("pre", { text: markdown });
+    }
+    return host;
+  }
+
+  renderGithubSetup(parent, repo) {
+    const card = parent.createDiv({ cls: "life-os-panel-card life-os-github-setup" });
+    card.createEl("h3", { text: "Connect GitHub Link" });
+    card.createEl("p", { text: "Pull requests, issues, and live link tags come from the GitHub Link community plugin, which talks to GitHub. Dev OS only shows what it renders. Public repositories work without a token; private ones need a token in GitHub Link's settings (stored in plain text in its data.json, which this vault's .gitignore excludes)." });
+    const actions = card.createDiv({ cls: "life-os-form-actions" });
+    actions.createEl("a", { cls: "life-os-small-button is-primary", text: "Install GitHub Link", attr: { href: "obsidian://show-plugin?id=github-link" } });
+    if (repo) {
+      this.externalLink(actions, `${repo.url}/pulls`, "Pull requests on GitHub");
+      this.externalLink(actions, `${repo.url}/issues`, "Issues on GitHub");
+      this.externalLink(actions, `${repo.url}/branches`, "Branches on GitHub");
+    }
+    return card;
+  }
+
+  renderGithubChips(parent, text) {
+    for (const link of githubLinks(text)) {
+      const chip = this.externalLink(parent, link.url, `${link.kind === "pull" ? "PR" : "Issue"} #${link.number}`);
+      chip?.addClass("life-os-github-chip");
+      chip?.setAttribute("title", `${link.owner}/${link.repo} ${link.kind === "pull" ? "pull request" : "issue"} #${link.number}`);
+    }
+  }
+
+  // Adds "+ Task" to each issue row GitHub Link renders.
+  decorateIssueRows(container, project, linked = new Set()) {
+    const rows = container.querySelectorAll?.("tr") || [];
+    for (const row of rows) {
+      if (row.dataset?.devOsTask) continue;
+      const link = [...(row.querySelectorAll?.("a[href]") || [])].map((anchor) => anchor.getAttribute("href")).find((href) => githubLinks(href).some((item) => item.kind === "issue"));
+      if (!link) continue;
+      const issue = githubLinks(link)[0];
+      row.dataset.devOsTask = "1";
+      const cell = row.createEl ? row.createEl("td", { cls: "life-os-github-add" }) : null;
+      if (!cell) continue;
+      const cells = [...row.querySelectorAll("td")].map((td) => td.textContent.trim()).filter((text) => text && !/^#?\d+$/.test(text));
+      const title = cells.sort((a, b) => b.length - a.length)[0] || `Issue #${issue.number}`;
+      if (linked.has(issue.url)) { cell.createSpan({ cls: "life-os-chip", text: "Linked" }); continue; }
+      this.addSmallButton(cell, "Task", () => this.openNewTaskForm({ text: title, github: issue.url, project }), { icon: "plus", title: `New task for issue #${issue.number}` });
+    }
+  }
+
+  renderProjectGithub(panel, { file, data, tasks }) {
+    const repo = parseGithubRepo(data.repo);
+    const title = this.getFileTitle(file);
+    if (!repo) {
+      panel.createDiv({ cls: "life-os-live-empty", text: "Set the Repository field in the header to a GitHub URL (https://github.com/owner/repo)." });
+      return;
+    }
+    const section = panel.createDiv({ cls: "life-os-github" });
+    const toolbar = section.createDiv({ cls: "life-os-toolbar" });
+    toolbar.createEl("strong", { text: `${repo.owner}/${repo.repo}` });
+    const state = this.githubState === "all" ? "all" : "open";
+    const toggle = toolbar.createDiv({ cls: "life-os-segmented", attr: { role: "group", "aria-label": "GitHub state" } });
+    for (const [id, label] of [["open", "Open"], ["all", "All"]]) {
+      const button = toggle.createEl("button", { text: label, attr: { "aria-pressed": String(state === id) } });
+      button.type = "button";
+      this.registerDomEvent(button, "click", () => { this.githubState = id; this.render(); });
+    }
+    this.externalLink(toolbar, `${repo.url}/branches`, "Branches");
+    this.externalLink(toolbar, `${repo.url}/compare`, "Compare");
+    this.addSmallButton(toolbar, "Task from GitHub URL", () => this.openNewTaskForm({ project: title }), { icon: "plus" });
+    if (!this.githubLinkReady()) {
+      this.renderGithubSetup(section, repo);
+    } else {
+      for (const [label, queryType, columns] of [
+        ["Pull requests", "pull-request", ["number", "title", "author", "status", "updated"]],
+        ["Issues", "issue", ["number", "title", "assignee", "labels", "pr"]],
+      ]) {
+        const card = section.createDiv({ cls: "life-os-panel-card life-os-github-table" });
+        card.createEl("h3", { text: label });
+        const host = this.renderGithubMarkdown(card, githubQueryBlock({ queryType, owner: repo.owner, repo: repo.repo, state, columns }), file.path);
+        if (queryType === "issue") {
+          const linkedUrls = new Set(tasks.flatMap((task) => githubLinks(task.raw).map((link) => link.url)));
+          this.decorateIssueRows(host, title, linkedUrls);
+          if (typeof MutationObserver === "function") {
+            const observer = new MutationObserver(() => this.decorateIssueRows(host, title, linkedUrls));
+            observer.observe(host, { childList: true, subtree: true });
+            (this.githubObservers ||= []).push(observer);
+          }
+        }
+      }
+    }
+    const linked = tasks.filter((task) => githubLinks(task.raw).length);
+    const box = section.createDiv({ cls: "life-os-panel-card" });
+    box.createEl("h3", { text: `Tasks linked to GitHub · ${linked.length}` });
+    if (!linked.length) box.createEl("p", { cls: "life-os-field-hint", text: "Paste an issue or PR URL into a task (task panel, GitHub) to link it." });
+    else this.renderTaskList(box, linked, { context: true, statusControl: true });
   }
 
   // ---------------------------------------------------------------------------

@@ -23,3 +23,6 @@ build/
 # Python bytecode from running the build and verify scripts
 __pycache__/
 *.pyc
+
+# GitHub Link stores account tokens in plain text in its plugin data.
+.obsidian/plugins/github-link/data.json
