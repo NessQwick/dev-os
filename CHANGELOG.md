@@ -4,6 +4,17 @@ Format: Added, Changed, Templates (manual merge notes), Plugins, Breaking. Semve
 
 ## Unreleased
 
+### Dev OS: application 1.8.0 candidate
+Added
+- **GitHub through the GitHub Link plugin.** It is optional and not bundled; Dev OS itself stays offline.
+  - **Project GitHub tab:** pull requests and issues (open or all), Branches and Compare links, and the tasks linked to GitHub.
+  - **Task on issue rows:** creates a task with the issue's title and URL. Issues that already have a task show Linked.
+  - **Task chips:** for example PR #12.
+  - **Task panel GitHub section:** link by pasting a URL, show live tags, unlink.
+  - **New task:** a GitHub URL field.
+  - **Setup card:** shown when GitHub Link is missing.
+- `.gitignore` excludes `.obsidian/plugins/github-link/data.json`, because GitHub Link keeps tokens there in plain text.
+
 ### Dev OS: application 1.7.0 candidate
 Added
 - **People hierarchy:** a `supervisor` link on person notes.

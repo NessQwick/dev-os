@@ -85,6 +85,26 @@ The ⋯ menu also has **Properties**, a dialog with the same fields and one Save
 
 The AI screen lists the notes in `Prompts/` with their purpose, when to use them, what they write, and the `risk` level, filtered by risk. **Copy instruction** copies the line the note's own button sends, for pasting into an agent chat. Dev OS never calls a model itself.
 
+## GitHub
+
+GitHub data in Dev OS comes from the **GitHub Link** community plugin (`github-link`, MIT). Dev OS has no network code; it writes GitHub Link's `github-query` blocks and lets Obsidian render them inside its screens. GitHub Link is not bundled. Install it from **Install GitHub Link** on the GitHub tab, or from Settings, Community plugins.
+- **Tokens:**
+  - Public repositories work without a token.
+  - Private repositories, and "assigned to me" queries, need an account and token in GitHub Link's settings.
+  - GitHub Link stores the token in plain text in `.obsidian/plugins/github-link/data.json`. This vault's `.gitignore` excludes that file and the template build drops it.
+- **Project GitHub tab.** It appears when the project's Repository is a GitHub URL (`https://github.com/owner/repo`, `owner/repo`, or `.git` forms).
+  - Open or all **Pull requests** and **Issues**, as GitHub Link tables.
+  - **Branches** and **Compare** open GitHub, because GitHub Link does not list branches.
+  - **Tasks linked to GitHub** lists the project's tasks that carry an issue or PR URL.
+- **Task from an issue.** Each issue row gets a **Task** button that opens New task with the issue title and URL filled in. Issues that already have a task show **Linked**. **Task from GitHub URL** works for any issue or PR.
+- **Tasks.**
+  - An issue or PR URL in a task's text is its link.
+  - Task rows hide the URL and show a chip such as **PR #12** that opens GitHub.
+  - The task panel's **GitHub** section shows the linked items (as live GitHub Link tags when the plugin is on), unlinks them, and takes a pasted URL.
+  - New task has a GitHub URL field.
+
+Without GitHub Link the tab shows the setup card and plain links to the repository's pull requests, issues, and branches.
+
 ## Bases tables
 
 `00 Dashboards/Bases/` holds Obsidian Bases tables over the same notes: Projects (Open, All, Archived), People, Meetings, Decisions and docs, Releases, and Clip inbox. They filter by `type`, so custom folders from Configure still work, and leave out sample notes. Projects, People, Meetings, Docs, Releases, and Inbox show **Open as table** when the file exists. The Projects and Decisions dashboards embed them. Editing a cell in Bases writes the note's property, the same data Dev OS reads.
@@ -288,8 +308,9 @@ Run `node scripts/verify_life_os_app.mjs .` for static contracts and a mock runt
 - the person page, property forms and the properties dialog, sprint details, the doc panel, the prompt library, and the Bases files
 - the task panel, Tasks views, sprint tabs, projects by quarter, the Review cards, and routing after create
 - editing saved minutes, the people picker, discarding drafts, People search and paging, remembered values, and New task
+- GitHub: repo and link parsing, `github-query` blocks, the setup card, the rendered tab, task chips, linking and unlinking in the panel, and New task with a link
 - the supervisor hierarchy: chart building, loop and missing-link detection, the person page reporting line, the org chart, New person with a supervisor, and reassigning reports on delete
 
 `PLAYWRIGHT_MODULE=<path to playwright> node scripts/verify_dashboard_view.mjs` exercises the same flows in Chromium with a synthetic vault at 1440, 900, 620, and 390 px. Neither replaces checking the view inside Obsidian after a reload; see [[23 Native Acceptance]].
 
-The application version is 1.7.0.
+The application version is 1.8.0.

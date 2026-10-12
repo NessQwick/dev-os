@@ -5,7 +5,7 @@ This separates reproducible development evidence from native acceptance. A local
 ## Identify the candidate
 
 - Template version: 1.1.0 candidate
-- Dev OS plugin (`life-os-app`) version: 1.7.0
+- Dev OS plugin (`life-os-app`) version: 1.8.0
 - Archive SHA256: use the exact candidate's external `.sha256` sidecar; not embedded here to avoid self-referential hashes
 - Operating system and Obsidian version: not recorded
 - Test date and reviewer: not recorded
@@ -37,6 +37,24 @@ Provider authentication, an actual AI request, external calendar integration, an
 ## Evidence rules
 
 Bind screenshots and results to the exact candidate checksum. Label synthetic fixtures visibly. Record failures and skipped checks. A passing static, mock-runtime, or browser test does not mark this record complete.
+
+## Development checks, 2026-10-12 (Dev OS 1.8.0)
+
+Dev OS application 1.8.0 passed 197 static and mock-runtime checks. New coverage:
+- GitHub repo and link parsing
+- `github-query` blocks
+- the setup card without GitHub Link
+- rendered PR and issue queries with a stand-in plugin
+- task chips
+- linking, refusing, and unlinking a URL in the task panel
+- New task with a link
+
+The browser fixture used a GitHub Link stand-in. It covered the GitHub tab, Task on an issue row, the Linked state after creating the task, and overflow at 390 px.
+
+Native check still required, with GitHub Link 1.3.0 installed and a public repo:
+- The pull request and issue tables render inside Dev OS.
+- Link tags render in the task panel.
+- The Task buttons attach to GitHub Link's real table rows.
 
 ## Development checks, 2026-10-12 (Dev OS 1.7.0)
 

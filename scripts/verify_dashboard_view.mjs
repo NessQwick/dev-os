@@ -51,7 +51,7 @@ try {
     add('06 Writing/Decisions/ADR-0001 Fixture decision.md',{type:'adr',adr_number:1,status:'proposed',date:'2026-09-08',project:'[[Synthetic project]]'});
     add('07 Library/Clippings/Fixture clip.md',{type:'clipping',status:'inbox',source:'https://example.invalid/clip',site:'example.invalid',clipped:'2026-09-09'});
     window.opened=[];window.commands=[];
-    const plugins={'agent-client':{settings:{autoAllowPermissions:false}},'obsidian-local-rest-api':{settings:{}}};
+    const plugins={'github-link':{settings:{}},'agent-client':{settings:{autoAllowPermissions:false}},'obsidian-local-rest-api':{settings:{}}};
     window.writes=[];
     const reindex=(path)=>{const body=contents.get(path)||'';metadata.get(path).listItems=body.split('\n').flatMap((line,i)=>{const m=line.match(/^- \[(.)\]/);return m?[{task:m[1],position:{start:{line:i}}}]:[];});};
     const app={vault:{getMarkdownFiles:()=>[...files.values()],getFiles:()=>[...files.values()],getAbstractFileByPath:p=>files.get(p),cachedRead:async f=>contents.get(f.path)||'',read:async f=>contents.get(f.path)||'',on(){},
@@ -59,7 +59,7 @@ try {
       create:async(p,c)=>{const fm={};for(const line of (c.match(/^---\n([\s\S]*?)\n---/)?.[1]||'').split('\n')){const m=line.match(/^(\w+): (.+)$/);if(m)fm[m[1]]=m[2].startsWith('"')?JSON.parse(m[2]):m[2];}add(p,fm,c);window.writes.push(['create',p]);return files.get(p);},createFolder:async()=>{}},
       fileManager:{processFrontMatter:async(f,fn)=>{fn(metadata.get(f.path).frontmatter);window.writes.push(['frontmatter',f.path]);},renameFile:async(f,t)=>{window.writes.push(['rename',f.path,t]);for(const store of [metadata,contents])if(store.has(f.path)){store.set(t,store.get(f.path));store.delete(f.path);}files.delete(f.path);files.set(t,new TFile(t));},trashFile:async(f)=>{window.writes.push(['trash',f.path]);files.delete(f.path);}},metadataCache:{getFileCache:f=>metadata.get(f.path),on(){}},plugins:{getPlugin:id=>plugins[id]},workspace:{getLeaf:()=>({openFile:async(f,o)=>window.opened.push({path:f.path,options:o})}),revealLeaf:async()=>{}},commands:{commands:{}}};
     const module={exports:{}};
-    const View=new Function('require','module',`${source};return LifeOSHomeView;`)(()=>({Component,ItemView,TFile,Plugin:class{},PluginSettingTab:class{},Setting:class{},Modal,Notice:class{},moment,setIcon(){}}),module);
+    const View=new Function('require','module',`${source};return LifeOSHomeView;`)(()=>({Component,ItemView,TFile,MarkdownRenderer:{render:async(app,md,el)=>{await new Promise(r=>setTimeout(r,20));if(md.includes('queryType: issue'))el.innerHTML='<table><tbody><tr><td><a href="https://github.com/acme/fixture/issues/3">#3</a></td><td>Broken login on Safari</td></tr></tbody></table>';else if(md.includes('queryType: pull-request'))el.innerHTML='<table><tbody><tr><td><a href="https://github.com/acme/fixture/pull/5">#5</a></td><td>Add cache</td></tr></tbody></table>';else el.innerHTML=`<a class="fixture-gh-tag" href="${md}">GitHub tag</a>`;}},Plugin:class{},PluginSettingTab:class{},Setting:class{},Modal,Notice:class{},moment,setIcon(){}}),module);
     const plugin={runCommand:(id)=>{window.commands.push(id);return true;},openCapture(){window.commands.push('capture');},activateView(){}};
     window.view=new View({app},plugin);await window.view.onOpen();
   }, fs.readFileSync('.obsidian/plugins/life-os-app/main.js','utf8'));
@@ -333,6 +333,28 @@ try {
   assert.equal(await page.locator('.life-os-project-headline .life-os-eyebrow').textContent(),'#project/fixture-platform');
   await page.getByRole('tab',{name:/^Tasks/}).click();
   assert.ok((await page.locator('.life-os-tab-panel').innerText()).includes('Build the fixture'));
+  // GitHub tab rendered through a GitHub Link stand-in; + Task on an issue row.
+  await page.evaluate(()=>{const f=window.view.app.vault.getAbstractFileByPath(window.view.activeProjectPath);window.view.getFrontmatter(f).repo='https://github.com/acme/fixture';window.view.render();});
+  await page.getByRole('tab',{name:'GitHub',exact:true}).click();
+  await page.waitForSelector('.life-os-github-add button');
+  assert.ok((await page.locator('.life-os-github-table').first().innerText()).includes('Add cache'));
+  await page.screenshot({path:'/tmp/life-os-github-tab.png',fullPage:true});
+  await page.locator('.life-os-github-add button').first().click();
+  assert.equal(await page.locator('.modal-fixture').getByLabel('Task',{exact:true}).inputValue(),'Broken login on Safari');
+  assert.equal(await page.locator('.modal-fixture').getByLabel('GitHub issue or PR URL',{exact:true}).inputValue(),'https://github.com/acme/fixture/issues/3');
+  await page.locator('.modal-fixture').getByRole('button',{name:'Add task'}).click();
+  await page.waitForSelector('.life-os-task-panel');
+  await page.waitForSelector('.life-os-task-panel .fixture-gh-tag');
+  assert.equal(await page.getByLabel('Task text',{exact:true}).inputValue(),'Broken login on Safari');
+  await page.screenshot({path:'/tmp/life-os-github-task.png',fullPage:true});
+  await page.getByRole('button',{name:'Close task details'}).click();
+  await page.waitForSelector('.life-os-github-chip');
+  await page.waitForFunction(()=>document.querySelector('.life-os-github-add')?.innerText.includes('Linked'));
+  for(const width of [390]){
+    await page.setViewportSize({width,height:900});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`github tab overflow at ${width}`);
+  }
+  await page.setViewportSize({width:1440,height:1000});
   // People: person page properties and a discussion topic; sprint details; doc panel; prompts; Bases button.
   const fm=(p)=>page.evaluate(p=>window.view.getFrontmatter(window.view.app.vault.getAbstractFileByPath(p)),p);
   await page.evaluate(()=>{window.view.projectFilter='open';window.view.activeScreen='people';window.view.render();});
@@ -447,5 +469,5 @@ try {
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.screenshot({path:'/tmp/life-os-home-light-candidate.png'});
   await page.evaluate(()=>window.view.onClose());
-  console.log('Dashboard browser checks passed: sixteen modules, Configure save and health check, project page tasks and minutes composer, sprint moves, inbox triage, roadmap bars and markers, waiting groups, task editor, release notes, project description, archive, unarchive and rename, person page, sprint details, doc property panel, prompt library, Bases button, task side panel, Tasks views, meeting edit and discard, attendee picker, People search, New task, org chart and reporting line, sprint tabs, projects by quarter, review cards, Home spacing, preview/full Brain navigation, workload groups, project counts, discussion links, board previews, Library filters and remote-cover rejection, AI branches, per-module controls, narrow widths and light-theme smoke check. Synthetic fixture only.');
+  console.log('Dashboard browser checks passed: sixteen modules, Configure save and health check, project page tasks and minutes composer, sprint moves, inbox triage, roadmap bars and markers, waiting groups, task editor, release notes, project description, archive, unarchive and rename, person page, sprint details, doc property panel, prompt library, Bases button, task side panel, Tasks views, meeting edit and discard, attendee picker, People search, New task, org chart and reporting line, GitHub tab and links, sprint tabs, projects by quarter, review cards, Home spacing, preview/full Brain navigation, workload groups, project counts, discussion links, board previews, Library filters and remote-cover rejection, AI branches, per-module controls, narrow widths and light-theme smoke check. Synthetic fixture only.');
 }finally{await browser.close();}

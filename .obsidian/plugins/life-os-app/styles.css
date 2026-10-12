@@ -2049,3 +2049,18 @@
   .life-os-org-node { display: inline-flex; max-width: 100%; }
   .life-os-home button.life-os-org-open { text-align: left; min-width: 0; }
 }
+
+/* Dev OS 1.8: GitHub through the GitHub Link plugin */
+.life-os-github { display: grid; gap: 12px; }
+.life-os-github > .life-os-toolbar strong { margin-right: 4px; }
+.life-os-github-table { min-width: 0; overflow-x: auto; }
+.life-os-github-table h3, .life-os-github-setup h3 { margin: 0 0 8px; font-size: 0.86rem; }
+.life-os-github-render { min-width: 0; overflow-x: auto; font-size: 0.78rem; }
+.life-os-github-render table { width: 100%; border-collapse: collapse; }
+.life-os-github-render th, .life-os-github-render td { padding: 5px 8px; border-bottom: 1px solid var(--life-os-line); text-align: left; vertical-align: middle; }
+.life-os-github-render p { margin: 0; }
+.life-os-github-setup .life-os-form-actions { flex-wrap: wrap; }
+.life-os-home a.life-os-github-chip { display: inline-flex; align-items: center; padding: 2px 8px; border: 1px solid var(--life-os-line); border-radius: 999px; color: var(--text-muted); font-size: 0.66rem; font-weight: 650; text-decoration: none; white-space: nowrap; }
+.life-os-home a.life-os-github-chip:hover { color: var(--life-os-accent-soft); border-color: var(--life-os-accent); }
+.life-os-github-add { white-space: nowrap; }
+.life-os-task-panel-link .life-os-github-render { flex: 1 1 auto; }

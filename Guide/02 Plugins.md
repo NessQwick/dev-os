@@ -17,6 +17,11 @@
 | **Local REST API** 5.1.0 | `obsidian-local-rest-api` | provider for Vault Lens note preview and editing from the browser; general local API | [[17 Search Providers]] |
 | **Web viewer** (core) | `webviewer` | browse and clip inside Obsidian | [[16 SEO, Web Viewer, and Vault Lens]] |
 
+## Optional, not bundled
+| Plugin | ID | Used for | Guide |
+| --- | --- | --- | --- |
+| **GitHub Link** (MIT, nathonius/obsidian-github-link) | `github-link` | Pull requests, issues, and live link tags on the Dev OS project GitHub tab and in the task panel. Install from Community plugins. Public repos need no token; for private repos add an account and token in its settings. The token is stored in plain text in its `data.json`, which `.gitignore` excludes. | [[21 Life OS Application]] |
+
 ## Added to make the template work
 | Plugin | ID | Why |
 | --- | --- | --- |

@@ -309,6 +309,12 @@ try {
         return {
           ItemView,
           Component,
+          MarkdownRenderer: {
+            render: async (app, markdown, element) => {
+              globalThis.renderedMarkdown = [...(globalThis.renderedMarkdown || []), markdown];
+              element.createEl("p", { text: markdown });
+            },
+          },
           Modal,
           Notice,
           Plugin,
@@ -1564,6 +1570,51 @@ try {
   Object.assign(personDelete.values, { confirm: "Person 02" });
   await personDelete.submit();
   check("their reports move to the next supervisor up", metadata.get(personPathFor(4)).supervisor === "[[Person 05]]");
+
+  // 1.8: GitHub through GitHub Link.
+  check("GitHub repo URLs parse in common forms",
+    sandbox.parseGithubRepo("https://github.com/acme/api.git")?.repo === "api" && sandbox.parseGithubRepo("acme/api")?.owner === "acme" &&
+    sandbox.parseGithubRepo("git@github.com:acme/api.git")?.url === "https://github.com/acme/api" && sandbox.parseGithubRepo("https://gitlab.com/a/b") === null && sandbox.parseGithubRepo("") === null);
+  const ghLinks = sandbox.githubLinks("Fix https://github.com/acme/api/pull/12/files and https://github.com/acme/api/issues/4. See https://github.com/acme/api");
+  check("GitHub issue and PR links are found in task text",
+    ghLinks.length === 2 && ghLinks[0].kind === "pull" && ghLinks[0].number === 12 && ghLinks[1].url === "https://github.com/acme/api/issues/4" && ghLinks[1].raw === "https://github.com/acme/api/issues/4" &&
+    sandbox.withoutGithubLinks("Fix bug https://github.com/acme/api/issues/4 now") === "Fix bug now");
+  const ghBlock = sandbox.githubQueryBlock({ queryType: "pull-request", owner: "acme", repo: "api", columns: ["number", "title"] });
+  check("github-query blocks are written for GitHub Link", ghBlock.startsWith("```github-query\noutputType: table\nqueryType: pull-request\norg: acme\nrepo: api\nstate: open") && ghBlock.includes("columns: [number, title]") && ghBlock.endsWith("```"));
+
+  metadata.set(platformPath, { ...metadata.get(platformPath), repo: "https://github.com/acme/platform" });
+  fileContents.set(platformPath, "## Tasks\n- [ ] Review https://github.com/acme/platform/pull/12 #project/platform\n- [ ] Plain task #project/platform");
+  reindexMock(platformPath);
+  await view.refreshLiveData();
+  view.setProjectTab(platformPath, "github");
+  view.openProject(platformPath);
+  check("the GitHub tab offers GitHub Link setup when it is missing", treeHasText(view.contentEl, "GitHub") && treeHasClass(view.contentEl, "life-os-github-setup") && treeHasText(view.contentEl, "Branches on GitHub"));
+  pluginInstances.set("github-link", { settings: {} });
+  globalThis.renderedMarkdown = [];
+  view.render();
+  await settle();
+  check("with GitHub Link, the tab renders its PR and issue queries", globalThis.renderedMarkdown.some((md) => md.includes("queryType: pull-request") && md.includes("org: acme") && md.includes("repo: platform")) && globalThis.renderedMarkdown.some((md) => md.includes("queryType: issue")) && !treeHasClass(view.contentEl, "life-os-github-setup"));
+  check("tasks show GitHub chips and a clean title", treeHasClass(view.contentEl, "life-os-github-chip") && treeHasText(view.contentEl, "PR #12") && treeHasText(view.contentEl, "Review"));
+  view.openTask(view.allTasks().find((task) => task.path === platformPath && task.text.startsWith("Plain task")));
+  const ghInput = findByLabel(view.contentEl, "Link a GitHub issue or PR");
+  ghInput.value = "https://example.com/nope";
+  ghInput.handlers.change();
+  await settle();
+  const beforeLink = fileContents.get(platformPath);
+  findByLabel(view.contentEl, "Link a GitHub issue or PR").value = "https://github.com/acme/platform/issues/7";
+  findByLabel(view.contentEl, "Link a GitHub issue or PR").handlers.change();
+  await settle();
+  check("the task panel links an issue and refuses other URLs", beforeLink.includes("- [ ] Plain task #project/platform") && fileContents.get(platformPath).includes("- [ ] Plain task https://github.com/acme/platform/issues/7 #project/platform"), fileContents.get(platformPath));
+  findByLabel(view.contentEl, "Unlink issue #7").handlers.click();
+  await settle();
+  check("the task panel unlinks an issue", fileContents.get(platformPath).includes("- [ ] Plain task #project/platform"), fileContents.get(platformPath));
+  view.closeTask();
+  const ghForm = view.openNewTaskForm({ project: "Platform" });
+  Object.assign(ghForm.values, { text: "Fix login", github: "https://github.com/acme/platform/issues/9#issuecomment-1" });
+  await ghForm.submit();
+  check("New task can carry a GitHub link", fileContents.get(platformPath).includes("- [ ] Fix login https://github.com/acme/platform/issues/9 #project/platform"), fileContents.get(platformPath));
+  pluginInstances.delete("github-link");
+  view.setProjectTab(platformPath, "overview");
 
   if (process.env.LIFE_OS_PREVIEW) {
     // Generated visual-test artifact uses synthetic fixtures only.
