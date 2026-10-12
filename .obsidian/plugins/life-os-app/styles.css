@@ -2015,3 +2015,37 @@
 .life-os-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; margin: 14px 0 4px; color: var(--text-muted); font-size: 0.76rem; }
 .life-os-composer.is-editing { margin: 10px; border-color: color-mix(in srgb, var(--life-os-accent) 45%, var(--life-os-line)); }
 .life-os-people-row > .life-os-people-picker { flex: 1 1 260px; }
+
+/* Dev OS 1.7: people hierarchy (org chart and reporting line) */
+.life-os-org-section { margin-top: 6px; }
+.life-os-org-scroll { max-width: 100%; overflow-x: auto; padding: 4px 2px 12px; }
+.life-os-org-tree { position: relative; display: flex; justify-content: center; margin: 0; padding: 20px 0 0; list-style: none; }
+.life-os-org-tree.is-root { padding-top: 0; justify-content: safe center; min-width: max-content; }
+.life-os-org-item { position: relative; display: flex; flex-direction: column; align-items: center; padding: 20px 6px 0; }
+.life-os-org-tree.is-root > .life-os-org-item { padding-top: 0; }
+.life-os-org-item::before, .life-os-org-item::after { content: ""; position: absolute; top: 0; right: 50%; width: 50%; height: 20px; border-top: 1px solid color-mix(in srgb, var(--text-normal) 24%, transparent); }
+.life-os-org-item::after { right: auto; left: 50%; border-left: 1px solid color-mix(in srgb, var(--text-normal) 24%, transparent); }
+.life-os-org-item:only-child { padding-top: 0; }
+.life-os-org-item:only-child::before, .life-os-org-item:only-child::after,
+.life-os-org-tree.is-root > .life-os-org-item::before, .life-os-org-tree.is-root > .life-os-org-item::after { display: none; }
+.life-os-org-item:first-child::before, .life-os-org-item:last-child::after { border: 0 none; }
+.life-os-org-item:last-child::before { border-right: 1px solid color-mix(in srgb, var(--text-normal) 24%, transparent); border-radius: 0 8px 0 0; }
+.life-os-org-item:first-child::after { border-radius: 8px 0 0 0; }
+.life-os-org-tree .life-os-org-tree::before { content: ""; position: absolute; top: 0; left: 50%; height: 20px; border-left: 1px solid color-mix(in srgb, var(--text-normal) 24%, transparent); }
+.life-os-org-node { position: relative; display: flex; align-items: center; gap: 4px; padding: 4px; border: 1px solid var(--life-os-line); border-radius: 12px; background: var(--background-primary); }
+.life-os-org-node.is-current { border-color: var(--life-os-accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--life-os-accent) 40%, transparent); }
+.life-os-home button.life-os-org-open { display: grid; gap: 2px; height: auto; min-width: 120px; max-width: 200px; padding: 6px 10px; border: 0; background: none; box-shadow: none; color: var(--text-normal); text-align: center; white-space: normal; cursor: pointer; }
+.life-os-org-open strong { font-size: 0.78rem; overflow-wrap: anywhere; }
+.life-os-org-open span { color: var(--text-muted); font-size: 0.66rem; overflow-wrap: anywhere; }
+.life-os-home button.life-os-org-toggle { height: auto; min-width: 26px; min-height: 26px; padding: 2px 6px; border: 1px solid var(--life-os-line); border-radius: 999px; background: var(--background-secondary); box-shadow: none; color: var(--text-muted); font-size: 0.68rem; cursor: pointer; }
+.life-os-person-org { margin-bottom: 14px; }
+.life-os-person-org h3 { margin: 0; flex: 1 1 auto; }
+@container (max-width: 700px) {
+  .life-os-org-tree, .life-os-org-tree.is-root { display: block; min-width: 0; padding: 0 0 0 14px; }
+  .life-os-org-tree.is-root { padding-left: 0; }
+  .life-os-org-item { display: block; padding: 6px 0 0; }
+  .life-os-org-tree .life-os-org-tree { margin-left: 8px; border-left: 1px solid color-mix(in srgb, var(--text-normal) 24%, transparent); }
+  .life-os-org-item::before, .life-os-org-item::after, .life-os-org-tree .life-os-org-tree::before { display: none; }
+  .life-os-org-node { display: inline-flex; max-width: 100%; }
+  .life-os-home button.life-os-org-open { text-align: left; min-width: 0; }
+}

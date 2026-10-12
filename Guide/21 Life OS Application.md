@@ -22,7 +22,7 @@ Dev OS opens automatically after Obsidian loads the vault. Use `Ctrl/Cmd+Shift+L
 | Waiting | Delegated tasks by person (age from `➕`), tasks waiting on open tasks (`⛔`), `#blocked` | task index, `05 People/` | task lines |
 | Configure | Config form with change preview; vault health check | `Meta/Dev OS Config.md`, Templater, QuickAdd, Web Clipper templates (read only), all typed notes and tasks | config note properties only |
 | Tasks | Views: By urgency, Next 7 days, To discuss (by person), High without a date, Inbox, Done this week; status and due date controls | task index | task lines |
-| People | Person cards with role, cadence, and open, to-discuss, and overdue counts; search, filters, 12 per page; discussion queue | `05 People/`, task index | person properties, new person notes |
+| People | Person cards with role, cadence, supervisor, and open, to-discuss, and overdue counts; search, filters, 12 per page; Cards or Org chart; discussion queue | `05 People/`, task index | person properties, new person notes |
 | Person page | Properties, To discuss (add a topic), open tasks, projects together, meeting log, meetings with 1:1 minutes | person note, `#p/<slug>` tasks, projects, meetings | person properties, a `#discuss` task in `08 Tasks/Tasks.md`, `## Meeting log`, new meeting notes |
 | Library, Brain, AI | Books and clips with book details (personal layer); link graph; AI readiness and the prompt library | as before, `Prompts/` | book properties |
 | Plan, Review | Personal layer: horizons, calendar; effort, habit rhythm, daily questions, life areas, memento mori over 7, 30, 56, or 90 days | periodic notes, config | nothing |
@@ -58,7 +58,16 @@ The person page has:
 - **Meeting log:** the last entries of `## Meeting log`; the input appends `- YYYY-MM-DD text`.
 - **Meetings:** minutes that list the person in `attendees`. **Write 1:1 minutes** opens the composer prefilled with kind one-on-one and the person as attendee.
 
-Renaming a person rewrites `[[Name]]` links (attendees, stakeholders, deciders) and `#p/<slug>` tags.
+Renaming a person rewrites `[[Name]]` links (attendees, stakeholders, deciders, supervisors) and `#p/<slug>` tags.
+
+### Hierarchy
+
+Each person can have a **Supervisor**, the person they report to, stored as `supervisor: "[[Name]]"` in the person note.
+- **Setting it.** New person has a Supervisor field that searches people notes. On the person page, Supervisor sits next to role and company. Only existing people notes are accepted, and never the person themselves or anyone who already reports to them, so the hierarchy cannot loop.
+- **Reporting line on the person page.** It shows the chain of supervisors above, the person highlighted, and their direct reports below. Click anyone to open their page. **Add direct report** opens New person with the supervisor filled in.
+- **Org chart on People.** Every team from its top person down, with connectors. Teams deeper than three levels start collapsed; the badge shows how many people a collapsed branch holds. People with no supervisor and no reports are listed under "Not in a reporting line". On narrow panes the chart becomes an indented list.
+- **Deleting a supervisor** offers to move their direct reports to the next supervisor up.
+- **Vault health** reports supervisor links to missing notes and supervisor loops.
 
 ## Properties
 
@@ -279,7 +288,8 @@ Run `node scripts/verify_life_os_app.mjs .` for static contracts and a mock runt
 - the person page, property forms and the properties dialog, sprint details, the doc panel, the prompt library, and the Bases files
 - the task panel, Tasks views, sprint tabs, projects by quarter, the Review cards, and routing after create
 - editing saved minutes, the people picker, discarding drafts, People search and paging, remembered values, and New task
+- the supervisor hierarchy: chart building, loop and missing-link detection, the person page reporting line, the org chart, New person with a supervisor, and reassigning reports on delete
 
 `PLAYWRIGHT_MODULE=<path to playwright> node scripts/verify_dashboard_view.mjs` exercises the same flows in Chromium with a synthetic vault at 1440, 900, 620, and 390 px. Neither replaces checking the view inside Obsidian after a reload; see [[23 Native Acceptance]].
 
-The application version is 1.6.0.
+The application version is 1.7.0.

@@ -1512,6 +1512,59 @@ try {
   check("New task writes to the inbox or the chosen project",
     fileContents.get("08 Tasks/Tasks.md").includes("- [ ] Ship docs #discuss ⏫ ➕ 2026-09-09") && fileContents.get(platformPath).includes("- [ ] Plan launch #project/platform 📅 2026-09-30 ➕ 2026-09-09"), fileContents.get(platformPath));
 
+  // 1.7: supervisor hierarchy.
+  const chartFixture = sandbox.orgChart([
+    { title: "Ana", supervisor: "" }, { title: "Ben", supervisor: "[[Ana]]" }, { title: "Cy", supervisor: "[[Ana]]" },
+    { title: "Dee", supervisor: "[[Ben]]" }, { title: "Eve", supervisor: "[[Ghost]]" }, { title: "Fox", supervisor: "[[Gus]]" }, { title: "Gus", supervisor: "[[Fox]]" },
+  ]);
+  check("org chart builds reporting lines and isolates bad links",
+    JSON.stringify(chartFixture.reportsOf.get("Ana")) === JSON.stringify(["Ben", "Cy"]) && JSON.stringify(chartFixture.chain("Dee")) === JSON.stringify(["Ben", "Ana"]) &&
+    JSON.stringify(chartFixture.descendants("Ana")) === JSON.stringify(["Ben", "Cy", "Dee"]) && chartFixture.missing[0].supervisor === "Ghost" &&
+    chartFixture.cycles.length === 1 && chartFixture.roots.includes("Fox") && chartFixture.roots.includes("Eve") && !chartFixture.roots.includes("Dee"));
+  check("new person notes and patches carry the supervisor link",
+    sandbox.buildPersonNote({ title: "Dee", supervisor: "Ben", today }).includes('supervisor: "[[Ben]]"') &&
+    JSON.stringify(sandbox.propertyPatch(schemas.person, { supervisor: "[[Ana]]" }, { supervisor: "Ben" })) === JSON.stringify({ supervisor: "[[Ben]]" }));
+  const orgHealth = sandbox.runHealthCheck({ notes: [
+    { path: "a.md", title: "A", type: "person", supervisor: "B" }, { path: "b.md", title: "B", type: "person", supervisor: "A" }, { path: "c.md", title: "C", type: "person", supervisor: "Nobody" },
+  ] }).map((issue) => issue.code);
+  check("health check reports supervisor loops and missing supervisors", orgHealth.includes("supervisor-cycle") && orgHealth.includes("supervisor-missing"));
+
+  const personPathFor = (index) => `05 People/Person ${String(index).padStart(2, "0")}.md`;
+  metadata.set(personPathFor(2), { ...metadata.get(personPathFor(2)), supervisor: "[[Person 01]]" });
+  metadata.set(personPathFor(3), { ...metadata.get(personPathFor(3)), supervisor: "[[Person 01]]" });
+  metadata.set(personPathFor(4), { ...metadata.get(personPathFor(4)), supervisor: "[[Person 02]]" });
+  view.openPerson(personPathFor(2));
+  check("person page shows the reporting line above and below", treeHasClass(view.contentEl, "life-os-person-org") && treeHasText(view.contentEl, "Person 01") && treeHasText(view.contentEl, "Person 04") && treeHasClass(view.contentEl, "is-current"));
+  const candidates = view.supervisorOptions(fakeFiles.find((file) => file.path === personPathFor(2)));
+  check("a person cannot report to themselves or their own reports", !candidates.includes("Person 02") && !candidates.includes("Person 04") && candidates.includes("Person 05"));
+  const supervisorInput = findByLabel(view.contentEl, "Supervisor of Person 02");
+  supervisorInput.value = "person 04";
+  supervisorInput.handlers.change();
+  await settle();
+  check("a looping supervisor is refused", metadata.get(personPathFor(2)).supervisor === "[[Person 01]]");
+  findByLabel(view.contentEl, "Supervisor of Person 02").value = "Person 05";
+  findByLabel(view.contentEl, "Supervisor of Person 02").handlers.change();
+  await settle();
+  check("the supervisor saves as a link", metadata.get(personPathFor(2)).supervisor === "[[Person 05]]");
+  view.activeScreen = "people";
+  view.peopleLayout = "org";
+  view.render();
+  check("People shows the org chart", treeHasClass(view.contentEl, "life-os-org-tree") && treeHasText(view.contentEl, "Person 05") && treeHasText(view.contentEl, "Not in a reporting line · " + (view.org().roots.length - view.org().roots.filter((root) => (view.org().reportsOf.get(root) || []).length).length)));
+  view.peopleLayout = "cards";
+  const personForm = view.openForm("person", { supervisor: "Person 05" });
+  Object.assign(personForm.values, { title: "Person 15", supervisor: "nobody real" });
+  absentPaths.add("05 People/Person 15.md");
+  await personForm.submit();
+  const refusedPerson = !fakeFiles.some((file) => file.path === "05 People/Person 15.md");
+  personForm.values.supervisor = "person 05";
+  await personForm.submit();
+  check("New person sets a supervisor from the list only", refusedPerson && fileContents.get("05 People/Person 15.md")?.includes('supervisor: "[[Person 05]]"'));
+  const personDelete = view.openDeleteDialog(fakeFiles.find((file) => file.path === personPathFor(2)));
+  check("deleting a supervisor offers to move their reports", personDelete.values.reassign === true);
+  Object.assign(personDelete.values, { confirm: "Person 02" });
+  await personDelete.submit();
+  check("their reports move to the next supervisor up", metadata.get(personPathFor(4)).supervisor === "[[Person 05]]");
+
   if (process.env.LIFE_OS_PREVIEW) {
     // Generated visual-test artifact uses synthetic fixtures only.
     for (let i = 0; i < 30; i += 1) {
