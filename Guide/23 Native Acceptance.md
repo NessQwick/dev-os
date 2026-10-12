@@ -5,7 +5,7 @@ This separates reproducible development evidence from native acceptance. A local
 ## Identify the candidate
 
 - Template version: 1.1.0 candidate
-- Dev OS plugin (`life-os-app`) version: 1.5.0
+- Dev OS plugin (`life-os-app`) version: 1.6.0
 - Archive SHA256: use the exact candidate's external `.sha256` sidecar; not embedded here to avoid self-referential hashes
 - Operating system and Obsidian version: not recorded
 - Test date and reviewer: not recorded
@@ -37,6 +37,26 @@ Provider authentication, an actual AI request, external calendar integration, an
 ## Evidence rules
 
 Bind screenshots and results to the exact candidate checksum. Label synthetic fixtures visibly. Record failures and skipped checks. A passing static, mock-runtime, or browser test does not mark this record complete.
+
+## Development checks, 2026-10-12 (Dev OS 1.6.0)
+
+Dev OS application 1.6.0 passed 177 static and mock-runtime checks. New coverage:
+- parsing saved minutes back into a draft
+- section rebuilding that keeps unchanged action lines
+- known values
+- the edit, save, discard, and attendee picker flows
+- Active commitments opening the project page
+- People paging and search, and company suggestions
+- New task for the inbox and for a project
+
+The browser fixture added:
+- discard, then reopen empty
+- picker entries for a person and a guest
+- editing a saved meeting's decision and action
+- People search keeping focus
+- New task opening the panel
+
+Native check still required: the `<datalist>` suggestions in Obsidian's Electron and on mobile.
 
 ## Development checks, 2026-10-11 (Dev OS 1.5.0)
 

@@ -16,13 +16,13 @@ Dev OS opens automatically after Obsidian loads the vault. Use `Ctrl/Cmd+Shift+L
 | Projects | Cards with status and priority selects, progress, overdue; Cards or By quarter | project notes and `#project/<slug>` tasks | project `status`, `priority` |
 | Roadmap | Projects from `started` to `due` with progress, sprints, milestones (◆), releases (▲), today line | project, sprint, and release notes | nothing |
 | Project page | Header, stakeholders, tabs: Overview, Tasks, Meetings, Docs, Clips | project note, its tasks, linked sprints, meetings, docs, clips | project properties, task lines, new meeting notes, meeting `## Notes`, clip `project` |
-| Meetings | Minutes composer, upcoming, today, recent, open action items | `10 Meetings/` | new meeting notes, task lines |
+| Meetings | Minutes composer, upcoming, today, recent, open action items; Edit minutes on a saved meeting | `10 Meetings/` | new meeting notes, a meeting's properties and its Agenda, Notes, Decisions, and Action items sections, task lines |
 | Docs | ADRs, tech notes, postmortems, releases with type, status, and project filters; a property panel per row; release notes | `06 Writing/`, `06 Writing/Releases/` | doc properties, new notes, a release note's `## Release notes` section |
 | Inbox | Web Clipper triage and template setup | `07 Library/Clippings/`, `Meta/Web Clipper/` | clip `project`, `status`, one move to Tech Notes |
 | Waiting | Delegated tasks by person (age from `➕`), tasks waiting on open tasks (`⛔`), `#blocked` | task index, `05 People/` | task lines |
 | Configure | Config form with change preview; vault health check | `Meta/Dev OS Config.md`, Templater, QuickAdd, Web Clipper templates (read only), all typed notes and tasks | config note properties only |
 | Tasks | Views: By urgency, Next 7 days, To discuss (by person), High without a date, Inbox, Done this week; status and due date controls | task index | task lines |
-| People | Person cards with role, cadence, and open, to-discuss, and overdue counts; filters; discussion queue | `05 People/`, task index | person properties, new person notes |
+| People | Person cards with role, cadence, and open, to-discuss, and overdue counts; search, filters, 12 per page; discussion queue | `05 People/`, task index | person properties, new person notes |
 | Person page | Properties, To discuss (add a topic), open tasks, projects together, meeting log, meetings with 1:1 minutes | person note, `#p/<slug>` tasks, projects, meetings | person properties, a `#discuss` task in `08 Tasks/Tasks.md`, `## Meeting log`, new meeting notes |
 | Library, Brain, AI | Books and clips with book details (personal layer); link graph; AI readiness and the prompt library | as before, `Prompts/` | book properties |
 | Plan, Review | Personal layer: horizons, calendar; effort, habit rhythm, daily questions, life areas, memento mori over 7, 30, 56, or 90 days | periodic notes, config | nothing |
@@ -39,15 +39,16 @@ Plan and Review, plus the daily check-in on Today, appear only when **Show perso
   - The list filters Open, In progress, Blocked, Done, and All, and groups by sprint. Each row has a checkbox, Start/Done, and a due date picker.
   - The list includes every task tagged `#project/<slug>` anywhere in the vault, including meeting action items.
 - **Meetings:**
-  - The minutes composer takes title, date, time, kind (meeting, standup, one-on-one, review, retro, planning), attendees (people chips plus free text), agenda, notes, a list of decisions, and a list of action items with owner and due date.
+  - The minutes composer takes title, date, time, kind (meeting, standup, one-on-one, review, retro, planning), attendees (a searchable picker: type to find a person note, or type any name and press Enter for a guest), agenda, notes, a list of decisions, and a list of action items with owner and due date.
   - **Save minutes** creates `10 Meetings/<date> <title>.md` linked to the project. Action items become tasks tagged with the project and owner.
-  - The draft survives refreshes and is kept in plugin data until you save or discard it.
+  - The draft survives refreshes and is kept in plugin data until you save it. **Discard draft** deletes it and closes the composer.
+  - **Edit minutes** on an expanded meeting reopens the composer filled from the note. **Save changes** rewrites the properties and the Agenda, Notes, Decisions, and Action items sections; other sections stay. Unchanged action items keep their exact line (done state, ids, dates); a changed one is edited in place; a removed one is dropped. Changing the title or date renames the note and updates links to it. **Cancel edit** leaves the note as it was.
   - Past meetings form a timeline. Expand one to see attendees, decisions (each with an **ADR** button that prefills a decision record), action items with checkboxes, and a box that appends a note to its `## Notes`.
 - **Docs and Clips:** linked documents with status selects and New ADR, tech note, and postmortem buttons; clips assigned to the project, and a picker to assign one from the inbox.
 
 ## People and the person page
 
-People shows a card per person note in `05 People` with role, company, meeting cadence (`meets`), and counts of open, to-discuss, and overdue tasks tagged `#p/<slug>`. Filters: All, To discuss, Meets weekly, Archived. **New person** creates a note with the same sections as `Templates/Person.md`.
+People shows a card per person note in `05 People` with role, company, meeting cadence (`meets`), and counts of open, to-discuss, and overdue tasks tagged `#p/<slug>`. Filters: All, To discuss, Meets weekly, Archived. **Search people** matches name, role, company, email, and cadence; results show 12 per page. **New person** creates a note with the same sections as `Templates/Person.md`. Role and Company or team suggest the values other people notes already use, here and on the person page.
 
 The person page has:
 - **Header:** the `#p/<slug>` tag, editable role, company or team, email (with a mail link), and meets, plus counts and the ⋯ menu.
@@ -112,6 +113,8 @@ Clicking a task anywhere in Dev OS (a row, a sprint card, a discussion item) ope
 Each change rewrites only that task line and refuses a line that changed since it was read. To go back to opening the note on click, turn off **Open tasks in the Dev OS panel** in Settings, Dev OS.
 
 ## Tasks views
+
+**New task** opens a form (text, project, sprint, owner, due, scheduled, high priority, to discuss, blocked). The task goes under the project's task heading, or into the Inbox of `08 Tasks/Tasks.md`, and opens in the task panel. Quick add sits under it for one-line tasks.
 
 The Tasks screen has the views of `00 Dashboards/Task Dashboard.md`, live:
 - **By urgency:** overdue, today, upcoming, unscheduled, with the workload bar.
@@ -275,7 +278,8 @@ Run `node scripts/verify_life_os_app.mjs .` for static contracts and a mock runt
 - rename with link and tag rewrites, archive and unarchive, delete to the trash, and the project description
 - the person page, property forms and the properties dialog, sprint details, the doc panel, the prompt library, and the Bases files
 - the task panel, Tasks views, sprint tabs, projects by quarter, the Review cards, and routing after create
+- editing saved minutes, the people picker, discarding drafts, People search and paging, remembered values, and New task
 
 `PLAYWRIGHT_MODULE=<path to playwright> node scripts/verify_dashboard_view.mjs` exercises the same flows in Chromium with a synthetic vault at 1440, 900, 620, and 390 px. Neither replaces checking the view inside Obsidian after a reload; see [[23 Native Acceptance]].
 
-The application version is 1.5.0.
+The application version is 1.6.0.

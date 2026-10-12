@@ -105,8 +105,19 @@ try {
       await page.waitForFunction(()=>window.writes.length>=2);
       await page.getByRole('tab',{name:/^Meetings/}).click();
       await page.getByRole('button',{name:'New meeting minutes'}).click();
+      await page.getByLabel('Title',{exact:true}).fill('Discard me');
+      await page.getByRole('button',{name:'Discard draft'}).click();
+      await page.waitForFunction(()=>!document.querySelector('.life-os-composer'));
+      await page.getByRole('button',{name:'New meeting minutes'}).click();
+      assert.equal(await page.getByLabel('Title',{exact:true}).inputValue(),'');
       await page.getByLabel('Title',{exact:true}).fill('Fixture review');
-      await page.getByRole('button',{name:'Synthetic person',exact:true}).click();
+      await page.getByLabel('Add attendee',{exact:true}).fill('synthetic person');
+      await page.getByLabel('Add attendee',{exact:true}).press('Enter');
+      await page.waitForFunction(()=>document.querySelector('.life-os-composer .life-os-people-picker')?.innerText.includes('Synthetic person'));
+      await page.getByLabel('Add attendee',{exact:true}).fill('Visiting guest');
+      await page.getByLabel('Add attendee',{exact:true}).press('Enter');
+      await page.waitForSelector('.life-os-composer .life-os-chip.is-free');
+      assert.equal(await page.getByLabel('Title',{exact:true}).inputValue(),'Fixture review');
       await page.getByLabel('Decision 1',{exact:true}).fill('Keep the fixture small');
       await page.getByLabel('Action item 1',{exact:true}).fill('Write the follow-up');
       await page.screenshot({path:'/tmp/life-os-project-composer.png',fullPage:true});
@@ -115,6 +126,16 @@ try {
       assert.ok(await page.evaluate(()=>window.writes.find(w=>w[0]==='create')[1]==='10 Meetings/2026-09-09 Fixture review.md'));
       await page.waitForSelector('.life-os-meeting-card.is-open');
       await page.screenshot({path:'/tmp/life-os-project-meetings.png',fullPage:true});
+      await page.locator('.life-os-meeting-card.is-open').getByRole('button',{name:/^Edit minutes/}).click();
+      await page.waitForSelector('.life-os-composer.is-editing');
+      assert.equal(await page.getByLabel('Decision 1',{exact:true}).inputValue(),'Keep the fixture small');
+      await page.getByLabel('Decision 1',{exact:true}).fill('Keep the fixture tiny');
+      await page.getByLabel('Action item 1',{exact:true}).fill('Write the follow-up today');
+      await page.screenshot({path:'/tmp/life-os-meeting-edit.png',fullPage:true});
+      await page.getByRole('button',{name:'Save changes'}).click();
+      await page.waitForFunction(()=>!document.querySelector('.life-os-composer.is-editing'));
+      await page.waitForFunction(()=>document.querySelector('.life-os-meeting-card.is-open')?.innerText.includes('Keep the fixture tiny'));
+      assert.ok((await page.locator('.life-os-meeting-card.is-open').innerText()).includes('Write the follow-up today'));
       await page.evaluate(()=>{window.view.activeScreen='projects';window.view.render();});
     }
     if(screen==='sprint'){
@@ -159,8 +180,8 @@ try {
       await page.getByLabel('Task text',{exact:true}).fill('Review the vendor contract');
       await page.getByLabel('Task text',{exact:true}).press('Tab');
       await page.waitForFunction(()=>document.querySelector('.life-os-waiting-person')?.innerText.includes('Review the vendor contract'));
-      await page.getByLabel('Due date',{exact:true}).fill('2026-09-25');
-      await page.getByLabel('Due date',{exact:true}).press('Tab');
+      await page.getByLabel('Task due date',{exact:true}).fill('2026-09-25');
+      await page.getByLabel('Task due date',{exact:true}).press('Tab');
       await page.waitForFunction(()=>document.querySelector('.life-os-task-panel')?.innerText.includes('Created 2026-09-01'));
       await page.screenshot({path:'/tmp/life-os-task-editor.png'});
       await page.locator('.life-os-task-panel').press('Escape');
@@ -182,6 +203,13 @@ try {
       await page.screenshot({path:'/tmp/life-os-docs.png',fullPage:true});
     }
     if(screen==='people'){
+      await page.getByLabel('Search people',{exact:true}).fill('fixture lead');
+      await page.waitForFunction(()=>document.querySelectorAll('.life-os-person-card').length===1);
+      assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('aria-label')),'Search people');
+      await page.getByLabel('Search people',{exact:true}).fill('nobody here');
+      await page.waitForFunction(()=>document.querySelectorAll('.life-os-person-card').length===0);
+      await page.getByLabel('Search people',{exact:true}).fill('');
+      await page.waitForFunction(()=>document.querySelectorAll('.life-os-person-card').length===1);
       await page.locator('.life-os-discussion-queue button').first().click();
       await page.waitForSelector('.life-os-task-panel');
       assert.equal(await page.evaluate(()=>window.view.activeTaskKey.path),'05 People/Synthetic person.md');
@@ -190,6 +218,13 @@ try {
       await page.getByRole('button',{name:'Close task details'}).click();
     }
     if(screen==='focus'){
+      await page.getByRole('button',{name:'New task',exact:true}).click();
+      await page.locator('.modal-fixture').getByLabel('Task',{exact:true}).fill('Fixture task from Tasks');
+      await page.locator('.modal-fixture').getByRole('button',{name:'Add task'}).click();
+      await page.waitForSelector('.life-os-task-panel');
+      assert.equal(await page.getByLabel('Task text',{exact:true}).inputValue(),'Fixture task from Tasks');
+      await page.screenshot({path:'/tmp/life-os-new-task.png',fullPage:true});
+      await page.getByRole('button',{name:'Close task details'}).click();
       assert.ok(await page.locator('.life-os-workload-segment').count()>0);
       await page.getByRole('button',{name:'Overdue · 1',exact:true}).click();
       assert.equal(await page.locator('.life-os-task-row').count(),1);
@@ -310,7 +345,8 @@ try {
   await page.evaluate(()=>{window.view.activeScreen='docs';window.view.render();});
   await page.getByRole('button',{name:'Edit properties of ADR-0001 Fixture decision'}).click();
   assert.equal(await page.locator('.life-os-doc-panel').count(),1);
-  await page.getByLabel('Add to Deciders of ADR-0001 Fixture decision',{exact:true}).selectOption('Synthetic person');
+  await page.getByLabel('Deciders of ADR-0001 Fixture decision',{exact:true}).fill('Synthetic person');
+  await page.getByLabel('Deciders of ADR-0001 Fixture decision',{exact:true}).press('Enter');
   await page.waitForFunction(()=>document.querySelector('.life-os-doc-panel')?.innerText.includes('Synthetic person'));
   await page.screenshot({path:'/tmp/life-os-doc-panel.png',fullPage:true});
   await page.evaluate(()=>{window.view.activeScreen='ai';window.view.render();});
@@ -391,5 +427,5 @@ try {
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.screenshot({path:'/tmp/life-os-home-light-candidate.png'});
   await page.evaluate(()=>window.view.onClose());
-  console.log('Dashboard browser checks passed: sixteen modules, Configure save and health check, project page tasks and minutes composer, sprint moves, inbox triage, roadmap bars and markers, waiting groups, task editor, release notes, project description, archive, unarchive and rename, person page, sprint details, doc property panel, prompt library, Bases button, task side panel, Tasks views, sprint tabs, projects by quarter, review cards, Home spacing, preview/full Brain navigation, workload groups, project counts, discussion links, board previews, Library filters and remote-cover rejection, AI branches, per-module controls, narrow widths and light-theme smoke check. Synthetic fixture only.');
+  console.log('Dashboard browser checks passed: sixteen modules, Configure save and health check, project page tasks and minutes composer, sprint moves, inbox triage, roadmap bars and markers, waiting groups, task editor, release notes, project description, archive, unarchive and rename, person page, sprint details, doc property panel, prompt library, Bases button, task side panel, Tasks views, meeting edit and discard, attendee picker, People search, New task, sprint tabs, projects by quarter, review cards, Home spacing, preview/full Brain navigation, workload groups, project counts, discussion links, board previews, Library filters and remote-cover rejection, AI branches, per-module controls, narrow widths and light-theme smoke check. Synthetic fixture only.');
 }finally{await browser.close();}
